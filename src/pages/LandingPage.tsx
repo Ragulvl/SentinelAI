@@ -7,41 +7,41 @@ import { Navigation } from "@/components/Navigation";
 const features = [
   {
     icon: Scan,
-    title: "Multi-Scanner Engine",
-    desc: "Trivy, Semgrep, npm audit, and secret scanning run in parallel inside isolated Docker sandboxes.",
+    title: "Parallel Analysis Modules",
+    desc: "Executes Trivy, Semgrep, npm security checks, and secret scans simultaneously in containerized isolation.",
   },
   {
     icon: Bot,
-    title: "AI-Powered Patching",
-    desc: "Our AI analyzes each vulnerability, generates secure patches, and verifies the fix automatically.",
+    title: "Automated AI Remediation",
+    desc: "Evaluates vulnerability reports, designs secure code adjustments, and verifies the resolution automatically.",
   },
   {
     icon: Code2,
-    title: "Built-in Code Editor",
-    desc: "Review and edit patches in a VS Code-like Monaco editor with full syntax highlighting.",
+    title: "Integrated Code Workspace",
+    desc: "Inspect and modify generated remedies within a syntax-highlighted editor prior to integration.",
   },
   {
     icon: GitPullRequest,
-    title: "One-Click PR",
-    desc: "Push all security fixes directly as a Pull Request to your repository — no manual work.",
+    title: "Direct Pull Requests",
+    desc: "Submit security updates directly to target repositories as standardized, reviewable pull requests.",
   },
   {
     icon: Lock,
-    title: "Sandboxed Execution",
-    desc: "Every scan runs in a memory-limited, network-isolated Docker container that auto-terminates.",
+    title: "Isolated Scan Environments",
+    desc: "Performs checks inside temporary, network-blocked, and CPU-limited container structures.",
   },
   {
     icon: Zap,
-    title: "Website Scanning",
-    desc: "Scan any website for TLS issues, missing headers, exposed files, open redirects, and more.",
+    title: "External Endpoint Audit",
+    desc: "Examines URLs for encryption validation, missing response headers, configuration leaks, and redirects.",
   },
 ];
 
 const stats = [
-  { value: "50+", label: "Vulnerability Rules" },
-  { value: "<3min", label: "Avg Scan Time" },
-  { value: "95%", label: "Auto-Patchable" },
-  { value: "0", label: "Data Stored" },
+  { value: "50+", label: "Security Policies" },
+  { value: "<3min", label: "Execution Speed" },
+  { value: "95%", label: "Resolution Success" },
+  { value: "0", label: "Data Retention" },
 ];
 
 const LandingPage = () => {
@@ -146,8 +146,7 @@ const LandingPage = () => {
               Security Scan
             </div>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-10 font-light">
-              SentinelAI scans your GitHub repositories and websites, detects security flaws using multiple scanners, 
-              and automatically generates verified patches.
+              SentinelAI audits source files and endpoints, identifying vulnerabilities across packages and deployment configurations to produce verified fixes.
             </p>
             <div className="flex items-center justify-center gap-3">
               <button
@@ -195,9 +194,9 @@ const LandingPage = () => {
           viewport={{ once: true }}
           className="text-center mb-16"
         >
-          <h2 className="text-3xl font-medium text-foreground mb-3">How It Works</h2>
+          <h2 className="text-3xl font-medium text-foreground mb-3">Auditing Process</h2>
           <p className="text-muted-foreground max-w-xl mx-auto font-light">
-            A fully autonomous pipeline from scanning to patching with zero manual configuration.
+            An automated assessment flow translating detected issues into actionable patches.
           </p>
         </motion.div>
         <div className="grid md:grid-cols-3 gap-4">
@@ -229,16 +228,16 @@ const LandingPage = () => {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <h2 className="text-3xl font-medium text-foreground mb-3">Scan Pipeline</h2>
-            <p className="text-muted-foreground font-light">Your code goes through 5 automated stages</p>
+            <h2 className="text-3xl font-medium text-foreground mb-3">Execution Pipeline</h2>
+            <p className="text-muted-foreground font-light">The five sequential phases of the security audit</p>
           </motion.div>
           <div className="space-y-3">
             {[
-              { step: "01", title: "Connect", desc: "Link your GitHub account and select a repo or enter a website URL" },
-              { step: "02", title: "Scan", desc: "Trivy, Semgrep, secret scanner, and header checks run in sandboxed containers" },
-              { step: "03", title: "Analyze", desc: "AI engine reasons about each vulnerability and its exploitability" },
-              { step: "04", title: "Patch", desc: "Secure code patches are generated, applied, and verified automatically" },
-              { step: "05", title: "Ship", desc: "Review diffs, edit in Monaco, download ZIP, or create a Pull Request" },
+              { step: "01", title: "Authorization", desc: "Authorize repository access or supply a target web URL." },
+              { step: "02", title: "Detection", desc: "Run multi-tool checks inside secure, sandboxed execution scopes." },
+              { step: "03", title: "Evaluation", desc: "Evaluate vulnerability severity, context, and practical exploitability." },
+              { step: "04", title: "Resolution", desc: "Formulate code adjustments and verify correct behavior." },
+              { step: "05", title: "Deployment", desc: "Inspect side-by-side diffs, download archive zip files, or open pull requests." },
             ].map((s, i) => (
               <motion.div
                 key={s.step}

@@ -82,7 +82,7 @@ export default function DomainVerificationPage() {
       return;
     }
 
-    if (!confirm(`⚠️ Are you sure you want to add "${newDomain}" as owned without verification?\n\nOnly do this for domains you actually own.`)) {
+    if (!confirm(`Confirm adding "${newDomain}" as an owned domain without verification. Make sure you are authorized to run security scans against this host.`)) {
       return;
     }
 
@@ -200,7 +200,7 @@ export default function DomainVerificationPage() {
           <CardHeader>
             <CardTitle>Add New Domain</CardTitle>
             <CardDescription>
-              Verify ownership of a domain to enable vulnerability scanning
+              Confirm your ownership of a domain to enable external vulnerability scanning.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -226,17 +226,17 @@ export default function DomainVerificationPage() {
                   </TabsList>
                   <TabsContent value="file" className="mt-4">
                     <p className="text-sm text-muted-foreground">
-                      Upload a verification file to your website's root directory
+                      Place the authorization file within the web root of your target host.
                     </p>
                   </TabsContent>
                   <TabsContent value="meta" className="mt-4">
                     <p className="text-sm text-muted-foreground">
-                      Add a meta tag to your website's homepage
+                      Embed a verification metadata tag into the main HTML head of your index page.
                     </p>
                   </TabsContent>
                   <TabsContent value="dns" className="mt-4">
                     <p className="text-sm text-muted-foreground">
-                      Add a TXT record to your domain's DNS configuration
+                      Publish a TXT record containing the verification token in your DNS configuration.
                     </p>
                   </TabsContent>
                 </Tabs>
@@ -258,7 +258,7 @@ export default function DomainVerificationPage() {
 
               <Alert>
                 <AlertDescription className="text-xs text-muted-foreground">
-                  💡 Use "Quick Add" to bypass verification for domains you own. Only use for testing or development.
+                  Use "Quick Add" to bypass checks for environments under local testing or development.
                 </AlertDescription>
               </Alert>
             </div>

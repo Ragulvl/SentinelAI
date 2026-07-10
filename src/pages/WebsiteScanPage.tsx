@@ -174,7 +174,7 @@ export default function WebsiteScanPage() {
             <CardHeader>
               <CardTitle>Comprehensive Website Security Scan</CardTitle>
               <CardDescription>
-                Complete security assessment including vulnerability scanning, penetration testing, load testing, rate limiting, and resilience testing.
+                Perform a multi-stage security check, evaluating target HTTP headers, SSL certificates, load capacity thresholds, and resilience capabilities.
               </CardDescription>
             </CardHeader>
             <CardContent>

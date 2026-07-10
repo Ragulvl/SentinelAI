@@ -1,105 +1,101 @@
-# SentinelAI - Code Security Scanner
+# SentinelAI - Automated Security Auditing System
 
-SentinelAI is a web application that helps developers identify, analyze, and remediate security vulnerabilities in their codebases. By integrating directly with GitHub via OAuth and analyzing website targets, it detects flaws and provides automatic patch recommendations.
+SentinelAI is a developer-centric security tool designed to detect, analyze, and resolve code vulnerabilities. By connecting to repositories via GitHub OAuth and monitoring external target URLs, the system identifies potential security risks and produces validated code patches.
 
-## Core Features
+## Key Capabilities
 
-- GitHub integration using OAuth authentication.
-- Automated code vulnerability scanning.
-- Live system and target health monitoring.
-- Interactive patch editor with side-by-side code diffing.
-- Auto-generated pull requests containing suggested security fixes.
-- Multi-channel notification alerts (Web Push and WhatsApp).
+- OAuth-based GitHub repository integration
+- Automated static code analysis and dependency checking
+- Continuous target monitoring and availability validation
+- Side-by-side patch editing and review interface
+- Automated pull request generation for security updates
+- Native notification alerts through Web Push and SMS/WhatsApp channels
 
 ## Getting Started
 
-### Prerequisites
+### System Requirements
 
-- Node.js (version 18 or newer)
+- Node.js version 18.0.0 or higher
 - npm or yarn package manager
-- A GitHub account for repository scanning
+- A GitHub developer account for repository integration
 
-### Installation and Setup
+### Setup and Installation
 
-1. Clone the repository and navigate into the folder:
+1. Clone the repository:
    ```bash
    git clone <repository-url>
    cd <project-folder>
    ```
 
-2. Install the frontend dependencies at the root:
+2. Retrieve and install dependencies for the frontend client:
    ```bash
    npm install
    ```
 
-3. Install the backend dependencies:
+3. Retrieve and install dependencies for the backend service:
    ```bash
    cd backend
-   ```
-   ```bash
    npm install
-   ```
-   ```bash
    cd ..
    ```
 
-4. Create configuration files from the templates:
+4. Create configuration profiles:
    ```bash
-   # In the root directory (frontend configuration)
+   # Root directory (frontend environment configuration)
    cp .env.example .env
 
-   # In the backend directory (backend configuration)
+   # Backend directory (backend environment configuration)
    cp backend/.env.example backend/.env
    ```
 
-5. Configure your environment files with your custom credentials. For scanning GitHub repositories, you will need to register an OAuth application under your GitHub developer settings.
+5. Configure your environmental settings in both files. For repository analysis, establish an OAuth application under your GitHub developer settings.
 
-6. Run the applications in separate terminal windows:
+6. Launch both application components:
 
-   **Terminal 1 - Backend Server:**
+   **Terminal 1 - Core Backend Server:**
    ```bash
    cd backend
    npm run dev
    ```
 
-   **Terminal 2 - Frontend Client:**
+   **Terminal 2 - Frontend Client Application:**
    ```bash
    npm run dev
    ```
 
-7. Once both services are running, open your web browser and go to http://localhost:5173 to access the interface.
+7. Access the interface at `http://localhost:5173`.
 
-## Directory Structure
+## Architecture Overview
 
-- **src/**: React frontend client built with Vite and Tailwind CSS.
-- **backend/**: Node.js Express server written in TypeScript.
-  - **src/controllers/**: Handlers for API endpoints.
-  - **src/services/**: Core scanning, AI analysis, database interactions, and integrations.
-  - **src/db/models/**: Mongoose schemas representing users, scans, and system states.
+- **src/**: React client app compiled with Vite and styled via Tailwind CSS.
+- **backend/**: Express-based Node.js application built in TypeScript.
+  - **src/controllers/**: Direct handlers for API endpoints.
+  - **src/services/**: Core logic engines covering AI audits, scanning runs, database mappings, and messaging providers.
+  - **src/db/models/**: Mongoose schemas representing users, historical scans, and target metrics.
 
-## API Endpoints
+## API Specification
 
-### Authentication
-- `GET /api/auth/github`: Begins the GitHub OAuth flow.
-- `GET /api/auth/github/callback`: Receives the OAuth authentication token callback.
-- `GET /api/auth/verify`: Validates user authentication using JWT.
-- `POST /api/auth/logout`: Clears the user session.
+### User Authorization
+- `GET /api/auth/github`: Initiates the GitHub OAuth redirect.
+- `GET /api/auth/github/callback`: Processes the authentication code from GitHub.
+- `GET /api/auth/verify`: Confirms user session integrity via JWT.
+- `POST /api/auth/logout`: Invalidates the active session.
 
-### Scanning & Monitoring
-- `GET /health`: Basic server status check.
-- `POST /api/scan/start`: Triggers a code scan for a repository.
-- `GET /api/scan/status/:scanId`: Polls progress of an active scan.
-- `GET /api/scan/results/:scanId`: Retrieves vulnerability reports.
+### Vulnerability Management
+- `GET /health`: Core server operational status.
+- `POST /api/scan/start`: Schedules a vulnerability check for a selected repository.
+- `GET /api/scan/status/:scanId`: Returns progress details for an ongoing analysis.
+- `GET /api/scan/results/:scanId`: Retrieves vulnerability findings.
 
 ## Configuration Parameters
 
-### Frontend Configuration (.env)
+### Frontend Client (.env)
 ```env
 VITE_API_URL=http://localhost:5000
 VITE_APP_NAME=SentinelAI
 ```
 
-### Backend Configuration (backend/.env)
+### Backend Service (backend/.env)
 ```env
 PORT=5000
 FRONTEND_URL=http://localhost:5173
@@ -112,15 +108,14 @@ JWT_EXPIRES_IN=7d
 NODE_ENV=development
 ```
 
-## Contributing
+## Contributing Guidelines
 
-We welcome contributions. To get started:
 1. Fork this repository.
-2. Create a branch for your updates (`git checkout -b feature-name`).
-3. Commit your code (`git commit -m 'Implement new feature'`).
-4. Push your branch (`git push origin feature-name`).
-5. Open a pull request against the main branch.
+2. Open a feature branch (`git checkout -b feature-branch-name`).
+3. Commit your updates (`git commit -m 'Add specific feature'`).
+4. Push your changes (`git push origin feature-branch-name`).
+5. Open a pull request against the default branch.
 
 ## License
 
-This software is private and proprietary. Unauthorized copying, distribution, or modifications are prohibited.
+This project is private and proprietary. Unauthorized distribution, modification, or copy of this software is strictly prohibited.

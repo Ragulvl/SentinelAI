@@ -1,16 +1,16 @@
-# SentinelAI Backend
+# SentinelAI Backend Service
 
-This is the backend server for the SentinelAI security scanning application. It manages GitHub OAuth authentication, schedules scans, processes AI code audits, triggers web-hook notifications, and records security history in MongoDB.
+This service acts as the orchestration and API backend for SentinelAI, a web application designed to run security code audits and monitor external endpoints. The backend coordinates GitHub OAuth authorization, schedules repository scanners, performs AI-assisted evaluations, processes notification events, and persists scan histories in MongoDB.
 
 ## Features
 
-- GitHub OAuth authentication and access token exchange.
-- JSON Web Token (JWT) user authorization.
-- MongoDB tracking for user preferences, target histories, and logs.
-- Automated API endpoints for scanning and system diagnostics.
-- Full TypeScript implementation.
+- OAuth authentication flow and access token management for GitHub integration
+- JWT-based authorization and session verification
+- MongoDB database integration for tracking users, logs, and historical checks
+- Scheduled checking routines for endpoint health and responsiveness
+- TypeScript-based architecture
 
-## Quick Start
+## Getting Started
 
 ### 1. Install Dependencies
 ```bash
@@ -18,43 +18,38 @@ cd backend
 npm install
 ```
 
-### 2. Database Installation
+### 2. Database Setup
 
-To run this backend locally, you will need a running MongoDB database instance.
+The backend service connects to a MongoDB database. You can start it locally in one of two ways:
 
-**Option A: Install MongoDB Locally**
+**Option A: Local Service Installation**
 - Download MongoDB Community Server: https://www.mongodb.com/try/download/community
-- Follow instructions for your operating system to start the service.
+- Install and start the service according to the OS instructions.
 
-**Option B: Start with Docker**
+**Option B: Containerized Database via Docker**
 ```bash
 docker run -d -p 27017:27017 --name mongodb-local mongo:latest
 ```
 
-To test the database connection, you can run:
-```bash
-npm run test:mongodb
-```
+### 3. GitHub OAuth Application Configuration
 
-### 3. GitHub OAuth Setup
-
-To support repository scanning, configure a GitHub OAuth app:
-1. Navigate to Settings > Developer settings > OAuth Apps in GitHub.
-2. Select "New OAuth App".
-3. Provide the following values:
+To enable repository access, configure an OAuth application on GitHub:
+1. Go to Settings > Developer settings > OAuth Apps in your GitHub account settings.
+2. Select "Register a new application".
+3. Configure the parameters:
    - Application Name: SentinelAI
    - Homepage URL: http://localhost:5173
    - Authorization Callback URL: http://localhost:5000/api/auth/github/callback
-4. Register the app, copy the Client ID, and generate a new Client Secret.
+4. Save the application, retrieve the Client ID, and generate a new Client Secret.
 
-### 4. Environment Configuration
+### 4. Environmental Configuration
 
-Create a local configuration file:
+Establish your local settings by creating a `.env` file:
 ```bash
 cp .env.example .env
 ```
 
-Open `.env` and fill in your custom values:
+Open the newly created `.env` file and supply your configurations:
 ```env
 PORT=5000
 FRONTEND_URL=http://localhost:5173
@@ -67,14 +62,14 @@ JWT_EXPIRES_IN=7d
 NODE_ENV=development
 ```
 
-### 5. Running the Server
+### 5. Start the Application
 
-Start the development hot-reloading server:
+Run the server with hot-reloading enabled for development:
 ```bash
 npm run dev
 ```
 
-Upon successful startup, the server output will confirm the database connection:
+On successful startup, you should see logs confirming database connection and service initialization:
 ```text
 Connecting to MongoDB...
 MongoDB connected successfully
@@ -82,23 +77,23 @@ Database: sentinelai
 Backend server running on http://localhost:5000
 ```
 
-## Folder Structure
+## Directory Structure
 
-- **src/config/**: Environment and database connection configurations.
-- **src/controllers/**: Express route handlers managing user requests.
-- **src/db/models/**: Mongoose models representing the data models (Users, Scans, Site Checks, etc.).
-- **src/middleware/**: Express middleware functions, including authentication validators.
-- **src/routes/**: Definition of web API endpoints.
-- **src/services/**: Scanning engines, AI prompts, WhatsApp worker routines, and GitHub integrations.
-- **scripts/**: Utility files for database checks and initial keys creation.
+- **src/config/**: Settings parser and database connection initialization.
+- **src/controllers/**: Express handlers executing request-response lifecycles.
+- **src/db/models/**: Mongoose database schemas mapping scans, targets, and users.
+- **src/middleware/**: Custom request interceptors, including route authentication guards.
+- **src/routes/**: Definition of endpoint patterns and HTTP methods.
+- **src/services/**: Core operational logic, wrapping AI prompts, scanning pipelines, and external integrations.
+- **scripts/**: Support scripts for database testing, notifications, and key generation.
 
-## Primary API Routes
+## Primary Endpoints
 
-### Authentication
-- `GET /api/auth/github`: Begins the OAuth flow.
-- `GET /api/auth/github/callback`: Receives the OAuth authentication token callback.
-- `GET /api/auth/verify`: Validates user authentication using JWT.
-- `POST /api/auth/logout`: Clears the user session.
+### Authorization
+- `GET /api/auth/github`: Begins OAuth sequence.
+- `GET /api/auth/github/callback`: Receives GitHub callback values.
+- `GET /api/auth/verify`: Validates JWT session credentials.
+- `POST /api/auth/logout`: Clears active session.
 
-### Health Check
-- `GET /health`: Basic server status check.
+### Operations
+- `GET /health`: Returns basic health status.

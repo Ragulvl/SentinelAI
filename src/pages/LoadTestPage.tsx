@@ -314,11 +314,11 @@ export default function LoadTestPage() {
                 <AlertTriangle className="h-4 w-4 text-blue-500" />
                 <AlertDescription className="ml-2">
                   <div className="space-y-2">
-                    <p className="font-semibold text-foreground">ℹ️ Controlled Load Testing</p>
+                    <p className="font-semibold text-foreground">Controlled Capacity Evaluation</p>
                     <p className="text-sm text-muted-foreground">
-                      This tool performs controlled load testing to measure your site's capacity and 
-                      identify performance bottlenecks. It's NOT a DDoS attack - it uses reasonable 
-                      limits and only works on verified domains.
+                      Perform controlled load and capacity checks to identify system bottlenecks and 
+                      evaluate response thresholds. All checks run within predefined rate limits against 
+                      authenticated and verified targets.
                     </p>
                   </div>
                 </AlertDescription>
@@ -431,7 +431,7 @@ export default function LoadTestPage() {
 
                   <TabsContent value="resilience" className="space-y-4 mt-6">
                     <p className="text-sm text-muted-foreground">
-                      This test gradually increases load to find your site's breaking point.
+                      This routine incrementally raises concurrent user load to identify system thresholds and performance limits.
                     </p>
                     <Button
                       onClick={handleResilienceTest}

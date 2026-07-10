@@ -173,10 +173,10 @@ export class PenetrationTestingService {
             category: 'Cross-Site Scripting',
             severity: 'critical',
             vulnerable: true,
-            description: 'The application reflects user input without proper sanitization, allowing XSS attacks.',
+            description: 'User inputs are rendered back directly to the client document context without validation or context-appropriate escaping.',
             evidence: `Payload reflected: ${payload}`,
             payload: payload,
-            recommendation: 'Implement proper input validation and output encoding. Use Content-Security-Policy headers.',
+            recommendation: 'Enforce contextual output encoding (HTML, attribute, JavaScript) and introduce Content Security Policies.',
           });
           break; // Found vulnerability, no need to test more payloads
         }
@@ -192,8 +192,8 @@ export class PenetrationTestingService {
         category: 'Cross-Site Scripting',
         severity: 'info',
         vulnerable: false,
-        description: 'No reflected XSS vulnerabilities detected in basic tests.',
-        recommendation: 'Continue monitoring and testing with more complex payloads.',
+        description: 'No reflected script reflection vulnerabilities detected in tests.',
+        recommendation: 'Continue monitoring endpoint input validation.',
       });
     }
 
@@ -263,10 +263,10 @@ export class PenetrationTestingService {
             category: 'Injection',
             severity: 'critical',
             vulnerable: true,
-            description: 'The application is vulnerable to SQL injection attacks. Database errors are exposed.',
+            description: 'The application appears to compile SQL query strings dynamically using user input, exposing data stores to arbitrary query executions.',
             evidence: 'SQL error messages detected in response',
             payload: payload,
-            recommendation: 'Use parameterized queries or prepared statements. Never concatenate user input into SQL queries.',
+            recommendation: 'Enforce parameterized queries or ORM models. Strictly validate and sanitize non-parameterized inputs.',
           });
           break;
         }
@@ -281,8 +281,8 @@ export class PenetrationTestingService {
         category: 'Injection',
         severity: 'info',
         vulnerable: false,
-        description: 'No SQL injection vulnerabilities detected in basic tests.',
-        recommendation: 'Continue using parameterized queries and input validation.',
+        description: 'No SQL injection vulnerabilities detected in tests.',
+        recommendation: 'Enforce prepared statements and use structured data mappers.',
       });
     }
 
@@ -342,10 +342,10 @@ export class PenetrationTestingService {
             category: 'Injection',
             severity: 'critical',
             vulnerable: true,
-            description: 'The application is vulnerable to OS command injection attacks.',
+            description: 'User input is passed directly to system command execution routines, allowing shell command execution.',
             evidence: hasCommandOutput ? 'Command output detected' : `Response delayed by ${responseTime}ms`,
             payload: payload,
-            recommendation: 'Never pass user input directly to system commands. Use allowlists and input validation.',
+            recommendation: 'Avoid executing commands on the system shell using parameters derived from client requests. Enforce command argument allowlists.',
           });
           break;
         }
@@ -360,8 +360,8 @@ export class PenetrationTestingService {
         category: 'Injection',
         severity: 'info',
         vulnerable: false,
-        description: 'No command injection vulnerabilities detected in basic tests.',
-        recommendation: 'Continue avoiding direct system command execution with user input.',
+        description: 'No command execution injection vulnerabilities detected in tests.',
+        recommendation: 'Restructure calls to avoid invoking OS shells.',
       });
     }
 
@@ -404,10 +404,10 @@ export class PenetrationTestingService {
             category: 'Path Traversal',
             severity: 'high',
             vulnerable: true,
-            description: 'The application is vulnerable to path traversal attacks, allowing access to arbitrary files.',
+            description: 'The application accesses files using directory paths built from client inputs, exposing arbitrary local system files to disclosure.',
             evidence: 'System file content detected in response',
             payload: payload,
-            recommendation: 'Validate and sanitize file paths. Use allowlists for file access. Implement proper access controls.',
+            recommendation: 'Restrict file inputs to predefined filenames, resolve path operations to canonical paths, and enforce strict filesystem sandbox controls.',
           });
           break;
         }
@@ -422,8 +422,8 @@ export class PenetrationTestingService {
         category: 'Path Traversal',
         severity: 'info',
         vulnerable: false,
-        description: 'No path traversal vulnerabilities detected in basic tests.',
-        recommendation: 'Continue validating file paths and using proper access controls.',
+        description: 'No directory traversal vulnerabilities detected in tests.',
+        recommendation: 'Enforce access boundaries and filename sanitization.',
       });
     }
 
@@ -461,9 +461,9 @@ export class PenetrationTestingService {
           category: 'CSRF',
           severity: 'high',
           vulnerable: true,
-          description: `Found ${vulnerableForms} form(s) without CSRF token protection.`,
+          description: `Found ${vulnerableForms} form(s) lacking anti-CSRF request tokens.`,
           evidence: `${vulnerableForms} vulnerable form(s)`,
-          recommendation: 'Implement CSRF tokens for all state-changing operations. Use SameSite cookie attribute.',
+          recommendation: 'Apply anti-forgery tokens to all state-changing target forms and enforce the SameSite cookie parameter.',
         });
       } else {
         results.push({
@@ -471,8 +471,8 @@ export class PenetrationTestingService {
           category: 'CSRF',
           severity: 'info',
           vulnerable: false,
-          description: 'Forms appear to have CSRF protection or no forms detected.',
-          recommendation: 'Ensure CSRF tokens are properly validated on the server side.',
+          description: 'Forms verify verification tokens or no forms are present.',
+          recommendation: 'Ensure token validation logic is consistently enforced.',
         });
       }
     } catch (error) {
@@ -481,8 +481,8 @@ export class PenetrationTestingService {
         category: 'CSRF',
         severity: 'info',
         vulnerable: false,
-        description: 'Could not test CSRF protection.',
-        recommendation: 'Manual testing recommended.',
+        description: 'Skipped CSRF checks.',
+        recommendation: 'Perform manual verification of form endpoints.',
       });
     }
 
@@ -525,10 +525,10 @@ export class PenetrationTestingService {
             category: 'SSRF',
             severity: 'critical',
             vulnerable: true,
-            description: 'The application is vulnerable to SSRF attacks, allowing access to internal resources.',
+            description: 'The service executes HTTP queries using addresses supplied by the client, exposing local or internal network assets.',
             evidence: 'Internal service response detected',
             payload: payload,
-            recommendation: 'Validate and sanitize URLs. Use allowlists for external requests. Block access to internal IPs.',
+            recommendation: 'Sanitize URLs, restrict target hosts to authorized domains via allowlists, and enforce firewall block policies for internal IP ranges.',
           });
           break;
         }
@@ -543,8 +543,8 @@ export class PenetrationTestingService {
         category: 'SSRF',
         severity: 'info',
         vulnerable: false,
-        description: 'No SSRF vulnerabilities detected in basic tests.',
-        recommendation: 'Continue validating URLs and blocking internal IP ranges.',
+        description: 'No SSRF vulnerability markers detected in tests.',
+        recommendation: 'Restrict outgoing traffic and resolve queries to public IPs.',
       });
     }
 
@@ -581,10 +581,10 @@ export class PenetrationTestingService {
             category: 'Open Redirect',
             severity: 'medium',
             vulnerable: true,
-            description: 'The application is vulnerable to open redirect attacks.',
+            description: 'The application performs client redirection using URLs specified in request parameters.',
             evidence: `Redirects to: ${locationHeader}`,
             payload: payload,
-            recommendation: 'Validate redirect URLs against an allowlist. Use relative URLs when possible.',
+            recommendation: 'Use relative paths for redirects or validate destination addresses against an allowlist.',
           });
           break;
         }
@@ -599,8 +599,8 @@ export class PenetrationTestingService {
         category: 'Open Redirect',
         severity: 'info',
         vulnerable: false,
-        description: 'No open redirect vulnerabilities detected in basic tests.',
-        recommendation: 'Continue validating redirect destinations.',
+        description: 'No open redirect vulnerabilities detected in tests.',
+        recommendation: 'Enforce relative targets for dynamic redirection.',
       });
     }
 

@@ -81,39 +81,39 @@ export class WebsiteScannerService {
     // Check for missing security headers
     const securityHeaders = {
       'strict-transport-security': {
-        title: 'Missing Strict-Transport-Security Header',
-        description: 'The HTTP Strict-Transport-Security (HSTS) header is not set.',
-        recommendation: 'Add "Strict-Transport-Security: max-age=31536000; includeSubDomains" header.',
+        title: 'Strict-Transport-Security Header Absent',
+        description: 'The HTTP Strict-Transport-Security (HSTS) response header is not configured on the host.',
+        recommendation: 'Configure the HTTP server to emit a "Strict-Transport-Security" header (e.g., "max-age=31536000; includeSubDomains").',
         type: 'high' as const,
       },
       'x-frame-options': {
-        title: 'Missing X-Frame-Options Header',
-        description: 'The X-Frame-Options header is not set, making the site vulnerable to clickjacking.',
-        recommendation: 'Add "X-Frame-Options: DENY" or "X-Frame-Options: SAMEORIGIN" header.',
+        title: 'X-Frame-Options Header Absent',
+        description: 'The application does not declare an X-Frame-Options header, which allows pages to be rendered inside frames and exposes the app to clickjacking.',
+        recommendation: 'Emit an "X-Frame-Options" response header set to "DENY" or "SAMEORIGIN".',
         type: 'medium' as const,
       },
       'x-content-type-options': {
-        title: 'Missing X-Content-Type-Options Header',
-        description: 'The X-Content-Type-Options header is not set.',
-        recommendation: 'Add "X-Content-Type-Options: nosniff" header.',
+        title: 'X-Content-Type-Options Header Absent',
+        description: 'The X-Content-Type-Options header is not defined, allowing browsers to perform MIME-sniffing on response bodies.',
+        recommendation: 'Define the "X-Content-Type-Options" header set to "nosniff".',
         type: 'low' as const,
       },
       'content-security-policy': {
-        title: 'Missing Content-Security-Policy Header',
-        description: 'No Content Security Policy is defined.',
-        recommendation: 'Implement a Content-Security-Policy header to prevent XSS attacks.',
+        title: 'Content Security Policy Not Set',
+        description: 'No Content Security Policy (CSP) is defined, leaving clients exposed to cross-site scripting (XSS) and injection vulnerabilities.',
+        recommendation: 'Implement a restrictive Content-Security-Policy header outlining authorized script sources.',
         type: 'high' as const,
       },
       'x-xss-protection': {
-        title: 'Missing X-XSS-Protection Header',
-        description: 'The X-XSS-Protection header is not set.',
-        recommendation: 'Add "X-XSS-Protection: 1; mode=block" header.',
+        title: 'X-XSS-Protection Header Absent',
+        description: 'The legacy X-XSS-Protection header is not set on responses.',
+        recommendation: 'Apply an "X-XSS-Protection: 1; mode=block" header to support legacy web browser defenses.',
         type: 'low' as const,
       },
       'referrer-policy': {
-        title: 'Missing Referrer-Policy Header',
-        description: 'The Referrer-Policy header is not set.',
-        recommendation: 'Add "Referrer-Policy: strict-origin-when-cross-origin" header.',
+        title: 'Referrer Policy Header Absent',
+        description: 'No Referrer-Policy header is present on outgoing responses, potentially leaking sensitive query parameters to external links.',
+        recommendation: 'Add a "Referrer-Policy: strict-origin-when-cross-origin" header to restrict referral leakages.',
         type: 'low' as const,
       },
     };
@@ -135,9 +135,9 @@ export class WebsiteScannerService {
       vulnerabilities.push({
         type: 'info',
         category: 'Information Disclosure',
-        title: 'Server Header Exposed',
-        description: `Server header reveals: ${headers['server']}`,
-        recommendation: 'Remove or obfuscate the Server header to prevent information disclosure.',
+        title: 'Infrastructure Information Disclosure',
+        description: `The server header exposes structural details: ${headers['server']}`,
+        recommendation: 'Obfuscate or suppress server headers within host configurations.',
         evidence: headers['server'],
       });
     }
@@ -146,9 +146,9 @@ export class WebsiteScannerService {
       vulnerabilities.push({
         type: 'info',
         category: 'Information Disclosure',
-        title: 'X-Powered-By Header Exposed',
-        description: `X-Powered-By header reveals: ${headers['x-powered-by']}`,
-        recommendation: 'Remove the X-Powered-By header to prevent technology stack disclosure.',
+        title: 'Execution Stack Disclosure',
+        description: `The X-Powered-By response header lists server frameworks: ${headers['x-powered-by']}`,
+        recommendation: 'Remove the X-Powered-By header within configuration files.',
         evidence: headers['x-powered-by'],
       });
     }
@@ -192,9 +192,9 @@ export class WebsiteScannerService {
       vulnerabilities.push({
         type: 'critical',
         category: 'SSL/TLS',
-        title: 'Invalid or Missing SSL Certificate',
-        description: 'The website does not have a valid SSL certificate.',
-        recommendation: 'Install a valid SSL certificate from a trusted Certificate Authority.',
+        title: 'Invalid SSL/TLS Certificate',
+        description: 'No trusted SSL certificate could be verified for this endpoint.',
+        recommendation: 'Obtain and configure a valid certificate from a trusted Authority.',
       });
     } else {
       // Check certificate expiry
@@ -207,9 +207,9 @@ export class WebsiteScannerService {
           vulnerabilities.push({
             type: 'high',
             category: 'SSL/TLS',
-            title: 'SSL Certificate Expiring Soon',
-            description: `SSL certificate expires in ${daysUntilExpiry} days.`,
-            recommendation: 'Renew the SSL certificate before it expires.',
+            title: 'SSL Certificate Approaching Expiration',
+            description: `The active SSL certificate expires in ${daysUntilExpiry} days.`,
+            recommendation: 'Renew the certificate before the validation window closes.',
             evidence: `Expires: ${new Date(sslInfo.validTo).toLocaleDateString()}`,
           });
         }
@@ -220,9 +220,9 @@ export class WebsiteScannerService {
         vulnerabilities.push({
           type: 'high',
           category: 'SSL/TLS',
-          title: 'Weak TLS Protocol',
-          description: `Website supports weak TLS protocol: ${sslInfo.protocol}`,
-          recommendation: 'Disable TLS 1.0 and 1.1. Use TLS 1.2 or higher.',
+          title: 'Legacy TLS Protocols Allowed',
+          description: `The endpoint supports deprecated cryptographic protocols: ${sslInfo.protocol}`,
+          recommendation: 'Disable support for TLS 1.0 and TLS 1.1; enforce TLS 1.2 or TLS 1.3.',
           evidence: sslInfo.protocol,
         });
       }
@@ -242,9 +242,9 @@ export class WebsiteScannerService {
         vulnerabilities.push({
           type: 'medium',
           category: 'CSRF',
-          title: 'Form Without CSRF Protection',
-          description: 'A form was found without apparent CSRF token protection.',
-          recommendation: 'Implement CSRF tokens for all forms that perform state-changing operations.',
+          title: 'Missing Cross-Site Request Forgery Protections',
+          description: 'An HTML form element lacks anti-CSRF validation inputs.',
+          recommendation: 'Enforce validation tokens on all state-changing target forms.',
         });
       }
     });
@@ -255,9 +255,9 @@ export class WebsiteScannerService {
       vulnerabilities.push({
         type: 'low',
         category: 'XSS Prevention',
-        title: 'Inline Scripts Detected',
-        description: `Found ${inlineScripts} inline script(s). Inline scripts can increase XSS risk.`,
-        recommendation: 'Move inline scripts to external files and use CSP to restrict script execution.',
+        title: 'Inline Script Elements Present',
+        description: `Detected ${inlineScripts} script block(s) without source paths. Inline scripts increase cross-site scripting risks.`,
+        recommendation: 'Consolidate script code into external source files and enforce Content Security Policies.',
         evidence: `${inlineScripts} inline script(s)`,
       });
     }
@@ -269,9 +269,9 @@ export class WebsiteScannerService {
         vulnerabilities.push({
           type: 'medium',
           category: 'Mixed Content',
-          title: 'Mixed Content Detected',
-          description: `Found ${httpResources} HTTP resource(s) loaded on HTTPS page.`,
-          recommendation: 'Load all resources over HTTPS to prevent mixed content warnings.',
+          title: 'Mixed HTTP/HTTPS Content',
+          description: `The application loads ${httpResources} HTTP reference(s) on a secure HTTPS page.`,
+          recommendation: 'Update internal endpoints to load assets exclusively over HTTPS.',
           evidence: `${httpResources} HTTP resource(s)`,
         });
       }
@@ -284,9 +284,9 @@ export class WebsiteScannerService {
         vulnerabilities.push({
           type: 'low',
           category: 'Password Security',
-          title: 'Password Field Allows Autocomplete',
-          description: 'Password field does not disable autocomplete.',
-          recommendation: 'Add autocomplete="new-password" or autocomplete="current-password" to password fields.',
+          title: 'Password Autocomplete Enabled',
+          description: 'Credential fields do not configure autocomplete constraints.',
+          recommendation: 'Specify "new-password" or "current-password" autocomplete attributes.',
         });
       }
     });
@@ -345,15 +345,15 @@ export class WebsiteScannerService {
 
           // Add content preview to evidence
           if (fileContent) {
-            evidence += `\n\n📄 File Content Preview:\n${'─'.repeat(50)}\n${fileContent}\n${'─'.repeat(50)}`;
+            evidence += `\n\nFile Content Preview:\n${'─'.repeat(50)}\n${fileContent}\n${'─'.repeat(50)}`;
           }
 
           return {
             type: file.type,
             category: 'Sensitive File Exposure',
-            title: `Sensitive file accessible: ${file.path}`,
-            description: `The ${file.name} is publicly accessible and may contain sensitive information.`,
-            recommendation: 'Remove or restrict access to sensitive files and directories.',
+            title: `Sensitive Configuration File Exposed: ${file.path}`,
+            description: `The application exposes the ${file.name} to the public network.`,
+            recommendation: 'Enforce strict access controls or move sensitive configs out of the web root.',
             evidence,
           };
         }
@@ -386,8 +386,8 @@ export class WebsiteScannerService {
           type,
           category: 'Code Quality',
           title,
-          description: `Potentially unsafe JavaScript pattern detected: ${title}`,
-          recommendation: 'Review and replace with safer alternatives.',
+          description: `Unsafe execution syntax detected: ${title}`,
+          recommendation: 'Refactor script logic using safer DOM manipulation alternatives.',
         });
       }
     }
@@ -397,9 +397,9 @@ export class WebsiteScannerService {
       vulnerabilities.push({
         type: 'high',
         category: 'Information Disclosure',
-        title: 'Directory Listing Enabled',
-        description: 'Directory listing appears to be enabled.',
-        recommendation: 'Disable directory listing on the web server.',
+        title: 'Directory Listings Enabled',
+        description: 'The directory structure is navigable via standard browser indices.',
+        recommendation: 'Disable server indexing configurations.',
       });
     }
 

@@ -95,7 +95,7 @@ export default function PenetrationTestPage() {
       return;
     }
 
-    if (!confirm('⚠️ WARNING: This will perform active penetration testing on the target website. Only proceed if you own this website or have explicit permission. Continue?')) {
+    if (!confirm('Warning: This process executes active vulnerability scans against the specified website. Verify that you have authorization and ownership of the target domain before proceeding. Do you wish to continue?')) {
       return;
     }
 
@@ -306,12 +306,11 @@ export default function PenetrationTestPage() {
                 <AlertTriangle className="h-4 w-4 text-red-500" />
                 <AlertDescription className="ml-2">
                   <div className="space-y-2">
-                    <p className="font-semibold text-foreground">⚠️ WARNING: Active Attack Mode</p>
+                    <p className="font-semibold text-foreground">Active Auditing Mode Warning</p>
                     <p className="text-sm text-muted-foreground">
-                      This tool performs active penetration testing including injection attacks, 
-                      path traversal, and other potentially harmful tests. Only use on websites 
-                      you own or have explicit written permission to test. Unauthorized testing 
-                      is illegal.
+                      This component executes active vulnerability verification checks, including simulated 
+                      injection and file path traversal. Run this scanner only on domains where you possess 
+                      explicit authorization. Unauthorized security scanning violates compliance standards.
                     </p>
                   </div>
                 </AlertDescription>

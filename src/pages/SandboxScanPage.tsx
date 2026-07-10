@@ -134,9 +134,9 @@ const SandboxScanPage = () => {
 
       <div className="max-w-4xl mx-auto px-6 py-12">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-3xl font-medium text-foreground mb-2">Sandbox Clone & Attack</h1>
+          <h1 className="text-3xl font-medium text-foreground mb-2">Sandbox Environment Verification</h1>
           <p className="text-muted-foreground mb-8 font-light">
-            Clone any GitHub repo, run it in a sandbox, and scan for vulnerabilities
+            Instantiate source repositories in isolated temporary runtimes to perform safety evaluations.
           </p>
 
           {/* Input Section */}
@@ -173,7 +173,7 @@ const SandboxScanPage = () => {
                 className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-md bg-primary text-black text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
               >
                 <Play className="w-4 h-4" />
-                {isProcessing ? 'Processing...' : 'Clone & Attack'}
+                {isProcessing ? 'Processing...' : 'Provision & Scan'}
               </button>
             </div>
           </div>
