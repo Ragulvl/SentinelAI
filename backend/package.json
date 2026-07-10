@@ -1,0 +1,45 @@
+{
+  "name": "sentinelai-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test:mongodb": "tsx scripts/test-mongodb.ts",
+    "clear:history": "tsx scripts/clear-old-scan-history.ts",
+    "generate:vapid": "tsx scripts/generate-vapid-keys.ts",
+    "test:notifications": "tsx scripts/test-notifications.ts",
+    "test:phone": "tsx scripts/test-phone-save.ts",
+    "check:notifications": "tsx scripts/check-user-notifications.ts",
+    "test:whatsapp": "tsx scripts/test-whatsapp-worker.ts",
+    "send:whatsapp": "tsx scripts/send-test-whatsapp.ts",
+    "debug:whatsapp": "tsx scripts/debug-whatsapp-session.ts",
+    "check:github": "tsx scripts/check-github-token.ts",
+    "set:github-token": "tsx scripts/set-github-token.ts"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "axios": "^1.6.2",
+    "cheerio": "^1.2.0",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^9.2.4",
+    "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@types/archiver": "^7.0.0",
+    "@types/cookie-parser": "^1.4.6",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.5",
+    "@types/mongoose": "^5.11.96",
+    "@types/node": "^20.10.5",
+    "@types/web-push": "^3.6.3",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}
