@@ -1,4 +1,7 @@
-export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+// In production (Vercel same-domain), VITE_API_URL is empty → relative URLs are used.
+// In local dev, falls back to http://localhost:5000.
+export const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5000';
+
 export const API_BASE_URL = API_URL; // Alias for compatibility
 
 export const API_ENDPOINTS = {

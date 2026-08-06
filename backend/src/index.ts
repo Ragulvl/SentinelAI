@@ -18,27 +18,37 @@ import { NotificationService } from './services/notification.service.js';
 
 const app = express();
 
-// CORS configuration - normalize frontend URL to remove trailing slash
+// CORS configuration - support production, Vercel previews, and local dev
 const frontendUrl = config.frontendUrl.replace(/\/$/, '');
+const allowedOrigins = [
+  frontendUrl,
+  'http://localhost:5173',
+  'http://localhost:8080',
+  'http://localhost:3000',
+];
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps or curl requests)
+    // Allow requests with no origin (mobile apps, curl, Vercel internal proxy)
     if (!origin) return callback(null, true);
-    
-    // Normalize the origin by removing trailing slash
+
     const normalizedOrigin = origin.replace(/\/$/, '');
-    
-    // Check if normalized origin matches normalized frontend URL
-    if (normalizedOrigin === frontendUrl) {
+
+    // Allow exact match or any *.vercel.app preview deployment
+    const isAllowed =
+      allowedOrigins.includes(normalizedOrigin) ||
+      /^https:\/\/[a-zA-Z0-9-]+-[a-zA-Z0-9]+-ragulvl\.vercel\.app$/.test(normalizedOrigin) ||
+      normalizedOrigin.endsWith('.vercel.app');
+
+    if (isAllowed) {
       callback(null, true);
     } else {
-      console.log(`CORS blocked: ${origin} (normalized: ${normalizedOrigin}) !== ${frontendUrl}`);
+      console.log(`CORS blocked: ${normalizedOrigin}`);
       callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
