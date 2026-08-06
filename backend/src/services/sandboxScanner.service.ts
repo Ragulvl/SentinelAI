@@ -9,6 +9,9 @@ import { AIService } from './ai.service.js';
 
 const execAsync = promisify(exec);
 
+// Detect if we are running on Vercel (production)
+const IS_VERCEL = !!process.env.VERCEL;
+
 interface SandboxEnvironment {
   id: string;
   repoUrl: string;
@@ -79,15 +82,26 @@ export class SandboxScannerService {
 
     this.sandboxes.set(sandboxId, sandbox);
 
-    // Start the process in background
-    this.processSandbox(sandboxId, userId).catch(error => {
-      console.error('Sandbox process error:', error);
-      const sb = this.sandboxes.get(sandboxId);
-      if (sb) {
-        sb.status = 'failed';
-        sb.error = error.message;
-      }
-    });
+    // Route to appropriate backend: Vercel Sandbox (production) or local child_process (dev)
+    if (IS_VERCEL) {
+      this.processWithVercelSandbox(sandboxId, userId).catch(error => {
+        console.error('Vercel Sandbox process error:', error);
+        const sb = this.sandboxes.get(sandboxId);
+        if (sb) {
+          sb.status = 'failed';
+          sb.error = error.message;
+        }
+      });
+    } else {
+      this.processSandbox(sandboxId, userId).catch(error => {
+        console.error('Local sandbox process error:', error);
+        const sb = this.sandboxes.get(sandboxId);
+        if (sb) {
+          sb.status = 'failed';
+          sb.error = error.message;
+        }
+      });
+    }
 
     return sandboxId;
   }
@@ -98,6 +112,257 @@ export class SandboxScannerService {
   static getSandboxStatus(sandboxId: string): SandboxEnvironment | null {
     return this.sandboxes.get(sandboxId) || null;
   }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // VERCEL SANDBOX BACKEND (Production)
+  // Uses @vercel/sandbox for isolated Linux microVMs — works on Vercel's read-only FS
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Process sandbox using Vercel's managed microVM infrastructure
+   */
+  private static async processWithVercelSandbox(sandboxId: string, userId: string): Promise<void> {
+    const sandbox = this.sandboxes.get(sandboxId);
+    if (!sandbox) throw new Error('Sandbox not found');
+
+    let vercelSandbox: any = null;
+
+    try {
+      // Dynamically import @vercel/sandbox to avoid breaking local dev if not installed
+      const { Sandbox } = await import('@vercel/sandbox');
+
+      // ── Step 1: Create isolated microVM ────────────────────────────────────
+      this.addSandboxLog(sandboxId, 'info', '🚀 Provisioning isolated Vercel microVM...');
+      vercelSandbox = await Sandbox.create();
+      this.addSandboxLog(sandboxId, 'success', '✅ MicroVM ready');
+
+      // ── Step 2: Clone the repository inside the microVM ────────────────────
+      this.addSandboxLog(sandboxId, 'info', `📦 Cloning ${sandbox.repoUrl}...`);
+      sandbox.status = 'cloning';
+
+      const cloneResult = await vercelSandbox.runCommand('git', [
+        'clone',
+        '--depth', '1',
+        '--branch', sandbox.branch,
+        sandbox.repoUrl,
+        '/repo',
+      ]);
+
+      if (cloneResult.exitCode !== 0) {
+        // Try without branch (use default)
+        this.addSandboxLog(sandboxId, 'warning', `Branch '${sandbox.branch}' not found, trying default...`);
+        const retryClone = await vercelSandbox.runCommand('git', [
+          'clone', '--depth', '1', sandbox.repoUrl, '/repo',
+        ]);
+        if (retryClone.exitCode !== 0) {
+          throw new Error(`Git clone failed: ${await retryClone.stderr()}`);
+        }
+      }
+      this.addSandboxLog(sandboxId, 'success', '✅ Repository cloned into microVM');
+
+      // ── Step 3: Read files from microVM for AI analysis ────────────────────
+      sandbox.status = 'scanning';
+      this.addSandboxLog(sandboxId, 'info', '🤖 Reading files for AI analysis...');
+
+      const lsResult = await vercelSandbox.runCommand('find', [
+        '/repo', '-type', 'f',
+        '-not', '-path', '*/node_modules/*',
+        '-not', '-path', '*/.git/*',
+        '-not', '-path', '*/dist/*',
+        '-not', '-path', '*/build/*',
+        '-name', '*.ts', '-o', '-name', '*.js', '-o', '-name', '*.py',
+        '-o', '-name', '*.go', '-o', '-name', '*.php', '-o', '-name', '*.rb',
+      ]);
+
+      const filePaths = (await lsResult.stdout()).trim().split('\n').filter(Boolean).slice(0, 12);
+      const codeFiles: Array<{ path: string; content: string }> = [];
+
+      for (const filePath of filePaths) {
+        const catResult = await vercelSandbox.runCommand('head', ['-c', '1500', filePath]);
+        if (catResult.exitCode === 0) {
+          const content = await catResult.stdout();
+          const relPath = filePath.replace('/repo/', '');
+          codeFiles.push({ path: relPath, content });
+        }
+      }
+
+      this.addSandboxLog(sandboxId, 'success', `Found ${codeFiles.length} files to analyze`);
+
+      // AI analysis in batches
+      if (codeFiles.length > 0) {
+        const MAX_BATCH = 3;
+        const allVulns: any[] = [];
+        for (let i = 0; i < codeFiles.length; i += MAX_BATCH) {
+          const batch = codeFiles.slice(i, i + MAX_BATCH);
+          const batchNum = Math.floor(i / MAX_BATCH) + 1;
+          const totalBatches = Math.ceil(codeFiles.length / MAX_BATCH);
+          this.addSandboxLog(sandboxId, 'info', `AI batch ${batchNum}/${totalBatches}...`);
+          try {
+            const result = await AIService.analyzeCode(batch);
+            allVulns.push(...result.vulnerabilities);
+            this.addSandboxLog(sandboxId, 'success', `Batch ${batchNum}: ${result.vulnerabilities.length} issues found`);
+          } catch (err: any) {
+            this.addSandboxLog(sandboxId, 'warning', `Batch ${batchNum} failed: ${err.message}`);
+          }
+          if (i + MAX_BATCH < codeFiles.length) await new Promise(r => setTimeout(r, 1000));
+        }
+
+        sandbox.codeScanResults = {
+          total: allVulns.length,
+          critical: allVulns.filter(v => v.severity === 'critical').length,
+          high: allVulns.filter(v => v.severity === 'high').length,
+          medium: allVulns.filter(v => v.severity === 'medium').length,
+          low: allVulns.filter(v => v.severity === 'low').length,
+          vulnerabilities: allVulns,
+        };
+        this.addSandboxLog(sandboxId, 'success', `AI code analysis complete: ${allVulns.length} vulnerabilities`);
+      }
+
+      // ── Step 4: Detect language and install dependencies in microVM ─────────
+      sandbox.status = 'installing';
+      this.addSandboxLog(sandboxId, 'info', '📦 Detecting language and installing dependencies...');
+
+      const langDetect = await vercelSandbox.runCommand('ls', ['/repo']);
+      const fileList = await langDetect.stdout();
+
+      let lang = 'unknown';
+      let installCmd = '';
+      let startCmd = '';
+
+      if (fileList.includes('package.json')) {
+        lang = 'node';
+        installCmd = 'npm install --legacy-peer-deps';
+        startCmd = 'npm start';
+      } else if (fileList.includes('requirements.txt')) {
+        lang = 'python';
+        installCmd = 'pip install -r requirements.txt';
+        startCmd = 'python app.py';
+      } else if (fileList.includes('go.mod')) {
+        lang = 'go';
+        installCmd = 'go mod download';
+        startCmd = 'go run .';
+      }
+
+      this.addSandboxLog(sandboxId, 'info', `Detected language: ${lang}`);
+
+      if (installCmd) {
+        const installResult = await vercelSandbox.runCommand('sh', ['-c', `cd /repo && ${installCmd}`]);
+        if (installResult.exitCode === 0) {
+          this.addSandboxLog(sandboxId, 'success', `${lang} dependencies installed`);
+        } else {
+          this.addSandboxLog(sandboxId, 'warning', `Dependency install warning (continuing anyway)`);
+        }
+      }
+
+      // ── Step 5: Start the application inside the microVM ───────────────────
+      sandbox.status = 'running';
+      const appPort = 3000;
+      this.addSandboxLog(sandboxId, 'info', `Starting app on internal port ${appPort}...`);
+
+      // Determine the correct start command from package.json
+      if (lang === 'node') {
+        const pkgResult = await vercelSandbox.runCommand('cat', ['/repo/package.json']);
+        if (pkgResult.exitCode === 0) {
+          try {
+            const pkg = JSON.parse(await pkgResult.stdout());
+            if (pkg.scripts?.start) startCmd = 'npm start';
+            else if (pkg.scripts?.dev) startCmd = 'npm run dev';
+            else if (pkg.scripts?.serve) startCmd = 'npm run serve';
+          } catch { /* use default npm start */ }
+        }
+      }
+
+      if (startCmd) {
+        // Run app in background inside microVM
+        await vercelSandbox.runCommand('sh', [
+          '-c',
+          `cd /repo && PORT=${appPort} ${startCmd} &`,
+        ]);
+
+        // Wait for server to start
+        await new Promise(r => setTimeout(r, 5000));
+        this.addSandboxLog(sandboxId, 'success', `App started inside microVM on port ${appPort}`);
+
+        // ── Step 6: Run penetration test against the app inside the microVM ─
+        sandbox.status = 'scanning';
+        this.addSandboxLog(sandboxId, 'info', '🔍 Running security checks inside microVM...');
+
+        // Use curl inside the microVM to test the app
+        const curlResult = await vercelSandbox.runCommand('curl', [
+          '-s', '-o', '/dev/null', '-w', '%{http_code}',
+          `http://localhost:${appPort}`,
+        ]);
+
+        const statusCode = (await curlResult.stdout()).trim();
+        this.addSandboxLog(sandboxId, 'info', `App responded with HTTP ${statusCode}`);
+
+        if (statusCode && statusCode !== '000') {
+          // Security header checks
+          const headersResult = await vercelSandbox.runCommand('curl', [
+            '-s', '-D', '-', '-o', '/dev/null',
+            `http://localhost:${appPort}`,
+          ]);
+          const headersOutput = await headersResult.stdout();
+
+          const missingHeaders: string[] = [];
+          if (!headersOutput.includes('X-Frame-Options')) missingHeaders.push('X-Frame-Options');
+          if (!headersOutput.includes('X-Content-Type-Options')) missingHeaders.push('X-Content-Type-Options');
+          if (!headersOutput.includes('Content-Security-Policy')) missingHeaders.push('Content-Security-Policy');
+          if (!headersOutput.includes('Strict-Transport-Security')) missingHeaders.push('Strict-Transport-Security');
+
+          const penTestVulns = missingHeaders.map(h => ({
+            type: 'Missing Security Header',
+            severity: 'medium',
+            description: `Missing HTTP security header: ${h}`,
+            recommendation: `Add ${h} header to all responses`,
+          }));
+
+          sandbox.penTestResults = {
+            vulnerabilitiesFound: penTestVulns.length,
+            vulnerabilities: penTestVulns,
+            testedUrl: `http://localhost:${appPort}`,
+          };
+
+          this.addSandboxLog(sandboxId, 'success', `Security checks done: ${penTestVulns.length} header issues`);
+        }
+      } else {
+        this.addSandboxLog(sandboxId, 'warning', `Auto-boot not supported for ${lang}, skipping runtime tests`);
+      }
+
+      // ── Done ───────────────────────────────────────────────────────────────
+      sandbox.status = 'completed';
+      const totalIssues =
+        (sandbox.codeScanResults?.total || 0) +
+        (sandbox.penTestResults?.vulnerabilitiesFound || 0);
+      this.addSandboxLog(sandboxId, 'success', `✅ All scans complete! Total issues found: ${totalIssues}`);
+
+      // Cleanup: stop the Vercel microVM
+      setTimeout(async () => {
+        try {
+          await vercelSandbox.stop();
+          this.sandboxes.delete(sandboxId);
+          console.log(`Vercel sandbox ${sandboxId} stopped and cleaned up`);
+        } catch (e) { /* ignore cleanup errors */ }
+      }, 300000);
+
+    } catch (error: any) {
+      console.error('Vercel Sandbox processing error:', error);
+      sandbox.status = 'failed';
+      sandbox.error = error.message;
+      this.addSandboxLog(sandboxId, 'error', `Failed: ${error.message}`);
+
+      // Always stop the microVM on failure
+      if (vercelSandbox) {
+        try { await vercelSandbox.stop(); } catch (e) { /* ignore */ }
+      }
+      setTimeout(() => this.sandboxes.delete(sandboxId), 60000);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // LOCAL SANDBOX BACKEND (Development)
+  // Uses child_process + local git — works on dev machines with full filesystem
+  // ─────────────────────────────────────────────────────────────────────────────
 
   /**
    * Process sandbox: clone -> install -> run -> AI code scan + website scan + pen test
@@ -250,8 +515,8 @@ export class SandboxScannerService {
    */
   private static async readCodeFilesFromDisk(
     workDir: string,
-    maxFiles = 10,        // keep low to avoid burning daily token quota
-    maxCharsPerFile = 800 // ~200 tokens per file, 10 files = ~2000 tokens per batch
+    maxFiles = 10,
+    maxCharsPerFile = 800
   ): Promise<Array<{ path: string; content: string }>> {
     const SUPPORTED_EXTS = new Set(['js', 'ts', 'jsx', 'tsx', 'py', 'go', 'php', 'rb', 'java', 'cs', 'cpp', 'c', 'rs', 'kt', 'swift']);
     const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'vendor', '__pycache__', '.venv', 'venv']);
@@ -275,7 +540,6 @@ export class SandboxScannerService {
             if (content.length > maxCharsPerFile) {
               content = content.slice(0, maxCharsPerFile) + '\n// ... (truncated)';
             }
-            // Simple priority: security-related filenames first
             const p = relPath.toLowerCase();
             const priority = (p.includes('auth') || p.includes('login') || p.includes('password') || p.includes('token') || p.includes('api')) ? 1 : 0;
             results.push({ path: relPath, content, priority });
@@ -285,7 +549,6 @@ export class SandboxScannerService {
     };
 
     await walk(workDir);
-    // Sort high-priority files first, then cap
     results.sort((a, b) => b.priority - a.priority);
     return results.slice(0, maxFiles).map(({ path, content }) => ({ path, content }));
   }
@@ -386,7 +649,6 @@ export class SandboxScannerService {
         for (const f of ['server.js', 'index.js', 'app.js', 'main.js']) {
           if (files.includes(f)) return `node ${f}`;
         }
-        // check src/
         const srcFiles = await fs.readdir(path.join(workDir, 'src')).catch(() => [] as string[]);
         for (const f of ['server.js', 'index.js', 'app.js', 'main.js']) {
           if (srcFiles.includes(f)) return `node src/${f}`;
@@ -413,7 +675,6 @@ export class SandboxScannerService {
         return `php -S 0.0.0.0:${port}`;
       }
       default:
-        // java and unknown — can't auto-boot, return null signal
         return '';
     }
   }
@@ -423,17 +684,14 @@ export class SandboxScannerService {
    */
   private static async waitForServer(url: string, timeout: number): Promise<void> {
     const startTime = Date.now();
-    
     while (Date.now() - startTime < timeout) {
       try {
         await axios.get(url, { timeout: 2000 });
-        return; // Server is ready
+        return;
       } catch (error) {
-        // Server not ready yet, wait and retry
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
-
     throw new Error('Server failed to start within timeout period');
   }
 
@@ -441,13 +699,8 @@ export class SandboxScannerService {
    * Scan the running application
    */
   private static async scanRunningApp(userId: string, url: string, repoUrl: string): Promise<string> {
-    // Import websiteScanner service
     const { WebsiteScannerService } = await import('./websiteScanner.service.js');
-
-    // Run the scan to get results
     const scanResult = await WebsiteScannerService.scanWebsite(url);
-
-    // Create scan record with results
     const scan = await WebsiteScan.create({
       userId: parseInt(userId),
       url: scanResult.url,
@@ -458,32 +711,21 @@ export class SandboxScannerService {
       technologies: scanResult.technologies,
       ssl: scanResult.ssl,
     });
-
     return scan._id.toString();
   }
 
   /**
-   * Cleanup sandbox environment
+   * Cleanup sandbox environment (local dev only)
    */
   private static async cleanupSandbox(sandboxId: string): Promise<void> {
     const sandbox = this.sandboxes.get(sandboxId);
     if (!sandbox) return;
 
     try {
-      // Kill process if running
-      if (sandbox.process) {
-        sandbox.process.kill();
-      }
-
-      // Release port
+      if (sandbox.process) sandbox.process.kill();
       this.usedPorts.delete(sandbox.port);
-
-      // Remove directory
       await fs.rm(sandbox.workDir, { recursive: true, force: true });
-
-      // Remove from map
       this.sandboxes.delete(sandboxId);
-
       console.log(`Sandbox ${sandboxId} cleaned up`);
     } catch (error) {
       console.error('Cleanup error:', error);
