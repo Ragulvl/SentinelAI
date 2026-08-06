@@ -1,407 +1,313 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { GitBranch, Play, Shield, AlertCircle, CheckCircle, Loader2, ExternalLink } from "lucide-react";
-import { Navigation } from "@/components/Navigation";
+import {
+  GitBranch, Play, Shield, AlertCircle, CheckCircle, Loader2, ExternalLink,
+} from "lucide-react";
+import { PageLayout } from "@/components/PageLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { API_ENDPOINTS } from "@/config/api";
 import { AuthService } from "@/services/auth.service";
 
 interface SandboxStatus {
-  status: 'idle' | 'cloning' | 'installing' | 'running' | 'scanning' | 'completed' | 'failed';
+  status: "idle" | "cloning" | "installing" | "running" | "scanning" | "completed" | "failed";
   message: string;
   url?: string;
   scanId?: string;
   vulnerabilities?: number;
-  codeScanResults?: {
-    total: number;
-    critical: number;
-    high: number;
-    medium: number;
-    low: number;
-  } | null;
-  penTestResults?: {
-    vulnerabilitiesFound: number;
-    riskScore: number;
-  } | null;
+  codeScanResults?: { total: number; critical: number; high: number; medium: number; low: number } | null;
+  penTestResults?: { vulnerabilitiesFound: number; riskScore: number } | null;
   error?: string;
 }
+
+const STEPS = ["cloning", "installing", "running", "scanning", "completed"] as const;
+
+const CODE_SEVERITY = [
+  { key: "critical", label: "Critical", color: "text-destructive", bg: "hsl(0 84% 60% / 0.09)" },
+  { key: "high", label: "High", color: "severity-high", bg: "hsl(18 95% 60% / 0.09)" },
+  { key: "medium", label: "Medium", color: "text-warning", bg: "hsl(38 92% 50% / 0.09)" },
+  { key: "low", label: "Low", color: "text-info", bg: "hsl(217 91% 60% / 0.09)" },
+];
+
+const LOG_COLORS: Record<string, string> = {
+  error: "text-destructive", success: "text-success", warning: "text-warning", info: "text-muted-foreground",
+};
 
 const SandboxScanPage = () => {
   const navigate = useNavigate();
   const [repoUrl, setRepoUrl] = useState("");
   const [branch, setBranch] = useState("main");
-  const [sandboxStatus, setSandboxStatus] = useState<SandboxStatus>({ status: 'idle', message: '' });
+  const [sandboxStatus, setSandboxStatus] = useState<SandboxStatus>({ status: "idle", message: "" });
   const [logs, setLogs] = useState<Array<{ time: string; message: string; level: string }>>([]);
 
-  const addLog = (message: string, level: 'info' | 'success' | 'warning' | 'error' = 'info') => {
+  const addLog = (message: string, level: "info" | "success" | "warning" | "error" = "info") => {
     setLogs(prev => [...prev, { time: new Date().toLocaleTimeString(), message, level }]);
   };
 
   const handleCloneAndScan = async () => {
     if (!repoUrl.trim()) return;
-
     try {
       setLogs([]);
-      setSandboxStatus({ status: 'cloning', message: 'Cloning repository...' });
-      addLog('Starting sandbox environment...', 'info');
-      addLog(`Cloning: ${repoUrl}`, 'info');
+      setSandboxStatus({ status: "cloning", message: "Cloning repository..." });
+      addLog("Starting sandbox environment...", "info");
+      addLog(`Cloning: ${repoUrl}`, "info");
 
       const token = AuthService.getToken();
       const response = await fetch(API_ENDPOINTS.scan.sandboxScan, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          repoUrl: repoUrl.trim(),
-          branch: branch.trim() || 'main',
-        }),
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ repoUrl: repoUrl.trim(), branch: branch.trim() || "main" }),
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to start sandbox scan');
+        throw new Error(error.error || "Failed to start sandbox scan");
       }
 
       const { sandboxId } = await response.json();
-      addLog('Repository cloned successfully', 'success');
-
-      // Poll for status updates
+      addLog("Repository cloned successfully", "success");
       pollSandboxStatus(sandboxId);
     } catch (error: any) {
-      console.error('Error starting sandbox scan:', error);
-      setSandboxStatus({ status: 'failed', message: error.message, error: error.message });
-      addLog(`Error: ${error.message}`, 'error');
+      setSandboxStatus({ status: "failed", message: error.message, error: error.message });
+      addLog(`Error: ${error.message}`, "error");
     }
   };
 
   const pollSandboxStatus = async (sandboxId: string) => {
     const token = AuthService.getToken();
-    
     const poll = async () => {
       try {
         const response = await fetch(`${API_ENDPOINTS.scan.sandboxStatus}/${sandboxId}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-
-        if (!response.ok) throw new Error('Failed to get status');
-
+        if (!response.ok) throw new Error("Failed to get status");
         const data = await response.json();
         setSandboxStatus(data);
-
-        // Replace logs entirely (don't accumulate)
-        if (data.logs) {
-          setLogs(data.logs);
-        }
-
-        // Continue polling if not done
-        if (!['completed', 'failed'].includes(data.status)) {
+        if (data.logs) setLogs(data.logs);
+        if (!["completed", "failed"].includes(data.status)) {
           setTimeout(poll, 2000);
-        } else if (data.status === 'completed') {
-          // Don't auto-navigate — let user see the full summary first
-          addLog(`Scan completed!`, 'success');
+        } else if (data.status === "completed") {
+          addLog("Scan completed!", "success");
         }
-      } catch (error) {
-        console.error('Polling error:', error);
-      }
+      } catch { }
     };
-
     poll();
   };
 
-  const getStatusIcon = () => {
-    switch (sandboxStatus.status) {
-      case 'cloning':
-      case 'installing':
-      case 'running':
-      case 'scanning':
-        return <Loader2 className="w-5 h-5 animate-spin text-primary" />;
-      case 'completed':
-        return <CheckCircle className="w-5 h-5 text-green-500" />;
-      case 'failed':
-        return <AlertCircle className="w-5 h-5 text-destructive" />;
-      default:
-        return <Shield className="w-5 h-5 text-muted-foreground" />;
-    }
-  };
-
-  const isProcessing = ['cloning', 'installing', 'running', 'scanning'].includes(sandboxStatus.status);
+  const isProcessing = ["cloning", "installing", "running", "scanning"].includes(sandboxStatus.status);
+  const currentStepIdx = STEPS.indexOf(sandboxStatus.status as any);
 
   return (
-    <div className="min-h-screen bg-black">
-      <Navigation />
+    <PageLayout>
+      <PageHeader
+        title="Sandbox Scanner"
+        description="Provision isolated environments to safely clone and perform full security evaluations without GitHub tokens."
+        breadcrumbs={[{ label: "Security Tools" }, { label: "Sandbox" }]}
+      />
 
-      <div className="max-w-4xl mx-auto px-6 py-12">
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-3xl font-medium text-foreground mb-2">Sandbox Environment Verification</h1>
-          <p className="text-muted-foreground mb-8 font-light">
-            Instantiate source repositories in isolated temporary runtimes to perform safety evaluations.
-          </p>
-
-          {/* Input Section */}
-          <div className="bg-card border border-border rounded-lg p-6 mb-6">
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-muted-foreground mb-2">Repository URL</label>
-                <div className="relative">
-                  <GitBranch className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <input
-                    value={repoUrl}
-                    onChange={(e) => setRepoUrl(e.target.value)}
-                    placeholder="https://github.com/username/repo"
-                    disabled={isProcessing}
-                    className="w-full pl-11 pr-4 py-2.5 rounded-md bg-background border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 font-mono text-sm disabled:opacity-50"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm text-muted-foreground mb-2">Branch (optional)</label>
-                <input
-                  value={branch}
-                  onChange={(e) => setBranch(e.target.value)}
-                  placeholder="main"
-                  disabled={isProcessing}
-                  className="w-full px-4 py-2.5 rounded-md bg-background border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 font-mono text-sm disabled:opacity-50"
-                />
-              </div>
-
-              <button
-                onClick={handleCloneAndScan}
-                disabled={!repoUrl.trim() || isProcessing}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-md bg-primary text-black text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
-              >
-                <Play className="w-4 h-4" />
-                {isProcessing ? 'Processing...' : 'Provision & Scan'}
-              </button>
+      <div className="max-w-3xl space-y-5">
+        {/* Input */}
+        <div className="card-elevated p-6 space-y-4">
+          <div>
+            <label className="section-label block mb-2">Repository URL</label>
+            <div className="relative">
+              <GitBranch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+              <input
+                value={repoUrl} onChange={e => setRepoUrl(e.target.value)}
+                disabled={isProcessing} placeholder="https://github.com/username/repo"
+                className="input-base pl-10 font-mono text-sm"
+              />
             </div>
           </div>
 
-          {/* Status Section */}
-          {sandboxStatus.status !== 'idle' && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-card border border-border rounded-lg p-6 mb-6"
-            >
-              <div className="flex items-center gap-3 mb-4">
-                {getStatusIcon()}
+          <div>
+            <label className="section-label block mb-2">Branch (optional)</label>
+            <input value={branch} onChange={e => setBranch(e.target.value)}
+              disabled={isProcessing} placeholder="main"
+              className="input-base font-mono text-sm" />
+          </div>
+
+          <button onClick={handleCloneAndScan} disabled={!repoUrl.trim() || isProcessing}
+            className="btn-primary w-full justify-center">
+            {isProcessing ? <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</> : <><Play className="w-4 h-4" /> Provision & Scan</>}
+          </button>
+
+          {/* How it works */}
+          <div className="p-3.5 rounded-xl text-xs space-y-1.5"
+            style={{ background: "hsl(var(--primary) / 0.06)", border: "1px solid hsl(var(--primary) / 0.2)" }}>
+            <p className="font-semibold text-foreground mb-2 text-[11px]">How it works</p>
+            {[
+              "Clones the repository in an isolated sandbox environment",
+              "AI scans all code files for vulnerabilities (no GitHub token needed)",
+              "Supports Node.js, Python, Go, Ruby, and PHP projects",
+              "Boots the app and runs website scan + penetration test in parallel",
+              "Sandbox is destroyed after scan completes",
+            ].map(text => (
+              <p key={text} className="text-muted-foreground flex items-start gap-2">
+                <span className="text-primary mt-0.5">•</span> {text}
+              </p>
+            ))}
+          </div>
+        </div>
+
+        {/* Status + pipeline */}
+        <AnimatePresence>
+          {sandboxStatus.status !== "idle" && (
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              className="card-elevated p-5 space-y-5">
+              {/* Header */}
+              <div className="flex items-center gap-3">
+                {sandboxStatus.status === "completed" ? (
+                  <CheckCircle className="w-5 h-5 text-success shrink-0" />
+                ) : sandboxStatus.status === "failed" ? (
+                  <AlertCircle className="w-5 h-5 text-destructive shrink-0" />
+                ) : (
+                  <Loader2 className="w-5 h-5 animate-spin text-primary shrink-0" />
+                )}
                 <div>
-                  <h3 className="text-sm font-medium text-foreground">
-                    {sandboxStatus.status.charAt(0).toUpperCase() + sandboxStatus.status.slice(1)}
-                  </h3>
+                  <p className="text-sm font-semibold text-foreground capitalize">{sandboxStatus.status}</p>
                   <p className="text-xs text-muted-foreground">{sandboxStatus.message}</p>
                 </div>
+                {sandboxStatus.url && (
+                  <a href={sandboxStatus.url} target="_blank" rel="noopener noreferrer"
+                    className="ml-auto flex items-center gap-1.5 text-xs text-primary hover:underline">
+                    <ExternalLink className="w-3 h-3" /> Live URL
+                  </a>
+                )}
               </div>
 
-              {sandboxStatus.url && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-4">
-                  <ExternalLink className="w-3 h-3" />
-                  <span>Running at:</span>
-                  <a
-                    href={sandboxStatus.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary hover:underline font-mono"
-                  >
-                    {sandboxStatus.url}
-                  </a>
-                </div>
-              )}
-
-              {/* Progress Steps */}
-              <div className="space-y-2">
-                {['cloning', 'installing', 'running', 'scanning', 'completed'].map((step, idx) => {
-                  const currentIdx = ['cloning', 'installing', 'running', 'scanning', 'completed'].indexOf(sandboxStatus.status);
-                  const isComplete = idx < currentIdx || sandboxStatus.status === 'completed';
-                  const isCurrent = idx === currentIdx;
-
+              {/* Pipeline steps */}
+              <div className="flex items-center gap-2">
+                {STEPS.map((step, i) => {
+                  const done = i < currentStepIdx || sandboxStatus.status === "completed";
+                  const active = i === currentStepIdx;
                   return (
-                    <div key={step} className="flex items-center gap-3">
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
-                        isComplete ? 'bg-green-500/20 text-green-500' :
-                        isCurrent ? 'bg-primary/20 text-primary' :
-                        'bg-muted text-muted-foreground'
-                      }`}>
-                        {isComplete ? '✓' : idx + 1}
-                      </div>
-                      <span className={`text-sm ${
-                        isComplete || isCurrent ? 'text-foreground' : 'text-muted-foreground'
-                      }`}>
-                        {step.charAt(0).toUpperCase() + step.slice(1)}
+                    <div key={step} className="flex-1 text-center">
+                      <div className={`h-1 rounded-full mb-1.5 ${done ? "bg-success" : active ? "bg-primary" : "bg-border"}`} />
+                      <span className={`text-[9px] font-medium capitalize ${done ? "text-success" : active ? "text-primary" : "text-muted-foreground/40"}`}>
+                        {step}
                       </span>
                     </div>
                   );
                 })}
               </div>
 
-              {/* Results Summary — shown when completed */}
-              {sandboxStatus.status === 'completed' && (
-                <div className="mt-5 space-y-4">
-                  <p className="text-xs font-medium text-foreground uppercase tracking-wider">Scan Report</p>
+              {/* Results when completed */}
+              {sandboxStatus.status === "completed" && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
+                  <p className="section-label">Scan Report</p>
 
-                  {/* AI Code Analysis */}
-                  {sandboxStatus.codeScanResults ? (
-                    <div className="rounded-md border border-border bg-background p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <p className="text-sm font-medium text-foreground">AI Code Analysis</p>
-                        <span className="text-xs text-muted-foreground">{sandboxStatus.codeScanResults.total} total issues</span>
-                      </div>
+                  {/* Code analysis */}
+                  <div className="p-4 rounded-xl space-y-3" style={{ background: "hsl(var(--muted) / 0.5)", border: "1px solid hsl(var(--border))" }}>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold text-foreground">AI Code Analysis</p>
+                      <span className="text-xs text-muted-foreground">{sandboxStatus.codeScanResults?.total ?? 0} total issues</span>
+                    </div>
+                    {sandboxStatus.codeScanResults ? (
                       <div className="grid grid-cols-4 gap-2">
-                        {[
-                          { label: 'Critical', val: sandboxStatus.codeScanResults.critical, color: 'text-red-500', bg: 'bg-red-500/10' },
-                          { label: 'High', val: sandboxStatus.codeScanResults.high, color: 'text-orange-500', bg: 'bg-orange-500/10' },
-                          { label: 'Medium', val: sandboxStatus.codeScanResults.medium, color: 'text-yellow-500', bg: 'bg-yellow-500/10' },
-                          { label: 'Low', val: sandboxStatus.codeScanResults.low, color: 'text-blue-400', bg: 'bg-blue-400/10' },
-                        ].map(({ label, val, color, bg }) => (
-                          <div key={label} className={`rounded p-2 text-center ${bg}`}>
-                            <p className={`text-xl font-bold ${color}`}>{val}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+                        {CODE_SEVERITY.map(s => (
+                          <div key={s.key} className="rounded-lg p-2 text-center" style={{ background: s.bg }}>
+                            <p className={`text-lg font-black metric-number ${s.color}`}>{(sandboxStatus.codeScanResults as any)[s.key]}</p>
+                            <p className="text-[9px] text-muted-foreground mt-0.5">{s.label}</p>
                           </div>
                         ))}
                       </div>
-                      {sandboxStatus.codeScanResults.total === 0 && (
-                        <p className="text-xs text-muted-foreground mt-2 text-center">No code vulnerabilities detected</p>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="rounded-md border border-border bg-background p-4 text-center">
-                      <p className="text-xs text-muted-foreground">AI code analysis was skipped or failed</p>
-                    </div>
-                  )}
+                    ) : (
+                      <p className="text-xs text-muted-foreground text-center">AI code analysis skipped or failed</p>
+                    )}
+                  </div>
 
-                  {/* Website Scan */}
-                  {sandboxStatus.scanId ? (
-                    <div className="rounded-md border border-border bg-background p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-sm font-medium text-foreground">Website Scan</p>
-                        <span className="text-xs text-green-500">✓ Complete</span>
-                      </div>
+                  {/* Website scan */}
+                  <div className="p-4 rounded-xl flex items-center justify-between"
+                    style={{ background: "hsl(var(--muted) / 0.5)", border: "1px solid hsl(var(--border))" }}>
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Website Scan</p>
                       <p className="text-xs text-muted-foreground">
-                        {sandboxStatus.vulnerabilities ?? 0} header/SSL/HTML issues found on the running app
+                        {sandboxStatus.scanId ? `${sandboxStatus.vulnerabilities ?? 0} header/SSL issues found` : "Skipped — unsupported runtime"}
                       </p>
                     </div>
-                  ) : (
-                    <div className="rounded-md border border-border bg-background p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-sm font-medium text-foreground">Website Scan</p>
-                        <span className="text-xs text-yellow-500">Skipped</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">App could not be booted (unsupported runtime)</p>
-                    </div>
-                  )}
+                    <span className={`badge text-[10px] ${sandboxStatus.scanId ? "badge-success" : "badge-warning"}`}>
+                      {sandboxStatus.scanId ? "Complete" : "Skipped"}
+                    </span>
+                  </div>
 
-                  {/* Pen Test */}
+                  {/* Pentest */}
                   {sandboxStatus.penTestResults ? (
-                    <div className="rounded-md border border-border bg-background p-4">
+                    <div className="p-4 rounded-xl" style={{ background: "hsl(var(--muted) / 0.5)", border: "1px solid hsl(var(--border))" }}>
                       <div className="flex items-center justify-between mb-3">
-                        <p className="text-sm font-medium text-foreground">Penetration Test</p>
-                        <span className="text-xs text-green-500">✓ Complete</span>
+                        <p className="text-sm font-semibold text-foreground">Penetration Test</p>
+                        <span className="badge badge-success text-[10px]">Complete</span>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
-                        <div className="rounded p-2 text-center bg-red-500/10">
-                          <p className="text-xl font-bold text-red-500">{sandboxStatus.penTestResults.vulnerabilitiesFound}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">Vulnerabilities</p>
+                        <div className="rounded-lg p-3 text-center" style={{ background: "hsl(0 84% 60% / 0.09)" }}>
+                          <p className="text-xl font-black metric-number text-destructive">{sandboxStatus.penTestResults.vulnerabilitiesFound}</p>
+                          <p className="text-xs text-muted-foreground">Vulnerabilities</p>
                         </div>
-                        <div className={`rounded p-2 text-center ${sandboxStatus.penTestResults.riskScore >= 70 ? 'bg-red-500/10' : sandboxStatus.penTestResults.riskScore >= 40 ? 'bg-yellow-500/10' : 'bg-green-500/10'}`}>
-                          <p className={`text-xl font-bold ${sandboxStatus.penTestResults.riskScore >= 70 ? 'text-red-500' : sandboxStatus.penTestResults.riskScore >= 40 ? 'text-yellow-500' : 'text-green-500'}`}>
+                        <div className="rounded-lg p-3 text-center"
+                          style={{ background: sandboxStatus.penTestResults.riskScore >= 70 ? "hsl(0 84% 60% / 0.09)" : sandboxStatus.penTestResults.riskScore >= 40 ? "hsl(38 92% 50% / 0.09)" : "hsl(142 71% 45% / 0.09)" }}>
+                          <p className={`text-xl font-black metric-number ${sandboxStatus.penTestResults.riskScore >= 70 ? "text-destructive" : sandboxStatus.penTestResults.riskScore >= 40 ? "text-warning" : "text-success"}`}>
                             {sandboxStatus.penTestResults.riskScore}
                           </p>
-                          <p className="text-xs text-muted-foreground mt-0.5">Risk Score /100</p>
+                          <p className="text-xs text-muted-foreground">Risk Score</p>
                         </div>
                       </div>
                     </div>
                   ) : (
-                    <div className="rounded-md border border-border bg-background p-4">
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium text-foreground">Penetration Test</p>
-                        <span className="text-xs text-yellow-500">Skipped</span>
+                    <div className="p-4 rounded-xl flex items-center justify-between"
+                      style={{ background: "hsl(var(--muted) / 0.5)", border: "1px solid hsl(var(--border))" }}>
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">Penetration Test</p>
+                        <p className="text-xs text-muted-foreground">Skipped — unsupported runtime</p>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">App could not be booted (unsupported runtime)</p>
+                      <span className="badge badge-warning text-[10px]">Skipped</span>
                     </div>
                   )}
 
-                  {/* Action buttons */}
-                  <div className="flex gap-2 pt-1">
+                  {/* Actions */}
+                  <div className="flex gap-3 pt-1">
                     {sandboxStatus.scanId && (
-                      <button
-                        onClick={() => navigate(`/website-scan/${sandboxStatus.scanId}`)}
-                        className="flex-1 py-2 rounded-md bg-primary text-black text-sm font-medium hover:opacity-90 transition-opacity"
-                      >
+                      <button onClick={() => navigate(`/website-scan/${sandboxStatus.scanId}`)} className="btn-primary flex-1 justify-center text-sm">
                         View Website Report
                       </button>
                     )}
-                    <button
-                      onClick={() => {
-                        setSandboxStatus({ status: 'idle', message: '' });
-                        setLogs([]);
-                      }}
-                      className="flex-1 py-2 rounded-md border border-border text-foreground text-sm hover:bg-card transition-colors"
-                    >
+                    <button onClick={() => { setSandboxStatus({ status: "idle", message: "" }); setLogs([]); }}
+                      className="btn-secondary flex-1 justify-center text-sm">
                       Scan Another Repo
                     </button>
                   </div>
-                </div>
+                </motion.div>
               )}
             </motion.div>
           )}
+        </AnimatePresence>
 
-          {/* Logs Section */}
+        {/* Logs */}
+        <AnimatePresence>
           {logs.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-card border border-border rounded-lg p-6"
-            >
-              <h3 className="text-sm font-medium text-foreground mb-4">Activity Log</h3>
-              <div className="space-y-2 max-h-64 overflow-y-auto font-mono text-xs">
-                {logs.map((log, idx) => (
-                  <div key={idx} className="flex items-start gap-3">
-                    <span className="text-muted-foreground shrink-0">{log.time}</span>
-                    <span className={`${
-                      log.level === 'error' ? 'text-destructive' :
-                      log.level === 'success' ? 'text-green-500' :
-                      log.level === 'warning' ? 'text-yellow-500' :
-                      'text-muted-foreground'
-                    }`}>
-                      {log.message}
-                    </span>
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              className="terminal-bg overflow-hidden rounded-xl">
+              <div className="flex items-center gap-1.5 px-4 py-3" style={{ borderBottom: "1px solid hsl(var(--border))" }}>
+                <div className="w-2.5 h-2.5 rounded-full bg-destructive/60" />
+                <div className="w-2.5 h-2.5 rounded-full bg-warning/60" />
+                <div className="w-2.5 h-2.5 rounded-full bg-success/60" />
+                <span className="ml-2 text-[10px] text-muted-foreground font-mono">sandbox.log</span>
+                {isProcessing && <span className="ml-auto text-[10px] text-primary flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />Live
+                </span>}
+              </div>
+              <div className="max-h-56 overflow-y-auto p-4 space-y-1.5">
+                {logs.map((log, i) => (
+                  <div key={i} className="flex items-start gap-3 text-xs">
+                    <span className="text-muted-foreground/40 font-mono shrink-0 w-16">{log.time}</span>
+                    <span className={LOG_COLORS[log.level]}>{log.message}</span>
                   </div>
                 ))}
               </div>
             </motion.div>
           )}
-
-          {/* Info Box */}
-          <div className="mt-6 bg-primary/5 border border-primary/20 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-foreground mb-2">How it works</h3>
-            <ul className="text-xs text-muted-foreground space-y-1.5 font-light">
-              <li className="flex items-center gap-2">
-                <span className="w-1 h-1 rounded-full bg-primary" />
-                Clones the repository in an isolated sandbox environment
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="w-1 h-1 rounded-full bg-primary" />
-                AI scans all code files for vulnerabilities (no GitHub token needed)
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="w-1 h-1 rounded-full bg-primary" />
-                Supports Node.js, Python, Go, Ruby, and PHP projects
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="w-1 h-1 rounded-full bg-primary" />
-                Boots the app and runs website scan + penetration test in parallel
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="w-1 h-1 rounded-full bg-primary" />
-                Sandbox is destroyed after scan completes
-              </li>
-            </ul>
-          </div>
-        </motion.div>
+        </AnimatePresence>
       </div>
-    </div>
+    </PageLayout>
   );
 };
 

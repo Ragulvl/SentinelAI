@@ -18,7 +18,6 @@ import ComprehensiveWebsiteScanResults from "./pages/ComprehensiveWebsiteScanRes
 import PenetrationTestPage from "./pages/PenetrationTestPage";
 import LoadTestPage from "./pages/LoadTestPage";
 import DomainVerificationPage from "./pages/DomainVerificationPage";
-import ScanHistoryPage from "./pages/ScanHistoryPage";
 import UnifiedHistoryPage from "./pages/UnifiedHistoryPage";
 import ProfilePage from "./pages/ProfilePage";
 import SandboxScanPage from "./pages/SandboxScanPage";

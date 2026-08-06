@@ -1,16 +1,17 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Shield, GitBranch, Globe, Target, Zap, Clock, AlertTriangle,
-  XCircle, CheckCircle, Filter, Search, TrendingUp, Activity
+  XCircle, CheckCircle, Search, Activity, RefreshCw, ChevronRight,
 } from "lucide-react";
-import { Navigation } from "@/components/Navigation";
+import { PageLayout } from "@/components/PageLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { API_ENDPOINTS } from "@/config/api";
 import { AuthService } from "@/services/auth.service";
 import { toast } from "@/hooks/use-toast";
 
-type ScanType = 'repository' | 'website' | 'penetration' | 'load';
+type ScanType = "repository" | "website" | "penetration" | "load";
 
 interface UnifiedScan {
   id: string;
@@ -26,37 +27,55 @@ interface UnifiedScan {
   technologies?: string[];
 }
 
+// ── Type config ───────────────────────────────────────────────────────────
+const TYPE_CONFIG: Record<ScanType, {
+  label: string;
+  icon: React.ElementType;
+  color: string;
+  bg: string;
+}> = {
+  repository: { label: "Repo Scan", icon: GitBranch, color: "text-primary", bg: "hsl(234 100% 68% / 0.1)" },
+  website: { label: "Website", icon: Globe, color: "text-success", bg: "hsl(142 71% 45% / 0.1)" },
+  penetration: { label: "Pentest", icon: Target, color: "text-destructive", bg: "hsl(0 84% 60% / 0.1)" },
+  load: { label: "Load Test", icon: Zap, color: "text-warning", bg: "hsl(38 92% 50% / 0.1)" },
+};
+
+const STATUS_CONFIG: Record<string, { icon: React.ElementType; color: string; label: string }> = {
+  completed: { icon: CheckCircle, color: "text-success", label: "Completed" },
+  failed: { icon: XCircle, color: "text-destructive", label: "Failed" },
+  running: { icon: Activity, color: "text-primary", label: "Running" },
+  pending: { icon: Clock, color: "text-muted-foreground", label: "Pending" },
+};
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
+
 const UnifiedHistoryPage = () => {
   const navigate = useNavigate();
   const [history, setHistory] = useState<UnifiedScan[]>([]);
   const [filteredHistory, setFilteredHistory] = useState<UnifiedScan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterType, setFilterType] = useState<ScanType | 'all'>('all');
+  const [filterType, setFilterType] = useState<ScanType | "all">("all");
   const [stats, setStats] = useState({
-    totalScans: 0,
-    repoScans: 0,
-    websiteScans: 0,
-    pentests: 0,
-    loadTests: 0,
+    totalScans: 0, repoScans: 0, websiteScans: 0, pentests: 0, loadTests: 0,
   });
 
-  useEffect(() => {
-    loadHistory();
-  }, []);
-
-  useEffect(() => {
-    filterHistory();
-  }, [history, searchQuery, filterType]);
+  useEffect(() => { loadHistory(); }, []);
+  useEffect(() => { filterHistory(); }, [history, searchQuery, filterType]);
 
   const calculateRepoScore = (summary: any): number => {
     const total = summary.total || 0;
     if (total === 0) return 100;
-    const weighted = 
-      (summary.critical || 0) * 10 +
-      (summary.high || 0) * 5 +
-      (summary.medium || 0) * 2 +
-      (summary.low || 0) * 1;
+    const weighted = (summary.critical || 0) * 10 + (summary.high || 0) * 5 + (summary.medium || 0) * 2 + (summary.low || 0);
     return Math.max(0, Math.min(100, 100 - weighted));
   };
 
@@ -64,80 +83,51 @@ const UnifiedHistoryPage = () => {
     try {
       setIsLoading(true);
       const token = AuthService.getToken();
-      
-      // Try the unified endpoint first
+
       try {
         const response = await fetch(`${API_ENDPOINTS.history.all}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-
         if (response.ok) {
           const data = await response.json();
           setHistory(data.history);
           setStats(data.stats);
           return;
         }
-      } catch (unifiedError) {
-        console.warn('Unified history endpoint failed, falling back to individual endpoints');
-      }
+      } catch { }
 
-      // Fallback: Fetch from individual endpoints
       const [repoScans, websiteScans] = await Promise.allSettled([
-        fetch(`${API_ENDPOINTS.scan.history}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }).then(r => r.ok ? r.json() : { scans: [] }),
-        
-        fetch(`${API_ENDPOINTS.websiteScan.history}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }).then(r => r.ok ? r.json() : []),
+        fetch(`${API_ENDPOINTS.scan.history}`, { headers: { Authorization: `Bearer ${token}` } })
+          .then(r => r.ok ? r.json() : { scans: [] }),
+        fetch(`${API_ENDPOINTS.websiteScan.history}`, { headers: { Authorization: `Bearer ${token}` } })
+          .then(r => r.ok ? r.json() : []),
       ]);
 
-      const repoScansData = repoScans.status === 'fulfilled' ? repoScans.value.scans || [] : [];
-      const websiteScansData = websiteScans.status === 'fulfilled' ? websiteScans.value : [];
+      const repoScansData = repoScans.status === "fulfilled" ? repoScans.value.scans || [] : [];
+      const websiteScansData = websiteScans.status === "fulfilled" ? websiteScans.value : [];
 
-      // Normalize to unified format
       const unifiedHistory: UnifiedScan[] = [
         ...repoScansData.map((scan: any) => ({
-          id: scan.id,
-          type: 'repository' as ScanType,
-          target: scan.repoFullName,
-          url: scan.repoUrl || '',
-          date: scan.startedAt,
-          status: scan.status,
-          summary: scan.summary,
-          vulnerabilities: scan.summary?.total || 0,
+          id: scan.id, type: "repository" as ScanType, target: scan.repoFullName,
+          url: scan.repoUrl || "", date: scan.startedAt, status: scan.status,
+          summary: scan.summary, vulnerabilities: scan.summary?.total || 0,
           score: scan.summary ? calculateRepoScore(scan.summary) : 0,
         })),
         ...websiteScansData.map((scan: any) => ({
-          id: scan._id,
-          type: 'website' as ScanType,
-          target: scan.url,
-          url: scan.url,
-          date: scan.scanDate,
-          status: 'completed',
+          id: scan._id, type: "website" as ScanType, target: scan.url,
+          url: scan.url, date: scan.scanDate, status: "completed",
           vulnerabilities: scan.vulnerabilities?.length || 0,
-          score: scan.securityScore || 0,
-          technologies: scan.technologies || [],
+          score: scan.securityScore || 0, technologies: scan.technologies || [],
         })),
-      ];
-
-      unifiedHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
       setHistory(unifiedHistory);
       setStats({
-        totalScans: unifiedHistory.length,
-        repoScans: repoScansData.length,
-        websiteScans: websiteScansData.length,
-        pentests: 0,
-        loadTests: 0,
+        totalScans: unifiedHistory.length, repoScans: repoScansData.length,
+        websiteScans: websiteScansData.length, pentests: 0, loadTests: 0,
       });
-    } catch (error: any) {
-      console.error('Error loading history:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load scan history",
-        variant: "destructive",
-      });
+    } catch {
+      toast({ title: "Error", description: "Failed to load scan history", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -145,308 +135,207 @@ const UnifiedHistoryPage = () => {
 
   const filterHistory = () => {
     let filtered = history;
-
-    // Filter by search query
     if (searchQuery) {
-      filtered = filtered.filter(scan =>
-        scan.target.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        scan.url.toLowerCase().includes(searchQuery.toLowerCase())
+      filtered = filtered.filter(s =>
+        s.target.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.url.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
-
-    // Filter by type
-    if (filterType !== 'all') {
-      filtered = filtered.filter(scan => scan.type === filterType);
-    }
-
+    if (filterType !== "all") filtered = filtered.filter(s => s.type === filterType);
     setFilteredHistory(filtered);
   };
 
-  const getTypeIcon = (type: ScanType) => {
-    switch (type) {
-      case 'repository': return <GitBranch className="w-4 h-4" />;
-      case 'website': return <Globe className="w-4 h-4" />;
-      case 'penetration': return <Target className="w-4 h-4" />;
-      case 'load': return <Zap className="w-4 h-4" />;
-    }
-  };
-
-  const getTypeBadge = (type: ScanType) => {
-    const config = {
-      repository: { label: 'Repo Scan', color: 'bg-blue-500/20 text-blue-500' },
-      website: { label: 'Website', color: 'bg-green-500/20 text-green-500' },
-      penetration: { label: 'Pentest', color: 'bg-red-500/20 text-red-500' },
-      load: { label: 'Load Test', color: 'bg-yellow-500/20 text-yellow-500' },
-    };
-    return config[type];
-  };
-
-  const getScoreColor = (score: number) => {
-    if (score >= 80) return "text-green-500";
-    if (score >= 60) return "text-yellow-500";
-    return "text-red-500";
-  };
-
   const handleScanClick = (scan: UnifiedScan) => {
-    switch (scan.type) {
-      case 'repository':
-        navigate(`/results?scanId=${scan.id}`);
-        break;
-      case 'website':
-        navigate(`/website-scan/${scan.id}`);
-        break;
-      case 'penetration':
-        navigate(`/pentest?resultId=${scan.id}`);
-        break;
-      case 'load':
-        navigate(`/loadtest?resultId=${scan.id}`);
-        break;
-    }
+    if (scan.type === "repository") navigate(`/results?scanId=${scan.id}`);
+    else if (scan.type === "website") navigate(`/website-scan/${scan.id}`);
   };
+
+  const filterTabs: Array<{ key: ScanType | "all"; label: string; count: number }> = [
+    { key: "all", label: "All", count: stats.totalScans },
+    { key: "repository", label: "Repo", count: stats.repoScans },
+    { key: "website", label: "Website", count: stats.websiteScans },
+    { key: "penetration", label: "Pentest", count: stats.pentests },
+    { key: "load", label: "Load", count: stats.loadTests },
+  ];
 
   return (
-    <div className="min-h-screen bg-black">
-      <Navigation />
+    <PageLayout>
+      <PageHeader
+        title="Scan History"
+        description="Complete history of all security scans, pentests, and load tests."
+        breadcrumbs={[{ label: "Data" }, { label: "History" }]}
+        actions={
+          <button onClick={loadHistory} className="btn-ghost-border gap-2 text-xs">
+            <RefreshCw className="w-3.5 h-3.5" /> Refresh
+          </button>
+        }
+      />
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-medium text-foreground mb-2">Complete Scan History</h1>
-          <p className="text-muted-foreground">
-            All security tests, scans, and assessments in one place
-          </p>
-        </div>
-
-        {/* Stats Cards */}
-        {!isLoading && (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-            <div className="bg-card border border-border rounded-lg p-4 text-center">
-              <Activity className="w-5 h-5 text-primary mx-auto mb-2" />
-              <div className="text-2xl font-bold font-mono text-foreground">{stats.totalScans}</div>
-              <div className="text-xs text-muted-foreground">Total Scans</div>
-            </div>
-            <div className="bg-card border border-border rounded-lg p-4 text-center">
-              <GitBranch className="w-5 h-5 text-blue-500 mx-auto mb-2" />
-              <div className="text-2xl font-bold font-mono text-foreground">{stats.repoScans}</div>
-              <div className="text-xs text-muted-foreground">Repo Scans</div>
-            </div>
-            <div className="bg-card border border-border rounded-lg p-4 text-center">
-              <Globe className="w-5 h-5 text-green-500 mx-auto mb-2" />
-              <div className="text-2xl font-bold font-mono text-foreground">{stats.websiteScans}</div>
-              <div className="text-xs text-muted-foreground">Website Scans</div>
-            </div>
-            <div className="bg-card border border-border rounded-lg p-4 text-center">
-              <Target className="w-5 h-5 text-red-500 mx-auto mb-2" />
-              <div className="text-2xl font-bold font-mono text-foreground">{stats.pentests}</div>
-              <div className="text-xs text-muted-foreground">Pentests</div>
-            </div>
-            <div className="bg-card border border-border rounded-lg p-4 text-center">
-              <Zap className="w-5 h-5 text-yellow-500 mx-auto mb-2" />
-              <div className="text-2xl font-bold font-mono text-foreground">{stats.loadTests}</div>
-              <div className="text-xs text-muted-foreground">Load Tests</div>
-            </div>
-          </div>
-        )}
-
-        {/* Filters */}
-        <div className="bg-card border border-border rounded-lg p-4 mb-6">
-          <div className="flex flex-col md:flex-row gap-4">
-            {/* Search */}
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search by URL or target..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 rounded-md bg-secondary border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
-              />
-            </div>
-
-            {/* Type Filter */}
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-muted-foreground" />
-              <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value as any)}
-                className="px-4 py-2 rounded-md bg-secondary border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
-              >
-                <option value="all">All Types</option>
-                <option value="repository">Repository Scans</option>
-                <option value="website">Website Scans</option>
-                <option value="penetration">Penetration Tests</option>
-                <option value="load">Load Tests</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Loading State */}
-        {isLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-          </div>
-        ) : filteredHistory.length === 0 ? (
-          <div className="bg-card border border-border rounded-lg p-12 text-center">
-            <Shield className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-foreground mb-2">No Scans Found</h3>
-            <p className="text-sm text-muted-foreground mb-6">
-              {searchQuery || filterType !== "all"
-                ? "Try adjusting your filters"
-                : "Start by running your first security scan"}
-            </p>
-            <button
-              onClick={() => navigate('/repos')}
-              className="px-4 py-2 rounded-md bg-primary text-black hover:opacity-90"
+      {/* Stats row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        {[
+          { label: "Total Scans", value: stats.totalScans, icon: Shield },
+          { label: "Repo Scans", value: stats.repoScans, icon: GitBranch },
+          { label: "Website Scans", value: stats.websiteScans, icon: Globe },
+          { label: "Pentests", value: stats.pentests, icon: Target },
+        ].map(s => {
+          const Icon = s.icon;
+          return (
+            <motion.div
+              key={s.label}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="card-elevated p-4"
             >
-              Start Scanning
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                <Icon className="w-3.5 h-3.5" />
+                {s.label}
+              </div>
+              <div className="text-2xl font-black gradient-text-primary metric-number">{s.value}</div>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {/* Search + Filter */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-5">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+          <input
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search by target or URL..."
+            className="input-base pl-10"
+          />
+        </div>
+        <div className="flex items-center gap-1 p-1 rounded-xl" style={{ background: "hsl(var(--muted))", border: "1px solid hsl(var(--border))" }}>
+          {filterTabs.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setFilterType(tab.key)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                filterType === tab.key
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {tab.label}
+              {tab.count > 0 && (
+                <span className="ml-1.5 text-[10px] opacity-60">{tab.count}</span>
+              )}
             </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Content */}
+      {isLoading ? (
+        <div className="space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="card-base p-4 flex items-center gap-4">
+              <div className="skeleton w-9 h-9 rounded-xl shrink-0" />
+              <div className="flex-1 space-y-2">
+                <div className="skeleton h-4 w-1/3 rounded" />
+                <div className="skeleton h-3 w-1/2 rounded" />
+              </div>
+              <div className="skeleton h-6 w-16 rounded-full" />
+            </div>
+          ))}
+        </div>
+      ) : filteredHistory.length === 0 ? (
+        <div className="text-center py-20">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
+            style={{ background: "hsl(var(--muted))", border: "1px solid hsl(var(--border))" }}>
+            <Activity className="w-6 h-6 text-muted-foreground" />
           </div>
-        ) : (
-          <div className="space-y-3">
-            {filteredHistory.map((scan, idx) => {
-              const typeBadge = getTypeBadge(scan.type);
-              
+          <h3 className="font-semibold text-foreground mb-2">
+            {searchQuery || filterType !== "all" ? "No matching scans" : "No scans yet"}
+          </h3>
+          <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+            {searchQuery ? `No scans match "${searchQuery}"` : "Run your first security scan to see results here."}
+          </p>
+          {!searchQuery && filterType === "all" && (
+            <button onClick={() => navigate("/repos")} className="btn-primary text-sm mt-5 gap-2">
+              <GitBranch className="w-4 h-4" /> Start First Scan
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <AnimatePresence mode="popLayout">
+            {filteredHistory.map((scan, i) => {
+              const tc = TYPE_CONFIG[scan.type];
+              const sc = STATUS_CONFIG[scan.status] || STATUS_CONFIG.completed;
+              const StatusIcon = sc.icon;
+              const TypeIcon = tc.icon;
+              const scoreColor = scan.score !== undefined
+                ? scan.score >= 80 ? "text-success" : scan.score >= 60 ? "text-warning" : "text-destructive"
+                : "";
+
               return (
                 <motion.div
                   key={scan.id}
-                  initial={{ opacity: 0, y: 10 }}
+                  layout
+                  initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.02 }}
+                  exit={{ opacity: 0, x: -16 }}
+                  transition={{ delay: i * 0.03 }}
                   onClick={() => handleScanClick(scan)}
-                  className="bg-card border border-border rounded-lg p-4 hover:bg-secondary/50 transition-colors cursor-pointer"
+                  className="card-interactive p-4 flex items-center gap-4 group"
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4 flex-1">
-                      {/* Type Icon */}
-                      <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-primary">
-                        {getTypeIcon(scan.type)}
-                      </div>
-
-                      {/* Info */}
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${typeBadge.color}`}>
-                            {typeBadge.label}
-                          </span>
-                          <span className="text-sm font-medium text-foreground font-mono">
-                            {scan.target}
-                          </span>
-                        </div>
-                        
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            {new Date(scan.date).toLocaleDateString()} at{' '}
-                            {new Date(scan.date).toLocaleTimeString()}
-                          </span>
-                          
-                          {scan.vulnerabilities !== undefined && (
-                            <span className="flex items-center gap-1">
-                              <AlertTriangle className="w-3 h-3" />
-                              {scan.vulnerabilities} issues
-                            </span>
-                          )}
-
-                          {scan.technologies && scan.technologies.length > 0 && (
-                            <span className="flex items-center gap-1">
-                              {scan.technologies.slice(0, 2).join(', ')}
-                              {scan.technologies.length > 2 && ` +${scan.technologies.length - 2}`}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Score */}
-                    {scan.score !== undefined && (
-                      <div className="text-center">
-                        <div className={`text-2xl font-bold font-mono ${getScoreColor(scan.score)}`}>
-                          {scan.score}
-                        </div>
-                        <div className="text-xs text-muted-foreground">Score</div>
-                      </div>
-                    )}
-
-                    {/* Status */}
-                    {scan.status && (
-                      <div className="ml-4">
-                        {scan.status === 'completed' ? (
-                          <CheckCircle className="w-5 h-5 text-green-500" />
-                        ) : scan.status === 'failed' ? (
-                          <XCircle className="w-5 h-5 text-red-500" />
-                        ) : (
-                          <Clock className="w-5 h-5 text-yellow-500" />
-                        )}
-                      </div>
-                    )}
+                  {/* Type icon */}
+                  <div
+                    className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105"
+                    style={{ background: tc.bg }}
+                  >
+                    <TypeIcon className={`w-4 h-4 ${tc.color}`} />
                   </div>
 
-                  {/* Summary for repo scans */}
-                  {scan.type === 'repository' && scan.summary && (
-                    <div className="mt-3 pt-3 border-t border-border flex items-center gap-4 text-xs">
-                      {scan.summary.critical > 0 && (
-                        <span className="flex items-center gap-1 text-red-500">
-                          <XCircle className="w-3 h-3" /> {scan.summary.critical} Critical
+                  {/* Main info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                      <span className="font-semibold text-sm text-foreground truncate">{scan.target}</span>
+                      <span className={`badge text-[10px] ${tc.color}`}
+                        style={{ background: tc.bg, border: `1px solid ${tc.bg}` }}>
+                        {tc.label}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {timeAgo(scan.date)}
+                      </span>
+                      {scan.vulnerabilities !== undefined && (
+                        <span className="flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          {scan.vulnerabilities} issues
                         </span>
                       )}
-                      {scan.summary.high > 0 && (
-                        <span className="flex items-center gap-1 text-orange-500">
-                          <AlertTriangle className="w-3 h-3" /> {scan.summary.high} High
-                        </span>
-                      )}
-                      {scan.summary.medium > 0 && (
-                        <span className="flex items-center gap-1 text-yellow-500">
-                          <AlertTriangle className="w-3 h-3" /> {scan.summary.medium} Medium
-                        </span>
-                      )}
-                      {scan.summary.low > 0 && (
-                        <span className="flex items-center gap-1 text-blue-500">
-                          <AlertTriangle className="w-3 h-3" /> {scan.summary.low} Low
-                        </span>
-                      )}
+                    </div>
+                  </div>
+
+                  {/* Score */}
+                  {scan.score !== undefined && (
+                    <div className="text-center shrink-0">
+                      <div className={`text-lg font-black metric-number ${scoreColor}`}>{scan.score}</div>
+                      <div className="text-[9px] text-muted-foreground">score</div>
                     </div>
                   )}
 
-                  {/* Summary for pentests */}
-                  {scan.type === 'penetration' && scan.summary && (
-                    <div className="mt-3 pt-3 border-t border-border flex items-center gap-4 text-xs">
-                      <span className="text-muted-foreground">
-                        {scan.summary.totalTests} tests
-                      </span>
-                      <span className="flex items-center gap-1 text-green-500">
-                        <CheckCircle className="w-3 h-3" /> {scan.summary.passed} passed
-                      </span>
-                      <span className="flex items-center gap-1 text-red-500">
-                        <XCircle className="w-3 h-3" /> {scan.summary.failed} failed
-                      </span>
-                    </div>
-                  )}
+                  {/* Status */}
+                  <div className={`flex items-center gap-1.5 text-xs shrink-0 ${sc.color}`}>
+                    <StatusIcon className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline font-medium">{sc.label}</span>
+                  </div>
 
-                  {/* Summary for load tests */}
-                  {scan.type === 'load' && scan.results && (
-                    <div className="mt-3 pt-3 border-t border-border flex items-center gap-4 text-xs">
-                      <span className="text-muted-foreground">
-                        {scan.results.totalRequests} requests
-                      </span>
-                      <span className="flex items-center gap-1 text-green-500">
-                        <CheckCircle className="w-3 h-3" /> {scan.results.successfulRequests} success
-                      </span>
-                      <span className="flex items-center gap-1 text-red-500">
-                        <XCircle className="w-3 h-3" /> {scan.results.failedRequests} failed
-                      </span>
-                      <span className="text-muted-foreground">
-                        Avg: {scan.results.averageResponseTime}ms
-                      </span>
-                    </div>
-                  )}
+                  <ChevronRight className="w-4 h-4 text-muted-foreground/40 shrink-0 transition-transform group-hover:translate-x-0.5" />
                 </motion.div>
               );
             })}
-          </div>
-        )}
-      </div>
-    </div>
+          </AnimatePresence>
+        </div>
+      )}
+    </PageLayout>
   );
 };
 

@@ -1,26 +1,13 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { 
-  User, 
-  Mail, 
-  Calendar, 
-  MapPin, 
-  Building2, 
-  LogIn, 
-  Activity,
-  Hash,
-  ArrowLeft
-} from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Navigation } from "@/components/Navigation";
+import { User, Mail, Calendar, LogOut, Github, Shield, ExternalLink } from "lucide-react";
+import { PageLayout } from "@/components/PageLayout";
+import { PageHeader } from "@/components/PageHeader";
 
 const ProfilePage = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
 
   if (!user) {
     navigate("/login");
@@ -30,201 +17,184 @@ const ProfilePage = () => {
   const formatDate = (dateString?: string) => {
     if (!dateString) return "N/A";
     return new Date(dateString).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
+      year: "numeric", month: "long", day: "numeric",
     });
   };
 
-  const getInitials = (name?: string, username?: string) => {
-    if (name) {
-      return name
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2);
-    }
-    return username?.slice(0, 2).toUpperCase() || "U";
+  const initials = user.name
+    ? user.name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)
+    : (user.username?.slice(0, 2).toUpperCase() || "U");
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/");
   };
 
   return (
-    <div className="min-h-screen bg-black">
-      <Navigation />
+    <PageLayout>
+      <PageHeader
+        title="Profile"
+        description="Manage your account settings and preferences."
+        breadcrumbs={[{ label: "Account" }, { label: "Profile" }]}
+        actions={
+          <button onClick={handleLogout} className="btn-ghost-border gap-2 text-xs text-destructive/80 hover:text-destructive">
+            <LogOut className="w-3.5 h-3.5" />
+            Sign out
+          </button>
+        }
+      />
 
-      <div className="max-w-4xl mx-auto px-6 py-12">
+      <div className="max-w-2xl space-y-5">
+        {/* Profile header card */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
+          className="card-elevated p-6"
         >
-          {/* Profile Header */}
-          <Card className="bg-card border-border mb-6">
-            <CardContent className="pt-6">
-              <div className="flex items-start gap-6">
-                <Avatar className="w-24 h-24 border-2 border-primary/20">
-                  <AvatarImage src={user.avatarUrl} alt={user.name || user.username} />
-                  <AvatarFallback className="bg-primary/10 text-primary text-2xl">
-                    {getInitials(user.name, user.username)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h1 className="text-2xl font-medium text-foreground mb-1">
-                        {user.name || user.username}
-                      </h1>
-                      <p className="text-muted-foreground text-sm mb-3">
-                        @{user.username}
-                      </p>
-                      {user.bio && (
-                        <p className="text-foreground text-sm mb-4 max-w-2xl">
-                          {user.bio}
-                        </p>
-                      )}
-                      <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                        {user.company && (
-                          <div className="flex items-center gap-1.5">
-                            <Building2 className="w-4 h-4" />
-                            <span>{user.company}</span>
-                          </div>
-                        )}
-                        {user.location && (
-                          <div className="flex items-center gap-1.5">
-                            <MapPin className="w-4 h-4" />
-                            <span>{user.location}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
-                      Active
-                    </Badge>
-                  </div>
+          <div className="flex items-start gap-5">
+            {/* Avatar */}
+            <div className="relative shrink-0">
+              {user.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt={user.name || user.username}
+                  className="w-20 h-20 rounded-2xl object-cover"
+                  style={{ border: "1px solid hsl(var(--border))" }}
+                />
+              ) : (
+                <div
+                  className="w-20 h-20 rounded-2xl flex items-center justify-center text-white text-2xl font-bold"
+                  style={{ background: "linear-gradient(135deg, hsl(234 100% 68%), hsl(262 82% 70%))" }}
+                >
+                  {initials}
                 </div>
+              )}
+              <div
+                className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center"
+                style={{ background: "hsl(var(--success))", border: "2px solid hsl(var(--card))" }}
+              >
+                <div className="w-2 h-2 rounded-full bg-white" />
               </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Account Information */}
-            <Card className="bg-card border-border">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <User className="w-5 h-5 text-primary" />
-                  Account Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                    <Hash className="w-3 h-3" />
-                    User ID
-                  </div>
-                  <p className="text-sm text-foreground font-mono">{user.userId}</p>
+                  <h2 className="text-xl font-bold text-foreground" style={{ letterSpacing: "-0.02em" }}>
+                    {user.name || user.username}
+                  </h2>
+                  <p className="text-sm text-muted-foreground mt-0.5">@{user.username}</p>
                 </div>
-                <Separator />
-                <div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                    <Mail className="w-3 h-3" />
-                    Email
-                  </div>
-                  <p className="text-sm text-foreground">{user.email}</p>
-                </div>
-                <Separator />
-                <div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                    <User className="w-3 h-3" />
-                    Username
-                  </div>
-                  <p className="text-sm text-foreground font-mono">@{user.username}</p>
-                </div>
-              </CardContent>
-            </Card>
+                <a
+                  href={`https://github.com/${user.username}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-ghost-border gap-1.5 text-xs shrink-0"
+                >
+                  <Github className="w-3.5 h-3.5" />
+                  GitHub
+                  <ExternalLink className="w-3 h-3 opacity-50" />
+                </a>
+              </div>
 
-            {/* Activity Statistics */}
-            <Card className="bg-card border-border">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Activity className="w-5 h-5 text-primary" />
-                  Activity Statistics
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                    <LogIn className="w-3 h-3" />
-                    Total Logins
-                  </div>
-                  <p className="text-2xl font-medium text-foreground">
-                    {user.loginCount || 0}
-                  </p>
-                </div>
-                <Separator />
-                <div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                    <Calendar className="w-3 h-3" />
-                    First Login
-                  </div>
-                  <p className="text-sm text-foreground">
-                    {formatDate(user.firstLogin)}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Session Information */}
-            <Card className="bg-card border-border md:col-span-2">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-primary" />
-                  Session Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                      <LogIn className="w-3 h-3" />
-                      Last Login
-                    </div>
-                    <p className="text-sm text-foreground">
-                      {formatDate(user.lastLogin)}
-                    </p>
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                      <Activity className="w-3 h-3" />
-                      Last Active
-                    </div>
-                    <p className="text-sm text-foreground">
-                      {formatDate(user.lastActive)}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* GitHub Link */}
-          <div className="mt-6 text-center">
-            <a
-              href={`https://github.com/${user.username}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-muted-foreground hover:text-primary transition-colors inline-flex items-center gap-2"
-            >
-              View GitHub Profile
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-              </svg>
-            </a>
+              {/* Tags */}
+              <div className="flex flex-wrap gap-2 mt-3">
+                <span className="badge badge-primary">
+                  <Shield className="w-3 h-3" />
+                  Free Plan
+                </span>
+                <span className="badge badge-success">
+                  <Activity className="w-3 h-3" />
+                  Active
+                </span>
+              </div>
+            </div>
           </div>
         </motion.div>
+
+        {/* Account details */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.07 }}
+          className="card-elevated p-5"
+        >
+          <h3 className="text-sm font-semibold text-foreground mb-4">Account Details</h3>
+          <div className="space-y-3">
+            {[
+              { icon: User, label: "Display Name", value: user.name || "Not set" },
+              { icon: Mail, label: "Username", value: `@${user.username}` },
+              { icon: Github, label: "GitHub ID", value: String(user.userId) || "—" },
+              { icon: Calendar, label: "Account Type", value: "GitHub OAuth" },
+            ].map(row => {
+              const Icon = row.icon;
+              return (
+                <div key={row.label} className="flex items-center justify-between py-2"
+                  style={{ borderBottom: "1px solid hsl(var(--border-subtle))" }}>
+                  <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
+                    <Icon className="w-4 h-4 shrink-0" />
+                    {row.label}
+                  </div>
+                  <span className="text-sm text-foreground font-medium">{row.value}</span>
+                </div>
+              );
+            })}
+          </div>
+        </motion.div>
+
+        {/* Quick actions */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.14 }}
+          className="card-elevated p-5"
+        >
+          <h3 className="text-sm font-semibold text-foreground mb-4">Quick Actions</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <button onClick={() => navigate("/repos")}
+              className="card-interactive p-3 text-left">
+              <div className="text-xs font-semibold text-foreground mb-0.5">New Scan</div>
+              <div className="text-[10px] text-muted-foreground">Scan a GitHub repository</div>
+            </button>
+            <button onClick={() => navigate("/monitoring")}
+              className="card-interactive p-3 text-left">
+              <div className="text-xs font-semibold text-foreground mb-0.5">Monitoring</div>
+              <div className="text-[10px] text-muted-foreground">View uptime dashboard</div>
+            </button>
+            <button onClick={() => navigate("/scan-history")}
+              className="card-interactive p-3 text-left">
+              <div className="text-xs font-semibold text-foreground mb-0.5">Scan History</div>
+              <div className="text-[10px] text-muted-foreground">Browse past results</div>
+            </button>
+            <button onClick={() => navigate("/website-scan")}
+              className="card-interactive p-3 text-left">
+              <div className="text-xs font-semibold text-foreground mb-0.5">Website Scan</div>
+              <div className="text-[10px] text-muted-foreground">Audit an endpoint</div>
+            </button>
+          </div>
+        </motion.div>
+
+        {/* Danger zone */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="rounded-xl p-5"
+          style={{
+            background: "hsl(0 84% 60% / 0.04)",
+            border: "1px solid hsl(0 84% 60% / 0.2)",
+          }}
+        >
+          <h3 className="text-sm font-semibold text-destructive mb-1">Danger Zone</h3>
+          <p className="text-xs text-muted-foreground mb-4">Actions in this area cannot be reversed.</p>
+          <button onClick={handleLogout} className="btn-ghost-border gap-2 text-xs text-destructive/80 hover:text-destructive">
+            <LogOut className="w-3.5 h-3.5" />
+            Sign out of SentinalAI
+          </button>
+        </motion.div>
       </div>
-    </div>
+    </PageLayout>
   );
 };
 

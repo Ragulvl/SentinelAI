@@ -1,19 +1,18 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Navigation } from '@/components/Navigation';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Slider } from '@/components/ui/slider';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ApiClient } from '@/utils/api';
-import { useToast } from '@/hooks/use-toast';
-import { AlertTriangle, Loader2, Activity, Zap, TrendingUp, ArrowLeft, Shield, Download, Share2 } from 'lucide-react';
-import { API_ENDPOINTS } from '@/config/api';
-import { AuthService } from '@/services/auth.service';
-import { exportToPDF, downloadPDF, sharePDF } from '@/utils/pdfExport';
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { motion } from "framer-motion";
+import {
+  AlertTriangle, Loader2, Activity, Zap, TrendingUp,
+  ArrowLeft, Download, Share2, Globe, Info, CheckCircle,
+  XCircle,
+} from "lucide-react";
+import { PageLayout } from "@/components/PageLayout";
+import { PageHeader } from "@/components/PageHeader";
+import { ApiClient } from "@/utils/api";
+import { useToast } from "@/hooks/use-toast";
+import { API_ENDPOINTS } from "@/config/api";
+import { AuthService } from "@/services/auth.service";
+import { exportToPDF, downloadPDF, sharePDF } from "@/utils/pdfExport";
 
 interface LoadTestResult {
   url: string;
@@ -35,531 +34,323 @@ export default function LoadTestPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  
-  const resultId = searchParams.get('resultId');
-  const [url, setUrl] = useState(searchParams.get('url') || '');
+
+  const resultId = searchParams.get("resultId");
+  const [url, setUrl] = useState(searchParams.get("url") || "");
   const [duration, setDuration] = useState(30);
   const [concurrentUsers, setConcurrentUsers] = useState(10);
   const [requestsPerSecond, setRequestsPerSecond] = useState(10);
   const [testing, setTesting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<LoadTestResult | null>(null);
-  const [testType, setTestType] = useState<'load' | 'resilience'>('load');
-  const [viewMode, setViewMode] = useState<'new' | 'view'>(resultId ? 'view' : 'new');
+  const [resilienceResult, setResilienceResult] = useState<any>(null);
+  const [testType, setTestType] = useState<"load" | "resilience">("load");
+  const [viewMode] = useState<"new" | "view">(resultId ? "view" : "new");
 
-  useEffect(() => {
-    if (resultId) {
-      loadExistingResult(resultId);
-    }
-  }, [resultId]);
+  useEffect(() => { if (resultId) loadExistingResult(resultId); }, [resultId]);
 
   const loadExistingResult = async (id: string) => {
     try {
       setLoading(true);
       const token = AuthService.getToken();
-      const response = await fetch(API_ENDPOINTS.history.detail('load', id), {
+      const response = await fetch(API_ENDPOINTS.history.detail("load", id), {
         headers: { Authorization: `Bearer ${token}` },
       });
-
-      if (!response.ok) throw new Error('Failed to load test result');
-
+      if (!response.ok) throw new Error("Failed to load");
       const data = await response.json();
       const scan = data.scan;
-
       setResult({
-        url: scan.url,
-        testDate: scan.testDate,
-        duration: scan.results.duration,
-        totalRequests: scan.results.totalRequests,
-        successfulRequests: scan.results.successfulRequests,
-        failedRequests: scan.results.failedRequests,
-        rateLimitedRequests: scan.results.rateLimitedRequests || 0,
-        averageResponseTime: scan.results.averageResponseTime,
-        minResponseTime: scan.results.minResponseTime,
-        maxResponseTime: scan.results.maxResponseTime,
-        requestsPerSecond: scan.results.requestsPerSecond,
-        errors: scan.results.errors || [],
-        recommendations: scan.results.recommendations || [],
+        url: scan.url, testDate: scan.testDate, duration: scan.results.duration,
+        totalRequests: scan.results.totalRequests, successfulRequests: scan.results.successfulRequests,
+        failedRequests: scan.results.failedRequests, rateLimitedRequests: scan.results.rateLimitedRequests || 0,
+        averageResponseTime: scan.results.averageResponseTime, minResponseTime: scan.results.minResponseTime,
+        maxResponseTime: scan.results.maxResponseTime, requestsPerSecond: scan.results.requestsPerSecond,
+        errors: scan.results.errors || [], recommendations: scan.results.recommendations || [],
       });
       setUrl(scan.url);
-    } catch (error: any) {
-      console.error('Error loading result:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load test result',
-        variant: 'destructive',
-      });
+    } catch {
+      toast({ title: "Error", description: "Failed to load test result", variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
 
   const handleLoadTest = async () => {
-    if (!url.trim()) {
-      toast({
-        title: 'Error',
-        description: 'Please enter a URL',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (!confirm(`⚠️ This will send ${concurrentUsers * requestsPerSecond * duration} requests to your site. Continue?`)) {
-      return;
-    }
-
+    if (!url.trim()) { toast({ title: "URL required", variant: "destructive" }); return; }
+    const estimated = concurrentUsers * requestsPerSecond * duration;
+    if (!confirm(`This will send ~${estimated} requests to the target. Proceed?`)) return;
     try {
-      setTesting(true);
-      setResult(null);
-
-      const response: LoadTestResult = await ApiClient.post('/api/website-scan/loadtest', {
-        url,
-        duration,
-        concurrentUsers,
-        requestsPerSecond,
-        method: 'GET',
+      setTesting(true); setResult(null);
+      const response: LoadTestResult = await ApiClient.post("/api/website-scan/loadtest", {
+        url, duration, concurrentUsers, requestsPerSecond, method: "GET",
       });
-
       setResult(response);
-
-      toast({
-        title: 'Load Test Complete',
-        description: `Sent ${response.totalRequests} requests`,
-      });
+      toast({ title: "Load Test Complete", description: `Sent ${response.totalRequests} requests` });
     } catch (error: any) {
-      console.error('Load test error:', error);
-
       if (error.response?.data?.requiresVerification) {
-        toast({
-          title: 'Domain Not Verified',
-          description: error.response.data.message,
-          variant: 'destructive',
-        });
-        navigate('/domain-verification');
+        toast({ title: "Domain Not Verified", description: error.response.data.message, variant: "destructive" });
+        navigate("/domain-verification");
       } else {
-        toast({
-          title: 'Test Failed',
-          description: error.response?.data?.error || error.message || 'Failed to perform load test',
-          variant: 'destructive',
-        });
+        toast({ title: "Test Failed", description: error.response?.data?.error || error.message || "Failed to perform load test", variant: "destructive" });
       }
-    } finally {
-      setTesting(false);
-    }
+    } finally { setTesting(false); }
   };
 
   const handleResilienceTest = async () => {
-    if (!url.trim()) {
-      toast({
-        title: 'Error',
-        description: 'Please enter a URL',
-        variant: 'destructive',
-      });
-      return;
-    }
-
+    if (!url.trim()) { toast({ title: "URL required", variant: "destructive" }); return; }
     try {
       setTesting(true);
-
-      const response: any = await ApiClient.post('/api/website-scan/test-resilience', { url });
-
-      toast({
-        title: 'Resilience Test Complete',
-        description: `Max concurrent users: ${response.maxConcurrentUsers}`,
-      });
-
-      alert(JSON.stringify(response, null, 2));
+      setResilienceResult(null);
+      const response: any = await ApiClient.post("/api/website-scan/test-resilience", { url });
+      setResilienceResult(response);
+      toast({ title: "Resilience Test Complete", description: `Max concurrent users: ${response.maxConcurrentUsers}` });
     } catch (error: any) {
-      toast({
-        title: 'Test Failed',
-        description: error.response?.data?.error || 'Failed to test resilience',
-        variant: 'destructive',
-      });
-    } finally {
-      setTesting(false);
-    }
+      toast({ title: "Test Failed", description: error.response?.data?.error || "Failed to test resilience", variant: "destructive" });
+    } finally { setTesting(false); }
   };
 
   const successRate = result ? (result.successfulRequests / result.totalRequests) * 100 : 0;
-  const failureRate = result ? (result.failedRequests / result.totalRequests) * 100 : 0;
-  const rateLimitRate = result ? (result.rateLimitedRequests / result.totalRequests) * 100 : 0;
 
   const handleExportPDF = () => {
     if (!result) return;
-
     const doc = exportToPDF({
-      title: 'Load Test Report',
-      subtitle: result.url,
-      metadata: {
-        date: new Date(result.testDate).toLocaleString(),
-        url: result.url,
-      },
+      title: "Load Test Report", subtitle: result.url,
+      metadata: { date: new Date(result.testDate).toLocaleString(), url: result.url },
       sections: [
-        {
-          title: 'Test Configuration',
-          table: {
-            headers: ['Parameter', 'Value'],
-            rows: [
-              ['Duration', `${result.duration}s`],
-              ['Total Requests', result.totalRequests.toString()],
-              ['Requests/Second', result.requestsPerSecond.toString()],
-            ],
-          },
-        },
-        {
-          title: 'Results Summary',
-          table: {
-            headers: ['Metric', 'Value'],
-            rows: [
-              ['Successful Requests', result.successfulRequests.toString()],
-              ['Failed Requests', result.failedRequests.toString()],
-              ['Rate Limited', result.rateLimitedRequests.toString()],
-              ['Success Rate', `${successRate.toFixed(1)}%`],
-              ['Avg Response Time', `${result.averageResponseTime}ms`],
-              ['Min Response Time', `${result.minResponseTime}ms`],
-              ['Max Response Time', `${result.maxResponseTime}ms`],
-            ],
-          },
-        },
-        ...(result.errors.length > 0 ? [{
-          title: 'Errors',
-          table: {
-            headers: ['Status', 'Message', 'Count'],
-            rows: result.errors.map(e => [
-              e.status.toString(),
-              e.message,
-              e.count.toString(),
-            ]),
-          },
-        }] : []),
-        ...(result.recommendations.length > 0 ? [{
-          title: 'Recommendations',
-          list: result.recommendations,
-        }] : []),
+        { title: "Configuration", table: { headers: ["Parameter", "Value"], rows: [["Duration", `${result.duration}s`], ["Total Requests", result.totalRequests.toString()], ["Req/Second", result.requestsPerSecond.toString()]] }},
+        { title: "Results", table: { headers: ["Metric", "Value"], rows: [["Success Rate", `${successRate.toFixed(1)}%`], ["Avg Response", `${result.averageResponseTime}ms`], ["Min Response", `${result.minResponseTime}ms`], ["Max Response", `${result.maxResponseTime}ms`]] }},
+        ...(result.recommendations.length > 0 ? [{ title: "Recommendations", list: result.recommendations }] : []),
       ],
     });
-
-    downloadPDF(doc, `loadtest-${result.url.replace(/[^a-z0-9]/gi, '-')}-${Date.now()}.pdf`);
-    
-    toast({
-      title: 'PDF Downloaded',
-      description: 'Load test report has been downloaded',
-    });
+    downloadPDF(doc, `loadtest-${result.url.replace(/[^a-z0-9]/gi, "-")}-${Date.now()}.pdf`);
+    toast({ title: "PDF Downloaded" });
   };
 
   const handleShare = async () => {
     if (!result) return;
-
-    const doc = exportToPDF({
-      title: 'Load Test Report',
-      subtitle: result.url,
-      metadata: {
-        date: new Date(result.testDate).toLocaleString(),
-        url: result.url,
-      },
-      sections: [
-        {
-          title: 'Summary',
-          content: `Total Requests: ${result.totalRequests}, Success Rate: ${successRate.toFixed(1)}%, Avg Response: ${result.averageResponseTime}ms`,
-        },
-      ],
-    });
-
+    const doc = exportToPDF({ title: "Load Test Report", subtitle: result.url, metadata: { date: new Date(result.testDate).toLocaleString(), url: result.url }, sections: [{ title: "Summary", content: `Success Rate: ${successRate.toFixed(1)}%, Avg: ${result.averageResponseTime}ms` }] });
     const shared = await sharePDF(doc, `Load Test - ${result.url}`);
-    
-    if (shared) {
-      toast({
-        title: 'Shared',
-        description: 'Report shared successfully',
-      });
-    } else {
-      toast({
-        title: 'Share Not Available',
-        description: 'PDF has been downloaded instead',
-      });
-    }
+    toast({ title: shared ? "Shared" : "Downloaded" });
   };
 
+  const Slider = ({ value, onChange, min, max, step, label, maxLabel }: { value: number; onChange: (v: number) => void; min: number; max: number; step: number; label: string; maxLabel?: string }) => (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <label className="section-label">{label}: {value}</label>
+        {maxLabel && <span className="text-xs text-muted-foreground">{maxLabel}</span>}
+      </div>
+      <input type="range" min={min} max={max} step={step} value={value}
+        onChange={e => onChange(Number(e.target.value))} disabled={testing}
+        className="w-full" style={{ accentColor: "hsl(var(--primary))" }} />
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-black">
-      <Navigation />
-      
-      <div className="container mx-auto py-8 px-4">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <Activity className="h-8 w-8 text-blue-500" />
+    <PageLayout>
+      <PageHeader
+        title="Load & Stress Testing"
+        description="Test your site's performance capacity, response times, and resilience under load."
+        breadcrumbs={[{ label: "Security Tools" }, { label: "Load Testing" }]}
+        actions={viewMode === "view" ? (
+          <button onClick={() => navigate("/scan-history")} className="btn-ghost-border gap-2 text-xs">
+            <ArrowLeft className="w-3.5 h-3.5" /> Back to History
+          </button>
+        ) : undefined}
+      />
+
+      {/* Info banner */}
+      <div className="mb-5 p-4 rounded-xl flex items-start gap-3"
+        style={{ background: "hsl(234 100% 68% / 0.06)", border: "1px solid hsl(234 100% 68% / 0.2)" }}>
+        <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-semibold text-foreground">Controlled Capacity Evaluation</p>
+          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+            Perform controlled load and capacity checks to identify bottlenecks and evaluate response thresholds.
+            Runs within predefined rate limits against verified targets only.
+          </p>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-10 h-10 animate-spin text-primary" />
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {/* Config form */}
+          {viewMode === "new" && (
+            <div className="card-elevated p-6 space-y-5 max-w-2xl">
               <div>
-                <h1 className="text-3xl font-bold text-foreground">Load & Stress Testing</h1>
-                <p className="text-muted-foreground">Test your site's capacity and resilience</p>
-              </div>
-            </div>
-            {viewMode === 'view' && (
-              <Button variant="outline" onClick={() => navigate('/scan-history')}>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to History
-              </Button>
-            )}
-          </div>
-
-          {loading && (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="h-12 w-12 animate-spin text-primary" />
-            </div>
-          )}
-
-          {!loading && (
-            <>
-              <Alert className="mb-6 border-blue-500/50 bg-blue-500/10">
-                <AlertTriangle className="h-4 w-4 text-blue-500" />
-                <AlertDescription className="ml-2">
-                  <div className="space-y-2">
-                    <p className="font-semibold text-foreground">Controlled Capacity Evaluation</p>
-                    <p className="text-sm text-muted-foreground">
-                      Perform controlled load and capacity checks to identify system bottlenecks and 
-                      evaluate response thresholds. All checks run within predefined rate limits against 
-                      authenticated and verified targets.
-                    </p>
-                  </div>
-                </AlertDescription>
-              </Alert>
-
-              {viewMode === 'new' && (
-                <Card className="mb-6">
-            <CardHeader>
-              <CardTitle>Test Configuration</CardTitle>
-              <CardDescription>
-                Configure load testing parameters for your verified website
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                <div>
-                  <Label htmlFor="url">Website URL</Label>
-                  <Input
-                    id="url"
-                    type="url"
-                    placeholder="https://example.com"
-                    value={url}
-                    onChange={(e) => setUrl(e.target.value)}
-                    disabled={testing}
-                    className="mt-1"
-                  />
+                <label className="section-label block mb-2">Target URL</label>
+                <div className="relative">
+                  <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                  <input type="url" value={url} onChange={e => setUrl(e.target.value)}
+                    disabled={testing} placeholder="https://example.com"
+                    className="input-base pl-10 font-mono text-sm" />
                 </div>
-
-                <Tabs value={testType} onValueChange={(v) => setTestType(v as any)}>
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="load">Load Test</TabsTrigger>
-                    <TabsTrigger value="resilience">Resilience</TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="load" className="space-y-6 mt-6">
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <Label>Duration: {duration} seconds</Label>
-                        <span className="text-sm text-muted-foreground">Max: 60s</span>
-                      </div>
-                      <Slider
-                        value={[duration]}
-                        onValueChange={(v) => setDuration(v[0])}
-                        min={10}
-                        max={60}
-                        step={5}
-                        disabled={testing}
-                      />
-                    </div>
-
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <Label>Concurrent Users: {concurrentUsers}</Label>
-                        <span className="text-sm text-muted-foreground">Max: 100</span>
-                      </div>
-                      <Slider
-                        value={[concurrentUsers]}
-                        onValueChange={(v) => setConcurrentUsers(v[0])}
-                        min={1}
-                        max={100}
-                        step={1}
-                        disabled={testing}
-                      />
-                    </div>
-
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <Label>Requests/Second: {requestsPerSecond}</Label>
-                        <span className="text-sm text-muted-foreground">Max: 50</span>
-                      </div>
-                      <Slider
-                        value={[requestsPerSecond]}
-                        onValueChange={(v) => setRequestsPerSecond(v[0])}
-                        min={1}
-                        max={50}
-                        step={1}
-                        disabled={testing}
-                      />
-                    </div>
-
-                    <Alert>
-                      <AlertDescription>
-                        <div className="text-sm">
-                          <p className="font-medium mb-1">Estimated load:</p>
-                          <p className="text-muted-foreground">
-                            Total requests: ~{concurrentUsers * requestsPerSecond * duration}
-                          </p>
-                        </div>
-                      </AlertDescription>
-                    </Alert>
-
-                    <Button
-                      onClick={handleLoadTest}
-                      disabled={testing || !url.trim()}
-                      className="w-full"
-                    >
-                      {testing ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Testing...
-                        </>
-                      ) : (
-                        <>
-                          <Zap className="mr-2 h-4 w-4" />
-                          Start Load Test
-                        </>
-                      )}
-                    </Button>
-                  </TabsContent>
-
-                  <TabsContent value="resilience" className="space-y-4 mt-6">
-                    <p className="text-sm text-muted-foreground">
-                      This routine incrementally raises concurrent user load to identify system thresholds and performance limits.
-                    </p>
-                    <Button
-                      onClick={handleResilienceTest}
-                      disabled={testing || !url.trim()}
-                      className="w-full"
-                    >
-                      {testing ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Testing...
-                        </>
-                      ) : (
-                        <>
-                          <TrendingUp className="mr-2 h-4 w-4" />
-                          Test Resilience
-                        </>
-                      )}
-                    </Button>
-                  </TabsContent>
-                </Tabs>
               </div>
-            </CardContent>
-          </Card>
-              )}
 
-          {result && (
-            <>
-              <Card className="mb-6">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle>Test Results</CardTitle>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={handleShare}>
-                        <Share2 className="mr-2 h-4 w-4" />
-                        Share
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={handleExportPDF}>
-                        <Download className="mr-2 h-4 w-4" />
-                        Download PDF
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                    <div className="text-center p-4 border rounded-lg">
-                      <div className="text-3xl font-bold text-foreground">{result.totalRequests}</div>
-                      <div className="text-sm text-muted-foreground">Total Requests</div>
-                    </div>
-                    <div className="text-center p-4 border rounded-lg">
-                      <div className="text-3xl font-bold text-green-500">{successRate.toFixed(1)}%</div>
-                      <div className="text-sm text-muted-foreground">Success Rate</div>
-                    </div>
-                    <div className="text-center p-4 border rounded-lg">
-                      <div className="text-3xl font-bold text-blue-500">{result.averageResponseTime}ms</div>
-                      <div className="text-sm text-muted-foreground">Avg Response</div>
-                    </div>
-                    <div className="text-center p-4 border rounded-lg">
-                      <div className="text-3xl font-bold text-orange-500">{result.requestsPerSecond}</div>
-                      <div className="text-sm text-muted-foreground">Req/Second</div>
-                    </div>
+              {/* Test type tabs */}
+              <div className="flex items-center p-1 rounded-xl gap-1" style={{ background: "hsl(var(--muted))", border: "1px solid hsl(var(--border))" }}>
+                {[{ key: "load", label: "Load Test", icon: Zap }, { key: "resilience", label: "Resilience", icon: TrendingUp }].map(tab => {
+                  const Icon = tab.icon;
+                  return (
+                    <button key={tab.key} onClick={() => setTestType(tab.key as any)}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${testType === tab.key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                      <Icon className="w-3.5 h-3.5" /> {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {testType === "load" ? (
+                <div className="space-y-5">
+                  <Slider value={duration} onChange={setDuration} min={10} max={60} step={5} label="Duration (seconds)" maxLabel="Max: 60s" />
+                  <Slider value={concurrentUsers} onChange={setConcurrentUsers} min={1} max={100} step={1} label="Concurrent Users" maxLabel="Max: 100" />
+                  <Slider value={requestsPerSecond} onChange={setRequestsPerSecond} min={1} max={50} step={1} label="Requests/Second" maxLabel="Max: 50" />
+
+                  <div className="p-3.5 rounded-xl text-xs"
+                    style={{ background: "hsl(var(--muted) / 0.5)", border: "1px solid hsl(var(--border))" }}>
+                    <span className="text-muted-foreground">Estimated load: </span>
+                    <span className="text-foreground font-semibold">~{concurrentUsers * requestsPerSecond * duration} requests</span>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4 mb-6">
-                    <div className="p-3 bg-green-500/10 border border-green-500/50 rounded-lg">
-                      <div className="text-lg font-bold text-green-500">{result.successfulRequests}</div>
-                      <div className="text-xs text-muted-foreground">Successful</div>
-                    </div>
-                    <div className="p-3 bg-red-500/10 border border-red-500/50 rounded-lg">
-                      <div className="text-lg font-bold text-red-500">{result.failedRequests}</div>
-                      <div className="text-xs text-muted-foreground">Failed</div>
-                    </div>
-                    <div className="p-3 bg-yellow-500/10 border border-yellow-500/50 rounded-lg">
-                      <div className="text-lg font-bold text-yellow-500">{result.rateLimitedRequests}</div>
-                      <div className="text-xs text-muted-foreground">Rate Limited</div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 mb-6">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Min Response Time:</span>
-                      <span className="font-medium">{result.minResponseTime}ms</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Max Response Time:</span>
-                      <span className="font-medium">{result.maxResponseTime}ms</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Duration:</span>
-                      <span className="font-medium">{result.duration}s</span>
-                    </div>
-                  </div>
-
-                  {result.errors.length > 0 && (
-                    <div className="mb-6">
-                      <h3 className="font-semibold mb-2">Errors</h3>
-                      <div className="space-y-2">
-                        {result.errors.map((error, index) => (
-                          <div key={index} className="p-2 bg-red-500/10 border border-red-500/50 rounded text-sm">
-                            <div className="flex justify-between">
-                              <span>HTTP {error.status}: {error.message}</span>
-                              <span className="font-medium">{error.count} occurrences</span>
-                            </div>
+                  <button onClick={handleLoadTest} disabled={testing || !url.trim()} className="btn-primary w-full justify-center">
+                    {testing ? <><Loader2 className="w-4 h-4 animate-spin" /> Testing...</> : <><Zap className="w-4 h-4" /> Start Load Test</>}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Incrementally raises concurrent user load to identify system thresholds and performance limits.
+                  </p>
+                  <button onClick={handleResilienceTest} disabled={testing || !url.trim()} className="btn-primary w-full justify-center">
+                    {testing ? <><Loader2 className="w-4 h-4 animate-spin" /> Testing...</> : <><TrendingUp className="w-4 h-4" /> Test Resilience</>}
+                  </button>
+                  {resilienceResult && (
+                    <div className="p-4 rounded-xl space-y-3" style={{ background: "hsl(var(--muted) / 0.5)", border: "1px solid hsl(var(--border))" }}>
+                      <p className="text-xs font-semibold text-foreground">Resilience Results</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        {[
+                          { label: "Max Concurrent Users", value: resilienceResult.maxConcurrentUsers ?? "—" },
+                          { label: "Breaking Point", value: resilienceResult.breakingPoint ?? "—" },
+                          { label: "Avg Response at Peak", value: resilienceResult.averageResponseTime ? `${resilienceResult.averageResponseTime}ms` : "—" },
+                          { label: "Success Rate at Peak", value: resilienceResult.successRate ? `${resilienceResult.successRate}%` : "—" },
+                        ].map(m => (
+                          <div key={m.label} className="text-center p-3 rounded-lg" style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }}>
+                            <div className="text-lg font-black metric-number text-primary">{m.value}</div>
+                            <div className="text-[10px] text-muted-foreground mt-0.5">{m.label}</div>
                           </div>
                         ))}
                       </div>
+                      {resilienceResult.recommendations?.length > 0 && (
+                        <div>
+                          <p className="section-label mb-1.5">Recommendations</p>
+                          <ul className="space-y-1">
+                            {resilienceResult.recommendations.map((r: string, i: number) => (
+                              <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                                <span className="text-primary shrink-0 mt-0.5">•</span>{r}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
                   )}
-
-                  <div>
-                    <h3 className="font-semibold mb-2">Recommendations</h3>
-                    <ul className="space-y-2">
-                      {result.recommendations.map((rec, index) => (
-                        <li key={index} className="text-sm text-muted-foreground flex items-start gap-2">
-                          <span className="text-blue-500 mt-1">•</span>
-                          <span>{rec}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </CardContent>
-              </Card>
-            </>
+                </div>
+              )}
+            </div>
           )}
-          </>
-        )}
+
+          {/* Results */}
+          {result && (
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="card-elevated p-5 space-y-5 max-w-4xl">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-foreground text-sm">Test Results</h3>
+                <div className="flex gap-2">
+                  <button onClick={handleShare} className="btn-ghost-border gap-2 text-xs py-1.5">
+                    <Share2 className="w-3.5 h-3.5" /> Share
+                  </button>
+                  <button onClick={handleExportPDF} className="btn-ghost-border gap-2 text-xs py-1.5">
+                    <Download className="w-3.5 h-3.5" /> PDF
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  { label: "Total Requests", value: result.totalRequests, color: "text-foreground" },
+                  { label: "Success Rate", value: `${successRate.toFixed(1)}%`, color: successRate >= 99 ? "text-success" : successRate >= 95 ? "text-warning" : "text-destructive" },
+                  { label: "Avg Response", value: `${result.averageResponseTime}ms`, color: "text-primary" },
+                  { label: "Req/Second", value: result.requestsPerSecond, color: "text-foreground" },
+                ].map(s => (
+                  <div key={s.label} className="text-center p-4 rounded-xl"
+                    style={{ background: "hsl(var(--muted) / 0.5)", border: "1px solid hsl(var(--border))" }}>
+                    <div className={`text-2xl font-black metric-number ${s.color}`}>{s.value}</div>
+                    <div className="text-xs text-muted-foreground mt-1">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { label: "Successful", value: result.successfulRequests, color: "text-success", bg: "hsl(var(--success) / 0.08)", border: "hsl(var(--success) / 0.25)" },
+                  { label: "Failed", value: result.failedRequests, color: "text-destructive", bg: "hsl(0 84% 60% / 0.08)", border: "hsl(0 84% 60% / 0.25)" },
+                  { label: "Rate Limited", value: result.rateLimitedRequests, color: "text-warning", bg: "hsl(38 92% 50% / 0.08)", border: "hsl(38 92% 50% / 0.25)" },
+                ].map(s => (
+                  <div key={s.label} className="rounded-xl p-3 text-center" style={{ background: s.bg, border: `1px solid ${s.border}` }}>
+                    <div className={`text-xl font-black metric-number ${s.color}`}>{s.value}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-2">
+                {[
+                  { label: "Min Response", value: `${result.minResponseTime}ms` },
+                  { label: "Max Response", value: `${result.maxResponseTime}ms` },
+                  { label: "Duration", value: `${result.duration}s` },
+                ].map(row => (
+                  <div key={row.label} className="flex items-center justify-between text-sm py-1.5"
+                    style={{ borderBottom: "1px solid hsl(var(--border-subtle))" }}>
+                    <span className="text-muted-foreground">{row.label}</span>
+                    <span className="font-mono font-medium text-foreground">{row.value}</span>
+                  </div>
+                ))}
+              </div>
+
+              {result.errors.length > 0 && (
+                <div>
+                  <p className="section-label mb-2">Errors</p>
+                  <div className="space-y-2">
+                    {result.errors.map((err, i) => (
+                      <div key={i} className="flex items-center justify-between p-2.5 rounded-lg text-sm"
+                        style={{ background: "hsl(0 84% 60% / 0.07)", border: "1px solid hsl(0 84% 60% / 0.2)" }}>
+                        <span className="text-foreground">HTTP {err.status}: {err.message}</span>
+                        <span className="text-destructive font-mono font-medium">{err.count}×</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {result.recommendations.length > 0 && (
+                <div>
+                  <p className="section-label mb-2">Recommendations</p>
+                  <ul className="space-y-2">
+                    {result.recommendations.map((rec, i) => (
+                      <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+                        <span className="text-primary mt-0.5">•</span>
+                        <span>{rec}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </motion.div>
+          )}
         </div>
-      </div>
-    </div>
+      )}
+    </PageLayout>
   );
 }
