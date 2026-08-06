@@ -20,12 +20,7 @@ const app = express();
 
 // CORS configuration - support production, Vercel previews, and local dev
 const frontendUrl = config.frontendUrl.replace(/\/$/, '');
-const allowedOrigins = [
-  frontendUrl,
-  'http://localhost:5173',
-  'http://localhost:8080',
-  'http://localhost:3000',
-];
+const isDev = config.nodeEnv !== 'production';
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -34,10 +29,14 @@ app.use(cors({
 
     const normalizedOrigin = origin.replace(/\/$/, '');
 
-    // Allow exact match or any *.vercel.app preview deployment
+    // In development: allow any localhost port
+    if (isDev && /^http:\/\/localhost(:\d+)?$/.test(normalizedOrigin)) {
+      return callback(null, true);
+    }
+
+    // In production: allow exact match or any *.vercel.app preview deployment
     const isAllowed =
-      allowedOrigins.includes(normalizedOrigin) ||
-      /^https:\/\/[a-zA-Z0-9-]+-[a-zA-Z0-9]+-ragulvl\.vercel\.app$/.test(normalizedOrigin) ||
+      normalizedOrigin === frontendUrl ||
       normalizedOrigin.endsWith('.vercel.app');
 
     if (isAllowed) {
