@@ -5,7 +5,11 @@
       "framework": "vite"
     },
     "backend": {
-      "root": "backend"
+      "root": "backend",
+      "framework": "express",
+      "buildCommand": "npm install && npm run build",
+      "startCommand": "node dist/index.js",
+      "entrypoint": "dist/index.js"
     }
   },
   "rewrites": [
