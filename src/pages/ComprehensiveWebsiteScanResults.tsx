@@ -91,10 +91,11 @@ export default function ComprehensiveWebsiteScanResults() {
     try {
       setPentestLoading(true);
       setPentestError(null);
-      const data = await ApiClient.get(`/api/history/penetration/${id}`);
+      // Route: GET /api/history/:type/:id — type = 'penetration'
+      const data = await ApiClient.get<{ scan: any; type: string }>(`/api/history/penetration/${id}`);
       const s = data.scan;
-      const total = s.summary?.totalTests ?? s.results?.length ?? 0;
-      const failed = s.summary?.failed ?? s.results?.filter((r: any) => !r.passed).length ?? 0;
+      const total: number = s.summary?.totalTests ?? 0;
+      const failed: number = s.summary?.failed ?? 0;
       setPentestResults({
         url: s.url,
         testDate: s.testDate,
@@ -104,6 +105,7 @@ export default function ComprehensiveWebsiteScanResults() {
         results: (s.results ?? []).map((r: any) => ({
           testName: r.testName,
           category: r.category,
+          // Model stores `passed: boolean`; PenetrationTestResult expects `vulnerable: boolean`
           vulnerable: !r.passed,
           severity: r.severity,
           description: r.description,
@@ -124,8 +126,10 @@ export default function ComprehensiveWebsiteScanResults() {
     try {
       setLoadTestLoading(true);
       setLoadTestError(null);
-      const data = await ApiClient.get(`/api/history/loadtest/${id}`);
-      const r = data.scan ?? data;
+      // Route: GET /api/history/:type/:id — type = 'load' (NOT 'loadtest')
+      const data = await ApiClient.get<{ scan: any; type: string }>(`/api/history/load/${id}`);
+      // Controller returns { scan, type }; load test data lives under scan.results
+      const r = data.scan.results;
       setLoadTestResults({
         totalRequests: r.totalRequests,
         successfulRequests: r.successfulRequests,

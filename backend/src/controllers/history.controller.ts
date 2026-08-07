@@ -4,6 +4,7 @@ import { Scan } from '../db/models/Scan.model.js';
 import { WebsiteScan } from '../db/models/WebsiteScan.model.js';
 import { PenetrationTest } from '../db/models/PenetrationTest.model.js';
 import { LoadTest } from '../db/models/LoadTest.model.js';
+import { logger } from '../config/logger.js';
 
 export class HistoryController {
   /**
@@ -11,28 +12,28 @@ export class HistoryController {
    */
   static async getAllHistory(req: Request, res: Response) {
     try {
-      console.log('[History] Received request for all history');
+      logger.info('[History] Received request for all history');
       
       const token = req.headers.authorization?.replace('Bearer ', '');
 
       if (!token) {
-        console.log('[History] No token provided');
+        logger.warn('[History] No token provided');
         return res.status(401).json({ error: 'No token provided' });
       }
 
       let payload;
       try {
         payload = JWTService.verifyToken(token);
-        console.log('[History] Token verified for user:', payload.userId);
+        logger.debug('[History] Token verified', { userId: payload.userId });
       } catch (error) {
-        console.log('[History] Token verification failed:', error);
+        logger.warn('[History] Token verification failed');
         return res.status(401).json({ error: 'Invalid token' });
       }
 
       // CWE-89: Validate and clamp limit before using in DB query
       const rawLimit = parseInt(req.query.limit as string);
       const limit = (!isNaN(rawLimit) && rawLimit > 0 && rawLimit <= 500) ? rawLimit : 100;
-      console.log('[History] Fetching scans with limit:', limit);
+      logger.debug('[History] Fetching scans', { limit });
 
       // Fetch all scan types with error handling
       const [repoScans, websiteScans, pentests, loadTests] = await Promise.allSettled([
@@ -58,7 +59,7 @@ export class HistoryController {
           .lean(),
       ]);
 
-      console.log('[History] Fetch results:', {
+      logger.debug('[History] Fetch results', {
         repoScans: repoScans.status,
         websiteScans: websiteScans.status,
         pentests: pentests.status,
@@ -71,7 +72,7 @@ export class HistoryController {
       const pentestsData = pentests.status === 'fulfilled' ? pentests.value : [];
       const loadTestsData = loadTests.status === 'fulfilled' ? loadTests.value : [];
 
-      console.log('[History] Data counts:', {
+      logger.debug('[History] Data counts', {
         repoScans: repoScansData.length,
         websiteScans: websiteScansData.length,
         pentests: pentestsData.length,
@@ -131,7 +132,7 @@ export class HistoryController {
       // Sort by date (most recent first)
       history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-      console.log('[History] Returning', history.length, 'total scans');
+      logger.info('[History] Returning history', { count: history.length });
 
       res.json({
         history: history.slice(0, limit),
@@ -144,8 +145,7 @@ export class HistoryController {
         },
       });
     } catch (error: any) {
-      console.error('[History] Error getting history:', error);
-      console.error('[History] Error stack:', error.stack);
+      logger.error('[History] Error getting all history', { error: error.message });
       res.status(500).json({ 
         error: 'Failed to get scan history', 
         details: error.message,
@@ -197,7 +197,7 @@ export class HistoryController {
 
       res.json({ scan, type });
     } catch (error: any) {
-      console.error('[History] Error getting scan detail:', error);
+      logger.error('[History] Error getting scan detail', { error: error.message });
       res.status(500).json({ 
         error: 'Failed to get scan detail', 
         details: error.message 
