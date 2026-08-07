@@ -22,9 +22,17 @@ export class SandboxScanController {
         return res.status(400).json({ error: 'Repository URL is required' });
       }
 
-      // Validate GitHub URL
-      if (!repoUrl.includes('github.com')) {
-        return res.status(400).json({ error: 'Only GitHub repositories are supported' });
+      // CWE-20: Use URL parsing instead of .includes() to prevent bypass attacks
+      try {
+        const parsedUrl = new URL(repoUrl);
+        if (parsedUrl.hostname !== 'github.com') {
+          return res.status(400).json({ error: 'Only GitHub repositories are supported' });
+        }
+        if (parsedUrl.protocol !== 'https:') {
+          return res.status(400).json({ error: 'Only HTTPS repository URLs are supported' });
+        }
+      } catch {
+        return res.status(400).json({ error: 'Invalid repository URL format' });
       }
 
       const sandboxId = await SandboxScannerService.createSandbox(
@@ -54,7 +62,12 @@ export class SandboxScanController {
         return res.status(401).json({ error: 'No token provided' });
       }
 
-      JWTService.verifyToken(token);
+      // CWE-287: Verify token and handle error properly (removed redundant second call)
+      try {
+        JWTService.verifyToken(token);
+      } catch {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
       const { sandboxId } = req.params;
 
       const sandbox = SandboxScannerService.getSandboxStatus(sandboxId);

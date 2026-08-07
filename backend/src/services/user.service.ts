@@ -87,7 +87,8 @@ export class UserService {
    */
   static async getGithubAccessToken(githubId: number): Promise<string | null> {
     try {
-      const user = await User.findOne({ githubId }).select('+githubAccessToken');
+      // CWE-89: Explicit $eq operator prevents NoSQL injection coercion
+      const user = await User.findOne({ githubId: { $eq: githubId } }).select('+githubAccessToken');
       return user?.githubAccessToken || null;
     } catch (error) {
       console.error('Error fetching access token:', error);

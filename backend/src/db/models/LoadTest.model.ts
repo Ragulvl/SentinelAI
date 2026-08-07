@@ -38,6 +38,11 @@ const LoadTestSchema = new Schema<ILoadTest>(
       type: String,
       required: true,
       trim: true,
+      // CWE-20: Validate URL format at the model level
+      validate: {
+        validator: (v: string) => /^https?:\/\/.+/.test(v),
+        message: 'URL must start with http:// or https://'
+      },
     },
     testDate: {
       type: Date,

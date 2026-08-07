@@ -1,6 +1,10 @@
 import dotenv from 'dotenv';
 
-dotenv.config();
+try {
+  dotenv.config();
+} catch (error) {
+  console.error('Warning: Error loading .env file:', (error as Error).message);
+}
 
 export const config = {
   port: Number(process.env.PORT) || 5000,
@@ -21,7 +25,8 @@ export const config = {
     apiUrl: process.env.GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1beta',
   },
   jwt: {
-    secret: process.env.JWT_SECRET || 'your-secret-key',
+    // CWE-798: No insecure fallback — app fails fast if JWT_SECRET is missing
+    secret: process.env.JWT_SECRET || (() => { throw new Error('FATAL: JWT_SECRET environment variable is not set'); })(),
     expiresIn: (process.env.JWT_EXPIRES_IN || '7d') as string,
   },
   nodeEnv: process.env.NODE_ENV || 'development',

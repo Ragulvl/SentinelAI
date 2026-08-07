@@ -17,12 +17,13 @@ router.post('/', MonitoringController.addSite);
 router.post('/refresh', MonitoringController.refreshAllSites);
 
 // Refresh a specific site
-router.post('/:siteId/refresh', MonitoringController.refreshSite);
+// CWE-434: Restrict siteId to alphanumeric/dash/underscore to prevent path traversal
+router.post('/:siteId([a-zA-Z0-9_-]+)/refresh', MonitoringController.refreshSite);
 
 // Update check interval for a site
-router.patch('/:siteId/interval', MonitoringController.updateCheckInterval);
+router.patch('/:siteId([a-zA-Z0-9_-]+)/interval', MonitoringController.updateCheckInterval);
 
 // Remove a monitored site
-router.delete('/:siteId', MonitoringController.removeSite);
+router.delete('/:siteId([a-zA-Z0-9_-]+)', MonitoringController.removeSite);
 
 export default router;

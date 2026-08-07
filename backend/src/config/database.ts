@@ -3,7 +3,7 @@ import { config } from './env.js';
 
 export const connectDatabase = async () => {
   try {
-    const mongoUri = config.mongoUri || 'mongodb://localhost:27017/sentinelai';
+  const mongoUri = config.mongoUri;
     
     console.log('🔄 Connecting to MongoDB...');
     console.log(`📍 URI: ${mongoUri.replace(/\/\/([^:]+):([^@]+)@/, '//*****:*****@')}`); // Hide credentials in logs
@@ -18,7 +18,8 @@ export const connectDatabase = async () => {
     console.log(`📦 Database: ${mongoose.connection.name}`);
     console.log(`🌐 Host: ${mongoose.connection.host}`);
   } catch (error: any) {
-    console.error('❌ MongoDB connection error:', error.message);
+    // CWE-209: Avoid leaking raw error messages that may contain connection details
+    console.error('❌ MongoDB connection error: Failed to connect to database');
     console.error('💡 Please check:');
     console.error('   1. MongoDB URI is correct');
     console.error('   2. MongoDB cluster is running');

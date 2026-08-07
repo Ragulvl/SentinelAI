@@ -21,7 +21,8 @@ export class MonitoringController {
       res.status(201).json(site);
     } catch (error: any) {
       console.error('Error adding site:', error);
-      res.status(400).json({ error: error.message || 'Failed to add site' });
+      // CWE-209: Don't expose raw error messages to clients
+      res.status(400).json({ error: 'Failed to add site' });
     }
   }
 

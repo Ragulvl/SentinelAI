@@ -198,11 +198,28 @@ const ResultsPage = () => {
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!scanId) return;
     const token = AuthService.getToken();
     if (!token) return;
-    window.open(`${API_ENDPOINTS.scan.download(scanId)}?token=${token}`, "_blank");
+    try {
+      // CWE-798: Never put tokens in URLs — use Authorization header via fetch
+      const response = await fetch(API_ENDPOINTS.scan.download(scanId), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error('Download failed');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sentinelai-fixes-${scanId}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Download error:', err);
+    }
   };
 
   if (loading) {

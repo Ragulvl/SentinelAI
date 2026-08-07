@@ -4,7 +4,8 @@ import { motion } from "framer-motion";
 import {
   AlertTriangle, Loader2, Activity, Zap, TrendingUp,
   ArrowLeft, Download, Share2, Globe, Info, CheckCircle,
-  XCircle,
+  XCircle, Users, Clock, BarChart3, Gauge, Shield,
+  ChevronRight, Timer, Cpu,
 } from "lucide-react";
 import { PageLayout } from "@/components/PageLayout";
 import { PageHeader } from "@/components/PageHeader";
@@ -29,6 +30,39 @@ interface LoadTestResult {
   errors: Array<{ status: number; count: number; message: string }>;
   recommendations: string[];
 }
+
+const PremiumSlider = ({
+  value, onChange, min, max, step, label, maxLabel, icon: Icon, color = "#5B6CFF",
+}: {
+  value: number; onChange: (v: number) => void; min: number; max: number; step: number;
+  label: string; maxLabel?: string; icon?: React.ElementType; color?: string;
+}) => {
+  const pct = ((value - min) / (max - min)) * 100;
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {Icon && <Icon className="w-3.5 h-3.5 text-muted-foreground" />}
+          <label className="text-xs font-medium text-foreground">{label}</label>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-bold tabular-nums" style={{ color }}>{value}</span>
+          {maxLabel && <span className="text-[10px] text-muted-foreground">{maxLabel}</span>}
+        </div>
+      </div>
+      <div className="relative h-2 rounded-full" style={{ background: "hsl(var(--muted))" }}>
+        <div className="absolute left-0 top-0 h-full rounded-full transition-all"
+          style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${color}99, ${color})` }} />
+        <input type="range" min={min} max={max} step={step} value={value}
+          onChange={e => onChange(Number(e.target.value))}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          style={{ WebkitAppearance: "none" }} />
+        <div className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-white shadow-lg transition-all"
+          style={{ left: `calc(${pct}% - 8px)`, background: color }} />
+      </div>
+    </div>
+  );
+};
 
 export default function LoadTestPage() {
   const [searchParams] = useSearchParams();
@@ -110,6 +144,7 @@ export default function LoadTestPage() {
   };
 
   const successRate = result ? (result.successfulRequests / result.totalRequests) * 100 : 0;
+  const estimatedRequests = concurrentUsers * requestsPerSecond * duration;
 
   const handleExportPDF = () => {
     if (!result) return;
@@ -117,8 +152,8 @@ export default function LoadTestPage() {
       title: "Load Test Report", subtitle: result.url,
       metadata: { date: new Date(result.testDate).toLocaleString(), url: result.url },
       sections: [
-        { title: "Configuration", table: { headers: ["Parameter", "Value"], rows: [["Duration", `${result.duration}s`], ["Total Requests", result.totalRequests.toString()], ["Req/Second", result.requestsPerSecond.toString()]] }},
-        { title: "Results", table: { headers: ["Metric", "Value"], rows: [["Success Rate", `${successRate.toFixed(1)}%`], ["Avg Response", `${result.averageResponseTime}ms`], ["Min Response", `${result.minResponseTime}ms`], ["Max Response", `${result.maxResponseTime}ms`]] }},
+        { title: "Configuration", table: { headers: ["Parameter", "Value"], rows: [["Duration", `${result.duration}s`], ["Total Requests", result.totalRequests.toString()], ["Req/Second", result.requestsPerSecond.toString()]] } },
+        { title: "Results", table: { headers: ["Metric", "Value"], rows: [["Success Rate", `${successRate.toFixed(1)}%`], ["Avg Response", `${result.averageResponseTime}ms`], ["Min Response", `${result.minResponseTime}ms`], ["Max Response", `${result.maxResponseTime}ms`]] } },
         ...(result.recommendations.length > 0 ? [{ title: "Recommendations", list: result.recommendations }] : []),
       ],
     });
@@ -133,18 +168,6 @@ export default function LoadTestPage() {
     toast({ title: shared ? "Shared" : "Downloaded" });
   };
 
-  const Slider = ({ value, onChange, min, max, step, label, maxLabel }: { value: number; onChange: (v: number) => void; min: number; max: number; step: number; label: string; maxLabel?: string }) => (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <label className="section-label">{label}: {value}</label>
-        {maxLabel && <span className="text-xs text-muted-foreground">{maxLabel}</span>}
-      </div>
-      <input type="range" min={min} max={max} step={step} value={value}
-        onChange={e => onChange(Number(e.target.value))} disabled={testing}
-        className="w-full" style={{ accentColor: "hsl(var(--primary))" }} />
-    </div>
-  );
-
   return (
     <PageLayout>
       <PageHeader
@@ -158,115 +181,223 @@ export default function LoadTestPage() {
         ) : undefined}
       />
 
-      {/* Info banner */}
-      <div className="mb-5 p-4 rounded-xl flex items-start gap-3"
-        style={{ background: "hsl(234 100% 68% / 0.06)", border: "1px solid hsl(234 100% 68% / 0.2)" }}>
-        <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-        <div>
-          <p className="text-sm font-semibold text-foreground">Controlled Capacity Evaluation</p>
-          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-            Perform controlled load and capacity checks to identify bottlenecks and evaluate response thresholds.
-            Runs within predefined rate limits against verified targets only.
-          </p>
-        </div>
-      </div>
-
       {loading ? (
-        <div className="flex items-center justify-center py-20">
+        <div className="flex items-center justify-center py-32">
           <Loader2 className="w-10 h-10 animate-spin text-primary" />
         </div>
       ) : (
-        <div className="space-y-5">
-          {/* Config form */}
-          {viewMode === "new" && (
-            <div className="card-elevated p-6 space-y-5 max-w-2xl">
-              <div>
-                <label className="section-label block mb-2">Target URL</label>
-                <div className="relative">
-                  <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                  <input type="url" value={url} onChange={e => setUrl(e.target.value)}
-                    disabled={testing} placeholder="https://example.com"
-                    className="input-base pl-10 font-mono text-sm" />
+        <div className="space-y-6">
+          {viewMode === "new" && !result && !resilienceResult && (
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+              {/* ── Left: Config ───────────────────────────────── */}
+              <div className="lg:col-span-3 space-y-4">
+                {/* Info banner */}
+                <div className="p-4 rounded-xl flex items-start gap-3"
+                  style={{ background: "hsl(234 100% 68% / 0.06)", border: "1px solid hsl(234 100% 68% / 0.2)" }}>
+                  <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Controlled Capacity Evaluation</p>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                      Identify bottlenecks and evaluate response thresholds safely.
+                      Runs within predefined rate limits against verified targets only.
+                    </p>
+                  </div>
                 </div>
-              </div>
 
-              {/* Test type tabs */}
-              <div className="flex items-center p-1 rounded-xl gap-1" style={{ background: "hsl(var(--muted))", border: "1px solid hsl(var(--border))" }}>
-                {[{ key: "load", label: "Load Test", icon: Zap }, { key: "resilience", label: "Resilience", icon: TrendingUp }].map(tab => {
-                  const Icon = tab.icon;
-                  return (
-                    <button key={tab.key} onClick={() => setTestType(tab.key as any)}
-                      className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${testType === tab.key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-                      <Icon className="w-3.5 h-3.5" /> {tab.label}
-                    </button>
-                  );
-                })}
-              </div>
+                <div className="card-elevated p-6 space-y-6">
+                  {/* URL input */}
+                  <div>
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                        style={{ background: "hsl(234 100% 68% / 0.12)", border: "1px solid hsl(234 100% 68% / 0.25)" }}>
+                        <BarChart3 className="w-4 h-4 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-foreground text-sm">Test Configuration</h3>
+                        <p className="text-xs text-muted-foreground">Set your target and load parameters</p>
+                      </div>
+                    </div>
 
-              {testType === "load" ? (
-                <div className="space-y-5">
-                  <Slider value={duration} onChange={setDuration} min={10} max={60} step={5} label="Duration (seconds)" maxLabel="Max: 60s" />
-                  <Slider value={concurrentUsers} onChange={setConcurrentUsers} min={1} max={100} step={1} label="Concurrent Users" maxLabel="Max: 100" />
-                  <Slider value={requestsPerSecond} onChange={setRequestsPerSecond} min={1} max={50} step={1} label="Requests/Second" maxLabel="Max: 50" />
-
-                  <div className="p-3.5 rounded-xl text-xs"
-                    style={{ background: "hsl(var(--muted) / 0.5)", border: "1px solid hsl(var(--border))" }}>
-                    <span className="text-muted-foreground">Estimated load: </span>
-                    <span className="text-foreground font-semibold">~{concurrentUsers * requestsPerSecond * duration} requests</span>
+                    <label className="section-label block mb-2">Target URL</label>
+                    <div className="relative">
+                      <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                      <input type="url" value={url} onChange={e => setUrl(e.target.value)}
+                        disabled={testing} placeholder="https://example.com"
+                        className="input-base pl-10 font-mono text-sm" />
+                    </div>
                   </div>
 
-                  <button onClick={handleLoadTest} disabled={testing || !url.trim()} className="btn-primary w-full justify-center">
-                    {testing ? <><Loader2 className="w-4 h-4 animate-spin" /> Testing...</> : <><Zap className="w-4 h-4" /> Start Load Test</>}
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    Incrementally raises concurrent user load to identify system thresholds and performance limits.
-                  </p>
-                  <button onClick={handleResilienceTest} disabled={testing || !url.trim()} className="btn-primary w-full justify-center">
-                    {testing ? <><Loader2 className="w-4 h-4 animate-spin" /> Testing...</> : <><TrendingUp className="w-4 h-4" /> Test Resilience</>}
-                  </button>
-                  {resilienceResult && (
-                    <div className="p-4 rounded-xl space-y-3" style={{ background: "hsl(var(--muted) / 0.5)", border: "1px solid hsl(var(--border))" }}>
-                      <p className="text-xs font-semibold text-foreground">Resilience Results</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        {[
-                          { label: "Max Concurrent Users", value: resilienceResult.maxConcurrentUsers ?? "—" },
-                          { label: "Breaking Point", value: resilienceResult.breakingPoint ?? "—" },
-                          { label: "Avg Response at Peak", value: resilienceResult.averageResponseTime ? `${resilienceResult.averageResponseTime}ms` : "—" },
-                          { label: "Success Rate at Peak", value: resilienceResult.successRate ? `${resilienceResult.successRate}%` : "—" },
-                        ].map(m => (
-                          <div key={m.label} className="text-center p-3 rounded-lg" style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }}>
-                            <div className="text-lg font-black metric-number text-primary">{m.value}</div>
-                            <div className="text-[10px] text-muted-foreground mt-0.5">{m.label}</div>
-                          </div>
-                        ))}
-                      </div>
-                      {resilienceResult.recommendations?.length > 0 && (
+                  {/* Test type tabs */}
+                  <div className="flex items-center p-1 rounded-xl gap-1"
+                    style={{ background: "hsl(var(--muted))", border: "1px solid hsl(var(--border))" }}>
+                    {[
+                      { key: "load", label: "Load Test", icon: Zap, desc: "Sustained load" },
+                      { key: "resilience", label: "Resilience", icon: TrendingUp, desc: "Breaking point" },
+                    ].map(tab => {
+                      const Icon = tab.icon;
+                      return (
+                        <button key={tab.key} onClick={() => setTestType(tab.key as any)}
+                          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${testType === tab.key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                          <Icon className="w-3.5 h-3.5" /> {tab.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {testType === "load" ? (
+                    <div className="space-y-6">
+                      <PremiumSlider value={duration} onChange={setDuration} min={10} max={60} step={5}
+                        label="Duration" maxLabel="max 60s" icon={Timer} color="#5B6CFF" />
+                      <PremiumSlider value={concurrentUsers} onChange={setConcurrentUsers} min={1} max={100} step={1}
+                        label="Concurrent Users" maxLabel="max 100" icon={Users} color="#7F5AF0" />
+                      <PremiumSlider value={requestsPerSecond} onChange={setRequestsPerSecond} min={1} max={50} step={1}
+                        label="Requests / Second" maxLabel="max 50" icon={Cpu} color="#00D4FF" />
+
+                      {/* Estimated load display */}
+                      <div className="p-4 rounded-xl flex items-center justify-between"
+                        style={{ background: "hsl(var(--muted) / 0.5)", border: "1px solid hsl(var(--border))" }}>
                         <div>
-                          <p className="section-label mb-1.5">Recommendations</p>
-                          <ul className="space-y-1">
-                            {resilienceResult.recommendations.map((r: string, i: number) => (
-                              <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
-                                <span className="text-primary shrink-0 mt-0.5">•</span>{r}
-                              </li>
-                            ))}
-                          </ul>
+                          <p className="text-xs text-muted-foreground">Estimated total requests</p>
+                          <p className="text-2xl font-black metric-number text-foreground mt-0.5">
+                            ~{estimatedRequests.toLocaleString()}
+                          </p>
                         </div>
-                      )}
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">at peak</p>
+                          <p className="text-sm font-semibold text-primary">{requestsPerSecond} req/s</p>
+                        </div>
+                      </div>
+
+                      <button onClick={handleLoadTest} disabled={testing || !url.trim()}
+                        className="btn-primary w-full justify-center py-3 text-sm">
+                        {testing ? <><Loader2 className="w-4 h-4 animate-spin" /> Running test...</> : <><Zap className="w-4 h-4" /> Start Load Test</>}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="p-4 rounded-xl space-y-2"
+                        style={{ background: "hsl(var(--muted) / 0.5)", border: "1px solid hsl(var(--border))" }}>
+                        <p className="text-sm font-medium text-foreground">Incremental Load Test</p>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          Gradually increases concurrent users until the system reaches its breaking point,
+                          identifying max throughput capacity and degradation patterns.
+                        </p>
+                      </div>
+                      <button onClick={handleResilienceTest} disabled={testing || !url.trim()}
+                        className="btn-primary w-full justify-center py-3 text-sm">
+                        {testing ? <><Loader2 className="w-4 h-4 animate-spin" /> Testing...</> : <><TrendingUp className="w-4 h-4" /> Test Resilience</>}
+                      </button>
                     </div>
                   )}
                 </div>
-              )}
+              </div>
+
+              {/* ── Right: Info Panel ──────────────────────────── */}
+              <div className="lg:col-span-2 space-y-4">
+                {/* Live preview of what we measure */}
+                <div className="card-elevated p-5 space-y-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Gauge className="w-4 h-4 text-primary" />
+                    <h3 className="font-semibold text-foreground text-sm">What We Measure</h3>
+                  </div>
+                  {[
+                    { icon: Clock, label: "Response Times", desc: "Min / Avg / Max latency", color: "#5B6CFF" },
+                    { icon: CheckCircle, label: "Success Rate", desc: "% of successful requests", color: "#22C55E" },
+                    { icon: XCircle, label: "Failure Analysis", desc: "Error codes & frequency", color: "#EF4444" },
+                    { icon: Users, label: "Concurrency", desc: "Peak user capacity", color: "#7F5AF0" },
+                    { icon: Activity, label: "Throughput", desc: "Requests per second", color: "#00D4FF" },
+                    { icon: Shield, label: "Rate Limits", desc: "429 detection & patterns", color: "#F59E0B" },
+                  ].map((item, i) => {
+                    const Icon = item.icon;
+                    return (
+                      <motion.div key={item.label}
+                        initial={{ opacity: 0, x: 8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.05 }}
+                        className="flex items-center gap-3 p-2.5 rounded-lg"
+                        style={{ background: "hsl(var(--muted) / 0.4)", border: "1px solid hsl(var(--border))" }}>
+                        <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                          style={{ background: `${item.color}18` }}>
+                          <Icon className="w-3.5 h-3.5" style={{ color: item.color }} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-foreground">{item.label}</p>
+                          <p className="text-[11px] text-muted-foreground">{item.desc}</p>
+                        </div>
+                        <ChevronRight className="w-3 h-3 text-muted-foreground/40 ml-auto shrink-0" />
+                      </motion.div>
+                    );
+                  })}
+                </div>
+
+                {/* Current config preview */}
+                <div className="card-elevated p-5 space-y-3">
+                  <h3 className="font-semibold text-foreground text-sm">Config Preview</h3>
+                  <div className="space-y-2">
+                    {[
+                      { label: "Duration", value: `${duration}s`, color: "#5B6CFF" },
+                      { label: "Users", value: concurrentUsers, color: "#7F5AF0" },
+                      { label: "Req/s", value: requestsPerSecond, color: "#00D4FF" },
+                      { label: "Total Est.", value: `~${estimatedRequests.toLocaleString()}`, color: "#F59E0B" },
+                    ].map(item => (
+                      <div key={item.label} className="flex items-center justify-between py-1.5"
+                        style={{ borderBottom: "1px solid hsl(var(--border-subtle))" }}>
+                        <span className="text-xs text-muted-foreground">{item.label}</span>
+                        <span className="text-sm font-bold tabular-nums" style={{ color: item.color }}>{item.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* Results */}
+          {/* Resilience Results */}
+          {resilienceResult && (
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+              <div className="flex items-center justify-between mb-5">
+                <button onClick={() => { setResilienceResult(null); }}
+                  className="btn-ghost-border gap-2 text-xs">
+                  <ArrowLeft className="w-3.5 h-3.5" /> New Test
+                </button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+                {[
+                  { label: "Max Concurrent Users", value: resilienceResult.maxConcurrentUsers ?? "—", color: "text-primary" },
+                  { label: "Breaking Point", value: resilienceResult.breakingPoint ?? "—", color: "text-destructive" },
+                  { label: "Avg Response at Peak", value: resilienceResult.averageResponseTime ? `${resilienceResult.averageResponseTime}ms` : "—", color: "text-warning" },
+                  { label: "Success Rate at Peak", value: resilienceResult.successRate ? `${resilienceResult.successRate}%` : "—", color: "text-success" },
+                ].map(m => (
+                  <div key={m.label} className="text-center p-5 rounded-xl"
+                    style={{ background: "hsl(var(--muted) / 0.5)", border: "1px solid hsl(var(--border))" }}>
+                    <div className={`text-3xl font-black metric-number ${m.color}`}>{m.value}</div>
+                    <div className="text-xs text-muted-foreground mt-1.5">{m.label}</div>
+                  </div>
+                ))}
+              </div>
+              {resilienceResult.recommendations?.length > 0 && (
+                <div className="card-elevated p-5">
+                  <p className="section-label mb-3">Recommendations</p>
+                  <ul className="space-y-2">
+                    {resilienceResult.recommendations.map((r: string, i: number) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                        <span className="text-primary shrink-0 mt-1">•</span>{r}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {/* Load Test Results */}
           {result && (
-            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="card-elevated p-5 space-y-5 max-w-4xl">
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-foreground text-sm">Test Results</h3>
+                <button onClick={() => { setResult(null); }}
+                  className="btn-ghost-border gap-2 text-xs">
+                  <ArrowLeft className="w-3.5 h-3.5" /> New Test
+                </button>
                 <div className="flex gap-2">
                   <button onClick={handleShare} className="btn-ghost-border gap-2 text-xs py-1.5">
                     <Share2 className="w-3.5 h-3.5" /> Share
@@ -277,57 +408,72 @@ export default function LoadTestPage() {
                 </div>
               </div>
 
+              {/* Primary metrics */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
-                  { label: "Total Requests", value: result.totalRequests, color: "text-foreground" },
-                  { label: "Success Rate", value: `${successRate.toFixed(1)}%`, color: successRate >= 99 ? "text-success" : successRate >= 95 ? "text-warning" : "text-destructive" },
-                  { label: "Avg Response", value: `${result.averageResponseTime}ms`, color: "text-primary" },
-                  { label: "Req/Second", value: result.requestsPerSecond, color: "text-foreground" },
+                  { label: "Total Requests", value: result.totalRequests.toLocaleString(), color: "text-foreground", bg: "hsl(var(--muted) / 0.5)" },
+                  { label: "Success Rate", value: `${successRate.toFixed(1)}%`, color: successRate >= 99 ? "text-success" : successRate >= 95 ? "text-warning" : "text-destructive", bg: successRate >= 99 ? "hsl(var(--success) / 0.08)" : "hsl(var(--muted) / 0.5)" },
+                  { label: "Avg Response", value: `${result.averageResponseTime}ms`, color: "text-primary", bg: "hsl(var(--muted) / 0.5)" },
+                  { label: "Req/Second", value: result.requestsPerSecond, color: "text-foreground", bg: "hsl(var(--muted) / 0.5)" },
                 ].map(s => (
-                  <div key={s.label} className="text-center p-4 rounded-xl"
-                    style={{ background: "hsl(var(--muted) / 0.5)", border: "1px solid hsl(var(--border))" }}>
+                  <div key={s.label} className="text-center p-5 rounded-xl"
+                    style={{ background: s.bg, border: "1px solid hsl(var(--border))" }}>
+                    <div className={`text-3xl font-black metric-number ${s.color}`}>{s.value}</div>
+                    <div className="text-xs text-muted-foreground mt-1.5">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Secondary metrics */}
+              <div className="grid grid-cols-3 gap-4">
+                {[
+                  { label: "Successful", value: result.successfulRequests.toLocaleString(), color: "text-success", bg: "hsl(var(--success) / 0.08)", border: "hsl(var(--success) / 0.25)" },
+                  { label: "Failed", value: result.failedRequests.toLocaleString(), color: "text-destructive", bg: "hsl(0 84% 60% / 0.08)", border: "hsl(0 84% 60% / 0.25)" },
+                  { label: "Rate Limited", value: result.rateLimitedRequests.toLocaleString(), color: "text-warning", bg: "hsl(38 92% 50% / 0.08)", border: "hsl(38 92% 50% / 0.25)" },
+                ].map(s => (
+                  <div key={s.label} className="rounded-xl p-4 text-center" style={{ background: s.bg, border: `1px solid ${s.border}` }}>
                     <div className={`text-2xl font-black metric-number ${s.color}`}>{s.value}</div>
                     <div className="text-xs text-muted-foreground mt-1">{s.label}</div>
                   </div>
                 ))}
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                {[
-                  { label: "Successful", value: result.successfulRequests, color: "text-success", bg: "hsl(var(--success) / 0.08)", border: "hsl(var(--success) / 0.25)" },
-                  { label: "Failed", value: result.failedRequests, color: "text-destructive", bg: "hsl(0 84% 60% / 0.08)", border: "hsl(0 84% 60% / 0.25)" },
-                  { label: "Rate Limited", value: result.rateLimitedRequests, color: "text-warning", bg: "hsl(38 92% 50% / 0.08)", border: "hsl(38 92% 50% / 0.25)" },
-                ].map(s => (
-                  <div key={s.label} className="rounded-xl p-3 text-center" style={{ background: s.bg, border: `1px solid ${s.border}` }}>
-                    <div className={`text-xl font-black metric-number ${s.color}`}>{s.value}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">{s.label}</div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="space-y-2">
-                {[
-                  { label: "Min Response", value: `${result.minResponseTime}ms` },
-                  { label: "Max Response", value: `${result.maxResponseTime}ms` },
-                  { label: "Duration", value: `${result.duration}s` },
-                ].map(row => (
-                  <div key={row.label} className="flex items-center justify-between text-sm py-1.5"
-                    style={{ borderBottom: "1px solid hsl(var(--border-subtle))" }}>
-                    <span className="text-muted-foreground">{row.label}</span>
-                    <span className="font-mono font-medium text-foreground">{row.value}</span>
-                  </div>
-                ))}
+              {/* Response time detail */}
+              <div className="card-elevated p-5">
+                <h3 className="font-semibold text-foreground text-sm mb-4">Response Time Breakdown</h3>
+                <div className="space-y-3">
+                  {[
+                    { label: "Minimum Response", value: `${result.minResponseTime}ms`, bar: result.minResponseTime / result.maxResponseTime * 100, color: "#22C55E" },
+                    { label: "Average Response", value: `${result.averageResponseTime}ms`, bar: result.averageResponseTime / result.maxResponseTime * 100, color: "#5B6CFF" },
+                    { label: "Maximum Response", value: `${result.maxResponseTime}ms`, bar: 100, color: "#EF4444" },
+                    { label: "Test Duration", value: `${result.duration}s`, bar: 60, color: "#7F5AF0" },
+                  ].map(row => (
+                    <div key={row.label}>
+                      <div className="flex items-center justify-between text-sm mb-1">
+                        <span className="text-muted-foreground text-xs">{row.label}</span>
+                        <span className="font-mono font-semibold text-foreground text-xs">{row.value}</span>
+                      </div>
+                      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "hsl(var(--muted))" }}>
+                        <motion.div className="h-full rounded-full"
+                          initial={{ width: 0 }}
+                          animate={{ width: `${row.bar}%` }}
+                          transition={{ duration: 0.8, ease: "easeOut" }}
+                          style={{ background: row.color }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {result.errors.length > 0 && (
-                <div>
-                  <p className="section-label mb-2">Errors</p>
+                <div className="card-elevated p-5">
+                  <p className="section-label mb-3">Errors Encountered</p>
                   <div className="space-y-2">
                     {result.errors.map((err, i) => (
-                      <div key={i} className="flex items-center justify-between p-2.5 rounded-lg text-sm"
+                      <div key={i} className="flex items-center justify-between p-3 rounded-lg text-sm"
                         style={{ background: "hsl(0 84% 60% / 0.07)", border: "1px solid hsl(0 84% 60% / 0.2)" }}>
                         <span className="text-foreground">HTTP {err.status}: {err.message}</span>
-                        <span className="text-destructive font-mono font-medium">{err.count}×</span>
+                        <span className="text-destructive font-mono font-semibold">{err.count}×</span>
                       </div>
                     ))}
                   </div>
@@ -335,12 +481,12 @@ export default function LoadTestPage() {
               )}
 
               {result.recommendations.length > 0 && (
-                <div>
-                  <p className="section-label mb-2">Recommendations</p>
+                <div className="card-elevated p-5">
+                  <p className="section-label mb-3">Recommendations</p>
                   <ul className="space-y-2">
                     {result.recommendations.map((rec, i) => (
-                      <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
-                        <span className="text-primary mt-0.5">•</span>
+                      <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                        <span className="text-primary mt-1 shrink-0">•</span>
                         <span>{rec}</span>
                       </li>
                     ))}

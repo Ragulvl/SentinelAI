@@ -89,13 +89,14 @@ export class DomainVerificationService {
   ): string {
     switch (method) {
       case 'file':
-        return `Upload a file named 'sentinel-verify.txt' to the root of your website (https://${domain}/sentinel-verify.txt) with the following content:\n\n${token}\n\nOnce uploaded, click 'Verify Ownership' to complete verification.`;
+        return `Upload a file named 'sentinel-verify.txt' to the root of your website (https://${encodeURIComponent(domain)}/sentinel-verify.txt) with the following content:\n\n${token}\n\nOnce uploaded, click 'Verify Ownership' to complete verification.`;
 
       case 'dns':
-        return `Add a TXT record to your DNS configuration:\n\nName: _sentinel-verify.${domain}\nType: TXT\nValue: ${token}\n\nDNS changes may take up to 48 hours to propagate. Click 'Verify Ownership' once the record is added.`;
+        return `Add a TXT record to your DNS configuration:\n\nName: _sentinel-verify.${encodeURIComponent(domain)}\nType: TXT\nValue: ${token}\n\nDNS changes may take up to 48 hours to propagate. Click 'Verify Ownership' once the record is added.`;
 
       case 'meta':
-        return `Add the following meta tag to the <head> section of your website's homepage (https://${domain}):\n\n<meta name="sentinel-verify" content="${token}">\n\nOnce added, click 'Verify Ownership' to complete verification.`;
+        // CWE-79: Encode token to prevent XSS if injected into HTML context
+        return `Add the following meta tag to the <head> section of your website's homepage (https://${encodeURIComponent(domain)}):\n\n<meta name="sentinel-verify" content="${encodeURIComponent(token)}">\n\nOnce added, click 'Verify Ownership' to complete verification.`;
 
       default:
         return 'Unknown verification method';

@@ -29,7 +29,9 @@ export class HistoryController {
         return res.status(401).json({ error: 'Invalid token' });
       }
 
-      const limit = parseInt(req.query.limit as string) || 100;
+      // CWE-89: Validate and clamp limit before using in DB query
+      const rawLimit = parseInt(req.query.limit as string);
+      const limit = (!isNaN(rawLimit) && rawLimit > 0 && rawLimit <= 500) ? rawLimit : 100;
       console.log('[History] Fetching scans with limit:', limit);
 
       // Fetch all scan types with error handling

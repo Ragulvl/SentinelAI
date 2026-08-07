@@ -7,6 +7,7 @@ const router = Router();
 router.get('/all', HistoryController.getAllHistory);
 
 // Get detailed scan by ID and type
-router.get('/:type/:id', HistoryController.getScanDetail);
+// CWE-434/CWE-23: Restrict params to safe alphanumeric characters only
+router.get('/:type([a-zA-Z0-9_-]+)/:id([a-zA-Z0-9_-]+)', HistoryController.getScanDetail);
 
 export default router;

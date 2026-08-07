@@ -3,7 +3,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertTriangle, Loader2, Target, Zap, CheckCircle, XCircle,
-  Info, ArrowLeft, Download, Share2, Globe,
+  Info, ArrowLeft, Download, Share2, Globe, Shield, Lock,
+  ChevronRight, Activity, Bug, Eye, Database, Cpu,
 } from "lucide-react";
 import { PageLayout } from "@/components/PageLayout";
 import { PageHeader } from "@/components/PageHeader";
@@ -20,6 +21,19 @@ const SEVERITY_CONFIG = {
   low: { color: "severity-low", bg: "severity-bg-low", icon: Info },
   info: { color: "text-muted-foreground", bg: "badge-muted", icon: Info },
 };
+
+const TEST_CATEGORIES = [
+  { icon: Bug, label: "XSS (Cross-Site Scripting)", color: "#EF4444" },
+  { icon: Database, label: "SQL Injection", color: "#F59E0B" },
+  { icon: Cpu, label: "Command Injection", color: "#EF4444" },
+  { icon: Globe, label: "Path Traversal", color: "#F59E0B" },
+  { icon: Shield, label: "CSRF & SSRF", color: "#8B5CF6" },
+  { icon: Eye, label: "Open Redirect", color: "#3B82F6" },
+  { icon: Lock, label: "XXE Injection", color: "#EF4444" },
+  { icon: Activity, label: "Security Misconfigurations", color: "#F59E0B" },
+  { icon: Shield, label: "Session Management", color: "#10B981" },
+  { icon: Globe, label: "HTTP Header Analysis", color: "#3B82F6" },
+];
 
 export default function PenetrationTestPage() {
   const [searchParams] = useSearchParams();
@@ -146,59 +160,134 @@ export default function PenetrationTestPage() {
         }
       />
 
-      {/* Warning banner */}
-      <div className="mb-5 p-4 rounded-xl flex items-start gap-3"
-        style={{ background: "hsl(0 84% 60% / 0.07)", border: "1px solid hsl(0 84% 60% / 0.25)" }}>
-        <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
-        <div>
-          <p className="text-sm font-semibold text-foreground">Active Auditing Mode Warning</p>
-          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-            This executes active vulnerability checks including injection and path traversal.
-            Only run on domains you own or have explicit authorization to test.
-          </p>
-        </div>
-      </div>
-
       {loading ? (
-        <div className="flex items-center justify-center py-20">
+        <div className="flex items-center justify-center py-32">
           <div className="text-center">
             <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto mb-3" />
             <p className="text-sm text-muted-foreground">Loading test results...</p>
           </div>
         </div>
       ) : (
-        <div className="space-y-5">
-          {/* Input form */}
-          {viewMode === "new" && (
-            <div className="card-elevated p-6 space-y-4 max-w-2xl">
-              <h3 className="font-semibold text-foreground text-sm">Target Configuration</h3>
-              <div>
-                <label className="section-label block mb-2">Target URL</label>
-                <div className="relative">
-                  <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                  <input
-                    type="url" value={url} onChange={e => setUrl(e.target.value)}
-                    disabled={testing} placeholder="https://example.com"
-                    className="input-base pl-10 font-mono text-sm"
-                  />
+        <div className="space-y-6">
+          {viewMode === "new" && !report && (
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+              {/* ── Left: Config Form ──────────────────────────── */}
+              <div className="lg:col-span-3 space-y-4">
+                {/* Warning */}
+                <div className="p-4 rounded-xl flex items-start gap-3"
+                  style={{ background: "hsl(0 84% 60% / 0.07)", border: "1px solid hsl(0 84% 60% / 0.25)" }}>
+                  <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Active Auditing Mode</p>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                      Executes live vulnerability scans including injection and path traversal.
+                      Only run on domains you own or have explicit authorization to test.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Form */}
+                <div className="card-elevated p-6 space-y-5">
+                  <div className="flex items-center gap-3 mb-1">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                      style={{ background: "hsl(0 84% 60% / 0.12)", border: "1px solid hsl(0 84% 60% / 0.25)" }}>
+                      <Target className="w-4 h-4 text-destructive" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-foreground text-sm">Target Configuration</h3>
+                      <p className="text-xs text-muted-foreground">Configure the target you want to test</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="section-label block mb-2">Target URL</label>
+                    <div className="relative">
+                      <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                      <input
+                        type="url" value={url} onChange={e => setUrl(e.target.value)}
+                        disabled={testing} placeholder="https://example.com"
+                        className="input-base pl-10 font-mono text-sm"
+                        onKeyDown={e => e.key === "Enter" && handleTest()}
+                      />
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-1.5">
+                      Must be a verified domain. <button onClick={() => navigate("/domain-verification")} className="text-primary hover:underline">Verify domain →</button>
+                    </p>
+                  </div>
+
+                  <div className="flex gap-3 pt-1">
+                    <button onClick={handleTest} disabled={testing || !url.trim()}
+                      className="btn-primary flex-1 justify-center py-2.5"
+                      style={{ background: testing ? undefined : "hsl(0 84% 60%)", boxShadow: !testing ? "0 4px 24px hsl(0 84% 60% / 0.35)" : undefined }}>
+                      {testing ? <><Loader2 className="w-4 h-4 animate-spin" /> Running tests...</> : <><Zap className="w-4 h-4" /> Start Penetration Test</>}
+                    </button>
+                    <button onClick={() => navigate("/domain-verification")} className="btn-secondary px-4 shrink-0">
+                      <Shield className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {testing && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                      className="p-4 rounded-xl space-y-2"
+                      style={{ background: "hsl(0 84% 60% / 0.05)", border: "1px solid hsl(0 84% 60% / 0.15)" }}>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
+                        <span className="text-xs font-medium text-foreground">Running active penetration tests...</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">This may take 1-3 minutes. Do not close this tab.</p>
+                      <div className="h-1 rounded-full overflow-hidden mt-2" style={{ background: "hsl(var(--muted))" }}>
+                        <motion.div className="h-full rounded-full"
+                          style={{ background: "hsl(0 84% 60%)" }}
+                          animate={{ width: ["10%", "85%"] }}
+                          transition={{ duration: 150, ease: "linear" }} />
+                      </div>
+                    </motion.div>
+                  )}
                 </div>
               </div>
 
-              <div className="flex gap-3">
-                <button onClick={handleTest} disabled={testing || !url.trim()}
-                  className="btn-primary flex-1 justify-center"
-                  style={{ background: testing ? undefined : "hsl(0 84% 60%)", boxShadow: "0 4px 24px hsl(0 84% 60% / 0.35)" }}>
-                  {testing ? <><Loader2 className="w-4 h-4 animate-spin" /> Testing...</> : <><Zap className="w-4 h-4" /> Start Penetration Test</>}
-                </button>
-                <button onClick={() => navigate("/domain-verification")} className="btn-secondary px-4">Verify Domain</button>
-              </div>
+              {/* ── Right: Info Panel ──────────────────────────── */}
+              <div className="lg:col-span-2 space-y-4">
+                <div className="card-elevated p-5 space-y-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Shield className="w-4 h-4 text-primary" />
+                    <h3 className="font-semibold text-foreground text-sm">Tests Performed</h3>
+                  </div>
+                  <div className="space-y-2">
+                    {TEST_CATEGORIES.map((test, i) => {
+                      const Icon = test.icon;
+                      return (
+                        <motion.div key={test.label}
+                          initial={{ opacity: 0, x: 8 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.04 }}
+                          className="flex items-center gap-3 p-2.5 rounded-lg group"
+                          style={{ background: "hsl(var(--muted) / 0.4)", border: "1px solid hsl(var(--border))" }}>
+                          <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0"
+                            style={{ background: `${test.color}18` }}>
+                            <Icon className="w-3 h-3" style={{ color: test.color }} />
+                          </div>
+                          <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">{test.label}</span>
+                          <ChevronRight className="w-3 h-3 text-muted-foreground/40 ml-auto" />
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                </div>
 
-              <div className="p-3.5 rounded-xl text-xs text-muted-foreground"
-                style={{ background: "hsl(var(--muted) / 0.5)", border: "1px solid hsl(var(--border))" }}>
-                <p className="font-medium text-foreground mb-2">Tests performed:</p>
-                <div className="grid grid-cols-2 gap-1">
-                  {["XSS (Cross-Site Scripting)", "SQL Injection", "Command Injection", "Path Traversal", "CSRF", "SSRF", "Open Redirect", "XXE", "Security Misconfigurations", "Session Management"].map(t => (
-                    <span key={t} className="flex items-center gap-1"><span className="opacity-40">•</span>{t}</span>
+                <div className="card-elevated p-5 space-y-3">
+                  <h3 className="font-semibold text-foreground text-sm">Risk Levels</h3>
+                  {[
+                    { label: "Critical", color: "#EF4444", desc: "Immediate exploitation possible" },
+                    { label: "High", color: "#F97316", desc: "Significant security risk" },
+                    { label: "Medium", color: "#F59E0B", desc: "Moderate impact potential" },
+                    { label: "Low", color: "#3B82F6", desc: "Minor security concern" },
+                  ].map(level => (
+                    <div key={level.label} className="flex items-center gap-3">
+                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: level.color }} />
+                      <span className="text-xs font-medium text-foreground w-16 shrink-0">{level.label}</span>
+                      <span className="text-xs text-muted-foreground">{level.desc}</span>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -208,52 +297,55 @@ export default function PenetrationTestPage() {
           {/* Results */}
           {report && (
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
-              {/* Summary */}
-              <div className="card-elevated p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-foreground text-sm">Test Summary</h3>
-                  <div className="flex gap-2">
-                    <button onClick={handleShare} className="btn-ghost-border gap-2 text-xs py-1.5">
-                      <Share2 className="w-3.5 h-3.5" /> Share
-                    </button>
-                    <button onClick={handleExportPDF} className="btn-ghost-border gap-2 text-xs py-1.5">
-                      <Download className="w-3.5 h-3.5" /> PDF
-                    </button>
-                  </div>
+              {/* Run new test button */}
+              <div className="flex items-center justify-between">
+                <button onClick={() => { setReport(null); setUrl(""); }}
+                  className="btn-ghost-border gap-2 text-xs">
+                  <ArrowLeft className="w-3.5 h-3.5" /> New Test
+                </button>
+                <div className="flex gap-2">
+                  <button onClick={handleShare} className="btn-ghost-border gap-2 text-xs py-1.5">
+                    <Share2 className="w-3.5 h-3.5" /> Share
+                  </button>
+                  <button onClick={handleExportPDF} className="btn-ghost-border gap-2 text-xs py-1.5">
+                    <Download className="w-3.5 h-3.5" /> PDF
+                  </button>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {[
-                    { label: "Tests Run", value: report.testsPerformed, color: "text-foreground" },
-                    { label: "Vulnerabilities", value: report.vulnerabilitiesFound, color: "text-destructive" },
-                    { label: "Risk Score", value: report.riskScore, color: report.riskScore > 50 ? "text-destructive" : "text-warning" },
-                    { label: "Passed", value: report.testsPerformed - report.vulnerabilitiesFound, color: "text-success" },
-                  ].map(s => (
-                    <div key={s.label} className="text-center p-4 rounded-xl"
-                      style={{ background: "hsl(var(--muted) / 0.5)", border: "1px solid hsl(var(--border))" }}>
-                      <div className={`text-2xl font-black metric-number ${s.color}`}>{s.value}</div>
-                      <div className="text-xs text-muted-foreground mt-1">{s.label}</div>
-                    </div>
-                  ))}
-                </div>
-
-                {vulnerableResults.length > 0 && (
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {Object.entries(SEVERITY_CONFIG).map(([sev, cfg]) => {
-                      const count = vulnerableResults.filter(r => r.severity === sev).length;
-                      if (!count) return null;
-                      return (
-                        <span key={sev} className={`badge ${cfg.color} ${cfg.bg}`}>
-                          {count} {sev}
-                        </span>
-                      );
-                    })}
-                  </div>
-                )}
               </div>
+
+              {/* Summary grid */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  { label: "Tests Run", value: report.testsPerformed, color: "text-foreground", bg: "hsl(var(--muted) / 0.5)" },
+                  { label: "Vulnerabilities", value: report.vulnerabilitiesFound, color: "text-destructive", bg: "hsl(0 84% 60% / 0.08)" },
+                  { label: "Risk Score", value: `${report.riskScore}/100`, color: report.riskScore > 50 ? "text-destructive" : "text-warning", bg: "hsl(var(--muted) / 0.5)" },
+                  { label: "Passed Tests", value: report.testsPerformed - report.vulnerabilitiesFound, color: "text-success", bg: "hsl(var(--success) / 0.08)" },
+                ].map(s => (
+                  <div key={s.label} className="text-center p-5 rounded-xl"
+                    style={{ background: s.bg, border: "1px solid hsl(var(--border))" }}>
+                    <div className={`text-3xl font-black metric-number ${s.color}`}>{s.value}</div>
+                    <div className="text-xs text-muted-foreground mt-1.5">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {vulnerableResults.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(SEVERITY_CONFIG).map(([sev, cfg]) => {
+                    const count = vulnerableResults.filter(r => r.severity === sev).length;
+                    if (!count) return null;
+                    return (
+                      <span key={sev} className={`badge ${cfg.color} ${cfg.bg}`}>
+                        {count} {sev}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* Detailed results */}
               <div className="card-elevated p-5">
-                <div className="flex items-center gap-2 mb-4 flex-wrap">
+                <div className="flex items-center gap-2 mb-5 flex-wrap">
                   <h3 className="font-semibold text-foreground text-sm mr-2">Detailed Results</h3>
                   {[{ key: null, label: `All (${report.results.length})` }, ...categories.map(c => ({ key: c, label: `${c} (${report.results.filter(r => r.category === c).length})` }))].map(f => (
                     <button key={f.key ?? "all"} onClick={() => setSelectedCategory(f.key)}
@@ -279,7 +371,7 @@ export default function PenetrationTestPage() {
                               <span className={`badge text-[10px] ${result.vulnerable ? `${cfg.color} ${cfg.bg}` : "badge-success"}`}>
                                 {result.vulnerable ? "VULNERABLE" : "SECURE"}
                               </span>
-                              <span className={`badge text-[10px] badge-muted`}>{result.severity}</span>
+                              <span className="badge text-[10px] badge-muted">{result.severity}</span>
                             </div>
                             <p className="text-xs text-muted-foreground leading-relaxed mb-2">{result.description}</p>
                             {result.evidence && (
