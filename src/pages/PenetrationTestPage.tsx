@@ -47,6 +47,7 @@ export default function PenetrationTestPage() {
   const [report, setReport] = useState<PenetrationTestReport | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"new" | "view">(resultId ? "view" : "new");
+  const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => { if (resultId) loadExistingResult(resultId); }, [resultId]);
 
@@ -84,7 +85,10 @@ export default function PenetrationTestPage() {
       toast({ title: "URL required", description: "Please enter a URL to test", variant: "destructive" });
       return;
     }
-    if (!confirm("Warning: This executes active vulnerability scans. Only proceed on domains you own or are authorized to test. Continue?")) return;
+    if (!authorized) {
+      toast({ title: "Authorization required", description: "Please confirm you are authorized to test this domain.", variant: "destructive" });
+      return;
+    }
 
     try {
       setTesting(true);
@@ -215,10 +219,21 @@ export default function PenetrationTestPage() {
                     </p>
                   </div>
 
-                  <div className="flex gap-3 pt-1">
-                    <button onClick={handleTest} disabled={testing || !url.trim()}
+                  {/* Authorization checkbox */}
+                  <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg transition-all"
+                    style={{ background: authorized ? "hsl(0 84% 60% / 0.05)" : "hsl(var(--muted)/0.4)", border: `1px solid ${authorized ? "hsl(0 84% 60% / 0.3)" : "hsl(var(--border))"}` }}>
+                    <input type="checkbox" checked={authorized} onChange={e => setAuthorized(e.target.checked)}
+                      className="mt-0.5 accent-red-500 shrink-0" />
+                    <span className="text-xs text-muted-foreground leading-relaxed">
+                      I confirm I am the <span className="text-foreground font-semibold">owner or authorized tester</span> of this domain.
+                      I understand this executes active vulnerability scans including injection attacks.
+                    </span>
+                  </label>
+
+                  <div className="flex gap-3">
+                    <button onClick={handleTest} disabled={testing || !url.trim() || !authorized}
                       className="btn-primary flex-1 justify-center py-2.5"
-                      style={{ background: testing ? undefined : "hsl(0 84% 60%)", boxShadow: !testing ? "0 4px 24px hsl(0 84% 60% / 0.35)" : undefined }}>
+                      style={{ background: testing || !authorized ? undefined : "hsl(0 84% 60%)", boxShadow: !testing && authorized ? "0 4px 24px hsl(0 84% 60% / 0.35)" : undefined }}>
                       {testing ? <><Loader2 className="w-4 h-4 animate-spin" /> Running tests...</> : <><Zap className="w-4 h-4" /> Start Penetration Test</>}
                     </button>
                     <button onClick={() => navigate("/domain-verification")} className="btn-secondary px-4 shrink-0">
