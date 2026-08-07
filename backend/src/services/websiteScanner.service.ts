@@ -156,10 +156,32 @@ export class WebsiteScannerService {
     return vulnerabilities;
   }
 
-  private static async checkSSL(url: string): Promise<any> {
-    if (!url.startsWith('https://')) return { valid: false };
+  private static async checkSSL(rawUrl: string): Promise<any> {
+    // Resolve the canonical URL — follow HTTP→HTTPS redirects first so we
+    // don't mark a perfectly valid cert as "invalid" just because the
+    // caller passed an http:// URL.
+    let targetUrl = rawUrl;
+    if (!targetUrl.startsWith('https://')) {
+      try {
+        const redirect = await axios.head(rawUrl, {
+          timeout: 5000,
+          maxRedirects: 5,
+          validateStatus: () => true,
+          httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+        });
+        const location = redirect.request?.res?.responseUrl ?? redirect.headers?.location;
+        if (location?.startsWith('https://')) {
+          targetUrl = location;
+        } else {
+          // No HTTPS upgrade found
+          return { valid: false };
+        }
+      } catch {
+        return { valid: false };
+      }
+    }
 
-    const urlObj = new URL(url);
+    const urlObj = new URL(targetUrl);
 
     return new Promise((resolve) => {
       const req = https.request(
@@ -294,80 +316,150 @@ export class WebsiteScannerService {
     return vulnerabilities;
   }
 
+  /**
+   * Returns true if the response body is an SPA catch-all page rather than
+   * the actual file.  SPAs (Vercel, Render, Cloudflare Pages) return 200 +
+   * index.html for EVERY unknown path, which causes massive false-positives.
+   *
+   * We detect this by checking:
+   *  1. Content-Type is text/html when we didn't request HTML
+   *  2. Body starts with an HTML doctype / tag
+   *  3. Body contains the React root mount point
+   */
+  private static isSpaFallback(body: any, contentType: string): boolean {
+    if (typeof body !== 'string') return false;
+    const trimmed = body.trimStart();
+    const isHtml =
+      trimmed.startsWith('<!DOCTYPE') ||
+      trimmed.startsWith('<html') ||
+      trimmed.startsWith('<!doctype') ||
+      contentType.includes('text/html');
+    if (!isHtml) return false;
+    // Could still be a real PHP/server-rendered page — only dismiss if it
+    // also contains clear SPA fingerprints (React root div or Vite marker).
+    return (
+      body.includes('id="root"') ||
+      body.includes("id='root'") ||
+      body.includes('id="app"') ||
+      body.includes('data-reactroot') ||
+      body.includes('__vite__') ||
+      body.includes('__next')
+    );
+  }
+
+  /**
+   * Verifies that the response content actually matches what we'd expect for
+   * the sensitive file path — prevents treating SPA HTML as a leaked file.
+   */
+  private static isActualSensitiveContent(path: string, body: string): boolean {
+    const lower = body.slice(0, 1000).toLowerCase();
+    if (path.endsWith('.env') || path.includes('.env.')) {
+      // Real .env files contain KEY=VALUE pairs
+      return /^[a-z_][a-z0-9_]*\s*=/im.test(body);
+    }
+    if (path === '/.git/config') {
+      return lower.includes('[core]') || lower.includes('[remote');
+    }
+    if (path === '/.git/HEAD') {
+      return lower.startsWith('ref:') || /^[0-9a-f]{40}/m.test(body);
+    }
+    if (path.endsWith('.sql')) {
+      return lower.includes('create table') || lower.includes('insert into') || lower.includes('--');
+    }
+    if (path.endsWith('.php')) {
+      return lower.includes('<?php') || lower.includes('<? ');
+    }
+    if (path === '/package.json' || path === '/composer.json' || path === '/config.json') {
+      try { JSON.parse(body); return true; } catch { return false; }
+    }
+    if (path === '/.htaccess') {
+      return lower.includes('rewriterule') || lower.includes('options') || lower.includes('allow from');
+    }
+    if (path === '/web.config') {
+      return lower.includes('<configuration>') || lower.includes('<?xml');
+    }
+    if (path === '/robots.txt') {
+      return lower.includes('user-agent') || lower.includes('disallow');
+    }
+    if (path === '/.DS_Store') {
+      // DS_Store is binary — non-string-like or contains Bud1 marker
+      return body.includes('Bud1') || body.length > 0;
+    }
+    // For any unrecognised path, default to true (conservative)
+    return true;
+  }
+
   private static async checkSensitiveFiles(baseUrl: string): Promise<WebsiteVulnerability[]> {
-    const vulnerabilities: WebsiteVulnerability[] = [];
-    
-    // List of sensitive files to check
     const sensitiveFiles = [
-      { path: '/.env', name: '.env file', type: 'critical' as const },
-      { path: '/.env.local', name: '.env.local file', type: 'critical' as const },
-      { path: '/.env.production', name: '.env.production file', type: 'critical' as const },
-      { path: '/.git/config', name: 'Git config', type: 'critical' as const },
-      { path: '/.git/HEAD', name: 'Git HEAD', type: 'high' as const },
-      { path: '/config.php', name: 'config.php', type: 'high' as const },
-      { path: '/wp-config.php', name: 'WordPress config', type: 'critical' as const },
-      { path: '/config.json', name: 'config.json', type: 'high' as const },
-      { path: '/package.json', name: 'package.json', type: 'medium' as const },
-      { path: '/.htaccess', name: '.htaccess', type: 'medium' as const },
-      { path: '/composer.json', name: 'composer.json', type: 'medium' as const },
-      { path: '/phpinfo.php', name: 'phpinfo.php', type: 'high' as const },
-      { path: '/info.php', name: 'info.php', type: 'high' as const },
-      { path: '/web.config', name: 'web.config', type: 'high' as const },
-      { path: '/backup.sql', name: 'backup.sql', type: 'critical' as const },
-      { path: '/database.sql', name: 'database.sql', type: 'critical' as const },
-      { path: '/.DS_Store', name: '.DS_Store', type: 'low' as const },
-      { path: '/robots.txt', name: 'robots.txt', type: 'info' as const },
+      { path: '/.env',            name: '.env file',        type: 'critical' as const },
+      { path: '/.env.local',      name: '.env.local file',  type: 'critical' as const },
+      { path: '/.env.production', name: '.env.production',  type: 'critical' as const },
+      { path: '/.git/config',     name: 'Git config',       type: 'critical' as const },
+      { path: '/.git/HEAD',       name: 'Git HEAD',         type: 'high'     as const },
+      { path: '/config.php',      name: 'config.php',       type: 'high'     as const },
+      { path: '/wp-config.php',   name: 'WordPress config', type: 'critical' as const },
+      { path: '/config.json',     name: 'config.json',      type: 'high'     as const },
+      { path: '/package.json',    name: 'package.json',     type: 'medium'   as const },
+      { path: '/.htaccess',       name: '.htaccess',        type: 'medium'   as const },
+      { path: '/composer.json',   name: 'composer.json',    type: 'medium'   as const },
+      { path: '/phpinfo.php',     name: 'phpinfo.php',      type: 'high'     as const },
+      { path: '/info.php',        name: 'info.php',         type: 'high'     as const },
+      { path: '/web.config',      name: 'web.config',       type: 'high'     as const },
+      { path: '/backup.sql',      name: 'backup.sql',       type: 'critical' as const },
+      { path: '/database.sql',    name: 'database.sql',     type: 'critical' as const },
+      { path: '/.DS_Store',       name: '.DS_Store',        type: 'low'      as const },
+      { path: '/robots.txt',      name: 'robots.txt',       type: 'info'     as const },
     ];
 
-    // Check each file in parallel
     const checks = sensitiveFiles.map(async (file): Promise<WebsiteVulnerability | null> => {
       try {
         const fileUrl = `${baseUrl}${file.path}`;
         const response = await axios.get(fileUrl, {
           timeout: 3000,
-          maxRedirects: 0,
+          // Allow one redirect (canonical URLs) but not more — prevents
+          // infinite redirect loops on SPA catch-all handlers.
+          maxRedirects: 1,
           validateStatus: (status) => status === 200,
           httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+          // Force response as text so we can inspect the raw body
+          responseType: 'text',
+          transformResponse: [(data) => data],
         });
 
-        // File is accessible
-        if (response.status === 200 && response.data) {
-          let evidence = `File found at: ${fileUrl}`;
-          let fileContent = '';
+        if (response.status !== 200 || !response.data) return null;
 
-          // Get file content (limit to first 2000 characters for display)
-          if (typeof response.data === 'string') {
-            fileContent = response.data.substring(0, 2000);
-            if (response.data.length > 2000) {
-              fileContent += '\n\n... (truncated)';
-            }
-          }
+        const body: string = response.data;
+        const contentType: string = (response.headers['content-type'] as string) ?? '';
 
-          // Add content preview to evidence
-          if (fileContent) {
-            evidence += `\n\nFile Content Preview:\n${'─'.repeat(50)}\n${fileContent}\n${'─'.repeat(50)}`;
-          }
+        // ── False-positive guard 1: SPA catch-all ──────────────────────────
+        // SPAs return 200 + index.html for every unknown route.
+        if (this.isSpaFallback(body, contentType)) return null;
 
-          return {
-            type: file.type,
-            category: 'Sensitive File Exposure',
-            title: `Sensitive Configuration File Exposed: ${file.path}`,
-            description: `The application exposes the ${file.name} to the public network.`,
-            recommendation: 'Enforce strict access controls or move sensitive configs out of the web root.',
-            evidence,
-          };
-        }
-      } catch (error) {
-        // File not accessible (this is good)
+        // ── False-positive guard 2: content heuristics ─────────────────────
+        // Even if it's not an SPA, confirm the body looks like the expected
+        // file type rather than a generic error page.
+        if (!this.isActualSensitiveContent(file.path, body)) return null;
+
+        // ── Real finding ───────────────────────────────────────────────────
+        const preview = body.substring(0, 2000) + (body.length > 2000 ? '\n\n... (truncated)' : '');
+        const evidence =
+          `File found at: ${fileUrl}\n\nFile Content Preview:\n${'─'.repeat(50)}\n${preview}\n${'─'.repeat(50)}`;
+
+        return {
+          type: file.type,
+          category: 'Sensitive File Exposure',
+          title: `Sensitive Configuration File Exposed: ${file.path}`,
+          description: `The application exposes the ${file.name} to the public network.`,
+          recommendation: 'Enforce strict access controls or move sensitive configs out of the web root.',
+          evidence,
+        };
+      } catch {
         return null;
       }
-      return null;
     });
 
     const results = await Promise.all(checks);
-    
-    // Filter out null results (files that weren't found)
-    return results.filter((vuln): vuln is WebsiteVulnerability => vuln !== null);
+    return results.filter((v): v is WebsiteVulnerability => v !== null);
   }
 
   private static checkCommonVulnerabilities(html: string, headers: any): WebsiteVulnerability[] {
