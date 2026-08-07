@@ -1,5 +1,6 @@
 import { MonitoredSite } from '../db/models/MonitoredSite.model.js';
 import { MonitoringService } from '../services/monitoring.service.js';
+import { logger } from '../config/logger.js';
 
 export class MonitoringWorker {
   private static interval: NodeJS.Timeout | null = null;
@@ -7,11 +8,11 @@ export class MonitoringWorker {
 
   static start() {
     if (this.interval) {
-      console.log('⚠️  Monitoring worker already running');
+      logger.warn('Monitoring worker already running');
       return;
     }
 
-    console.log('🔄 Starting monitoring worker...');
+    logger.info('Starting monitoring worker...');
     
     // Run immediately on start
     this.checkAllSites();
@@ -21,14 +22,14 @@ export class MonitoringWorker {
       this.checkAllSites();
     }, this.CHECK_INTERVAL);
 
-    console.log(`✅ Monitoring worker started (checking every ${this.CHECK_INTERVAL / 1000}s)`);
+    logger.info(`Monitoring worker started (checking every ${this.CHECK_INTERVAL / 1000}s)`);
   }
 
   static stop() {
     if (this.interval) {
       clearInterval(this.interval);
       this.interval = null;
-      console.log('🛑 Monitoring worker stopped');
+      logger.info('Monitoring worker stopped');
     }
   }
 
@@ -53,23 +54,19 @@ export class MonitoringWorker {
         return;
       }
 
-      console.log(`🔍 Checking ${sitesToCheck.length} of ${sites.length} monitored sites...`);
+      logger.info('Checking monitored sites', { checking: sitesToCheck.length, total: sites.length });
 
-      // Check all sites in parallel (with some throttling)
-      const batchSize = 5;
-      for (let i = 0; i < sitesToCheck.length; i += batchSize) {
-        const batch = sitesToCheck.slice(i, i + batchSize);
-        await Promise.all(
-          batch.map(site => 
-            MonitoringService.updateSiteHealth(site._id.toString())
-              .catch(err => console.error(`Error checking ${site.url}:`, err.message))
-          )
-        );
-      }
+      // Check all sites in parallel
+      const updates = sitesToCheck.map(site => 
+        MonitoringService.updateSiteHealth(site._id.toString())
+          .catch(err => logger.error(`Error checking ${site.url}:`, { error: err.message }))
+      );
+      
+      await Promise.allSettled(updates);
 
-      console.log(`✅ Completed checking ${sitesToCheck.length} sites`);
-    } catch (error) {
-      console.error('Error in monitoring worker:', error);
+      logger.info('Site check complete', { checked: sitesToCheck.length });
+    } catch (error: any) {
+      logger.error('Error in monitoring worker check', { error: error.message });
     }
   }
 }

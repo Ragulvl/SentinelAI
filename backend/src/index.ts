@@ -8,6 +8,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import mongoose from 'mongoose';
 import { config } from './config/env.js';
+import { logger } from './config/logger.js';
 import { connectDatabase } from './config/database.js';
 import authRoutes from './routes/auth.routes.js';
 import scanRoutes from './routes/scan.routes.js';
@@ -47,7 +48,7 @@ app.use(cors({
     if (isAllowed) {
       callback(null, true);
     } else {
-      console.log(`CORS blocked: ${normalizedOrigin}`);
+      logger.warn('CORS blocked', { origin: normalizedOrigin });
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -84,7 +85,7 @@ app.get('/health', (req, res) => {
 
 // Error handling
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Error:', err);
+  logger.error('Unhandled error', { message: err.message, status: err.status, stack: err.stack });
   res.status(err.status || 500).json({
     error: err.message || 'Internal server error',
   });
@@ -96,26 +97,28 @@ const startServer = async () => {
     // Try to connect to database, but don't fail if it's not available
     try {
       await connectDatabase();
-    } catch (dbError) {
-      console.error('⚠️  Database connection failed, but server will continue...');
+    } catch (dbError: any) {
+      logger.warn('Database connection failed — server will continue without DB', { error: dbError.message });
     }
     
     // Initialize notification service
     NotificationService.initialize();
     
-    const port = Number(config.port) || 10000;
+    const port = config.port;
     // Bind to 0.0.0.0 in production or if RENDER environment variable is set
     const isProduction = config.nodeEnv === 'production' || process.env.RENDER === 'true';
     const host = isProduction ? '0.0.0.0' : 'localhost';
     
-    console.log(`🔧 Binding to ${host}:${port} (${isProduction ? 'production' : 'development'} mode)`);
+    logger.info('Binding server', { host, port, mode: isProduction ? 'production' : 'development' });
     
     app.listen(port, host, () => {
-      console.log(`🚀 Backend server running on http://${host}:${port}`);
-      console.log(`📱 Frontend URL: ${config.frontendUrl}`);
-      console.log(`🔐 GitHub OAuth configured: ${!!config.github.clientId}`);
-      console.log(`🌍 Environment: ${config.nodeEnv}`);
-      console.log(`💾 MongoDB: ${mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'}`);
+      logger.info('Backend server started', {
+        url: `http://${host}:${port}`,
+        frontendUrl: config.frontendUrl,
+        githubOAuth: !!config.github.clientId,
+        env: config.nodeEnv,
+        db: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+      });
       
       // Start monitoring worker only if DB is connected
       if (mongoose.connection.readyState === 1) {
@@ -125,28 +128,28 @@ const startServer = async () => {
         if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
           WhatsAppWorker.start();
         } else {
-          console.log('⚠️  WhatsApp worker not started (Twilio not configured)');
+          logger.warn('WhatsApp worker not started — Twilio not configured');
         }
       } else {
-        console.log('⚠️  Monitoring worker not started (no database connection)');
+        logger.warn('Monitoring worker not started — no database connection');
       }
     });
-  } catch (error) {
-    console.error('❌ Failed to start server:', error);
+  } catch (error: any) {
+    logger.error('Failed to start server', { error: error.message });
     process.exit(1);
   }
 };
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully...');
+  logger.info('SIGTERM received — shutting down gracefully');
   MonitoringWorker.stop();
   WhatsAppWorker.stop();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down gracefully...');
+  logger.info('SIGINT received — shutting down gracefully');
   MonitoringWorker.stop();
   WhatsAppWorker.stop();
   process.exit(0);

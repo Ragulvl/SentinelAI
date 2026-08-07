@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { config } from '../config/env.js';
+import { logger } from '../config/logger.js';
 
 export interface AIAnalysisResult {
   vulnerabilities: Array<{
@@ -67,7 +68,7 @@ export class AIService {
 
     if (availableKeys.length === 0) {
       // All keys have failed, reset and try again
-      console.warn('⚠️ All API keys have failed, resetting failure counts');
+      logger.warn('All API keys have failed — resetting failure counts', { provider: 'rotator' });
       rotator.failureCount.clear();
       rotator.lastUsed.clear();
       return rotator.keys[0];
@@ -81,7 +82,7 @@ export class AIService {
   private static markKeyAsFailed(rotator: APIKeyRotator, key: string): void {
     const currentFailures = rotator.failureCount.get(key) || 0;
     rotator.failureCount.set(key, currentFailures + 1);
-    console.warn(`⚠️ API key failed (${currentFailures + 1} times): ${key.substring(0, 20)}...`);
+    logger.warn('API key failed', { failures: currentFailures + 1, keyPrefix: key.substring(0, 20) });
   }
 
   private static markKeyAsSuccess(rotator: APIKeyRotator, key: string): void {
@@ -96,17 +97,21 @@ export class AIService {
       { name: 'Gemini', rotator: this.geminiRotator, method: this.analyzeWithGemini.bind(this) },
     ];
 
-    console.log(`🔍 AI Service initialized with ${this.groqRotator.keys.length} Groq keys and ${this.geminiRotator.keys.length} Gemini keys`);
+    logger.info('AI analysis started', {
+      groqKeys: this.groqRotator.keys.length,
+      geminiKeys: this.geminiRotator.keys.length,
+      files: files.length,
+    });
 
     // Try all providers with rotation
     for (const provider of providers) {
       if (provider.rotator.keys.length === 0) {
-        console.warn(`⚠️ No ${provider.name} API keys configured`);
+        logger.warn('No API keys configured for provider', { provider: provider.name });
         errors.push(`No ${provider.name} API keys configured`);
         continue;
       }
 
-      console.log(`� Trying ${provider.name} API with ${provider.rotator.keys.length} keys...`);
+      logger.info('Trying AI provider', { provider: provider.name, keys: provider.rotator.keys.length });
       
       // Try all available keys for this provider
       const maxAttempts = provider.rotator.keys.length * 2; // Allow retries
@@ -118,23 +123,23 @@ export class AIService {
         }
 
         try {
-          console.log(`🔄 ${provider.name} attempt ${attempt + 1} with key: ${apiKey.substring(0, 20)}...`);
+          logger.info('AI provider attempt', { provider: provider.name, attempt: attempt + 1, keyPrefix: apiKey.substring(0, 20) });
           const result = await provider.method(files, apiKey);
-          console.log(`✅ ${provider.name} API succeeded!`);
+          logger.info('AI provider succeeded', { provider: provider.name });
           this.markKeyAsSuccess(provider.rotator, apiKey);
           return result;
         } catch (error: any) {
           const errorMsg = `${provider.name} attempt ${attempt + 1} failed: ${error.message}`;
-          console.error(`❌ ${errorMsg}`);
+          logger.warn('AI provider attempt failed', { provider: provider.name, attempt: attempt + 1, error: error.message, status: error.response?.status });
           if (error.response?.data) {
-            console.error('Response data:', JSON.stringify(error.response.data, null, 2));
+            logger.debug('AI provider error response', { data: error.response.data });
           }
           errors.push(errorMsg);
           this.markKeyAsFailed(provider.rotator, apiKey);
           
           // If it's a rate limit error, try next key immediately
           if (error.response?.status === 429) {
-            console.log('⏭️ Rate limit hit, trying next key...');
+            logger.info('Rate limit hit — trying next key', { provider: provider.name });
             continue;
           }
           
@@ -145,7 +150,7 @@ export class AIService {
     }
 
     const finalError = `All AI providers failed after rotation:\n${errors.join('\n')}`;
-    console.error(`💥 ${finalError}`);
+    logger.error('All AI providers exhausted', { errors });
     throw new Error(finalError);
   }
 
@@ -161,9 +166,9 @@ export class AIService {
       const prompt = this.buildAnalysisPrompt(files);
       const systemPrompt = this.getSystemPrompt();
 
-      // Use gemini-3-flash-preview (Gemini 3 Flash) - latest and fastest
+      // Use gemini-2.0-flash — stable production model (gemini-3-flash-preview does not exist)
       const response = await axios.post(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
         {
           contents: [
             {
@@ -189,7 +194,7 @@ export class AIService {
 
       const content = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!content) {
-        console.error('Gemini response structure:', JSON.stringify(response.data, null, 2));
+        logger.error('Empty response from Gemini API', { responseData: JSON.stringify(response.data) });
         throw new Error('No response from Gemini API');
       }
 
@@ -246,7 +251,7 @@ export class AIService {
 
       const content = response.data.choices[0]?.message?.content;
       if (!content) {
-        console.error('Groq response structure:', JSON.stringify(response.data, null, 2));
+        logger.error('Empty response from Groq API', { responseData: JSON.stringify(response.data) });
         throw new Error('No response from Groq API');
       }
 
@@ -392,7 +397,7 @@ If you cannot describe how an attacker would exploit it, DO NOT include it.`;
     // Try to extract JSON from the response
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      console.error('AI response:', content);
+      logger.error('AI response did not contain valid JSON', { contentPreview: content.substring(0, 200) });
       throw new Error('Invalid JSON response from AI');
     }
 
@@ -400,7 +405,7 @@ If you cannot describe how an attacker would exploit it, DO NOT include it.`;
     
     // Validate and clean the result
     if (!result.vulnerabilities || !Array.isArray(result.vulnerabilities)) {
-      console.warn('Invalid vulnerabilities array from AI');
+      logger.warn('AI returned invalid vulnerabilities array — returning empty result');
       return { vulnerabilities: [] };
     }
 
@@ -461,6 +466,6 @@ If you cannot describe how an attacker would exploit it, DO NOT include it.`;
     this.groqRotator.lastUsed.clear();
     this.geminiRotator.failureCount.clear();
     this.geminiRotator.lastUsed.clear();
-    console.log('✅ All API key failure counts reset');
+    logger.info('All API key failure counts reset');
   }
 }
