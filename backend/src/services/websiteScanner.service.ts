@@ -157,54 +157,68 @@ export class WebsiteScannerService {
   }
 
   private static async checkSSL(rawUrl: string): Promise<any> {
-    // Resolve the canonical URL — follow HTTP→HTTPS redirects first so we
-    // don't mark a perfectly valid cert as "invalid" just because the
-    // caller passed an http:// URL.
-    let targetUrl = rawUrl;
-    if (!targetUrl.startsWith('https://')) {
-      try {
-        const redirect = await axios.head(rawUrl, {
-          timeout: 5000,
-          maxRedirects: 5,
-          validateStatus: () => true,
-          httpsAgent: new https.Agent({ rejectUnauthorized: false }),
-        });
-        const location = redirect.request?.res?.responseUrl ?? redirect.headers?.location;
-        if (location?.startsWith('https://')) {
-          targetUrl = location;
-        } else {
-          // No HTTPS upgrade found
-          return { valid: false };
-        }
-      } catch {
+    // Phase 1 — validity check via Node's own TLS verifier.
+    // If axios succeeds with rejectUnauthorized:true, the cert chain is valid.
+    // This is more reliable than getPeerCertificate() which returns empty objects
+    // on Cloudflare-proxied hosts due to TLS session resumption.
+    let targetUrl = rawUrl.startsWith('https://') ? rawUrl : rawUrl.replace('http://', 'https://');
+
+    let isValid = false;
+    try {
+      await axios.head(targetUrl, {
+        timeout: 6000,
+        maxRedirects: 5,
+        // Use the DEFAULT https agent — rejectUnauthorized defaults to true
+        // so any cert error will throw, confirming invalid cert.
+        httpsAgent: new https.Agent({ rejectUnauthorized: true }),
+        validateStatus: () => true, // Don't throw on 4xx/5xx — only cert errors throw
+      });
+      isValid = true;
+    } catch (err: any) {
+      // CERT_HAS_EXPIRED, UNABLE_TO_VERIFY_LEAF_SIGNATURE, etc.
+      const certErrors = [
+        'CERT_HAS_EXPIRED', 'CERT_NOT_YET_VALID', 'ERR_TLS_CERT_ALTNAME_INVALID',
+        'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'DEPTH_ZERO_SELF_SIGNED_CERT',
+        'SELF_SIGNED_CERT_IN_CHAIN', 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+      ];
+      const code: string = err.code ?? err.cause?.code ?? '';
+      // Only mark invalid on explicit cert errors — network timeouts etc. are ambiguous
+      if (certErrors.some(e => code.includes(e))) {
         return { valid: false };
       }
+      // For non-cert errors (ECONNREFUSED, ETIMEDOUT) try http:// fallback
+      if (!rawUrl.startsWith('https://')) {
+        return { valid: false };
+      }
+      // Treat as "we couldn't verify" but don't cry wolf
+      isValid = false;
     }
 
+    // Phase 2 — metadata retrieval via raw socket (best-effort, does not affect validity).
     const urlObj = new URL(targetUrl);
-
-    return new Promise((resolve) => {
+    const meta = await new Promise<any>((resolve) => {
       const req = https.request(
         { host: urlObj.hostname, port: 443, method: 'HEAD', rejectUnauthorized: false, timeout: 5000 },
         (res) => {
           const cert = (res.socket as any).getPeerCertificate(true);
           if (cert?.valid_to) {
             resolve({
-              valid: new Date(cert.valid_to) > new Date(),
-              issuer: cert.issuer?.O || 'Unknown',
+              issuer: cert.issuer?.O || cert.issuer?.CN || 'Unknown',
               validFrom: new Date(cert.valid_from),
               validTo: new Date(cert.valid_to),
               protocol: (res.socket as any).getProtocol?.() || 'Unknown',
             });
           } else {
-            resolve({ valid: false });
+            resolve({});
           }
         }
       );
-      req.on('timeout', () => { req.destroy(); resolve({ valid: false }); });
-      req.on('error', () => resolve({ valid: false }));
+      req.on('timeout', () => { req.destroy(); resolve({}); });
+      req.on('error', () => resolve({}));
       req.end();
     });
+
+    return { valid: isValid, ...meta };
   }
 
   private static checkSSLVulnerabilities(sslInfo: any): WebsiteVulnerability[] {
@@ -408,7 +422,7 @@ export class WebsiteScannerService {
       { path: '/backup.sql',      name: 'backup.sql',       type: 'critical' as const },
       { path: '/database.sql',    name: 'database.sql',     type: 'critical' as const },
       { path: '/.DS_Store',       name: '.DS_Store',        type: 'low'      as const },
-      { path: '/robots.txt',      name: 'robots.txt',       type: 'info'     as const },
+      { path: '/robots.txt', name: 'robots.txt', type: 'info' as const },
     ];
 
     const checks = sensitiveFiles.map(async (file): Promise<WebsiteVulnerability | null> => {
@@ -445,12 +459,21 @@ export class WebsiteScannerService {
         const evidence =
           `File found at: ${fileUrl}\n\nFile Content Preview:\n${'─'.repeat(50)}\n${preview}\n${'─'.repeat(50)}`;
 
+        // ── robots.txt is expected to be public; give it an accurate finding ──
+        const isRobots = file.path === '/robots.txt';
+
         return {
           type: file.type,
-          category: 'Sensitive File Exposure',
-          title: `Sensitive Configuration File Exposed: ${file.path}`,
-          description: `The application exposes the ${file.name} to the public network.`,
-          recommendation: 'Enforce strict access controls or move sensitive configs out of the web root.',
+          category: isRobots ? 'Information Disclosure' : 'Sensitive File Exposure',
+          title: isRobots
+            ? 'robots.txt Discloses Internal Path Structure'
+            : `Sensitive Configuration File Exposed: ${file.path}`,
+          description: isRobots
+            ? 'The robots.txt file is publicly accessible (this is expected for SEO). However, its Disallow directives enumerate sensitive paths (e.g. /admin, /api) that can guide attackers to high-value targets.'
+            : `The application exposes the ${file.name} to the public network.`,
+          recommendation: isRobots
+            ? 'Review Disallow entries — avoid listing sensitive admin/API paths in robots.txt. Search engines respect the Allow list; adversarial crawlers do not honour Disallow.'
+            : 'Enforce strict access controls or move sensitive configs out of the web root.',
           evidence,
         };
       } catch {
