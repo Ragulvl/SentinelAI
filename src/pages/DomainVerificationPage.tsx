@@ -2,330 +2,438 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Shield, CheckCircle, XCircle, Clock, Trash2, FileText,
-  Globe, Code, Loader2, Info, Lock, Zap, Target, ArrowRight,
-  Plus, RefreshCw,
+  Shield, Trash2, Globe, Loader2, Lock, Zap, Target,
+  RefreshCw, Copy, Check, Network, Terminal, ShieldCheck,
+  AlertTriangle, FileCode2, Wifi, HardDrive, X,
+  ChevronDown, ChevronUp, ArrowRight,
 } from "lucide-react";
 import { PageLayout } from "@/components/PageLayout";
 import { PageHeader } from "@/components/PageHeader";
-import { websiteScanService, VerifiedDomain, VerificationInstructions } from "@/services/websiteScan.service";
+import {
+  websiteScanService,
+  VerifiedDomain,
+  VerificationInstructions,
+} from "@/services/websiteScan.service";
 import { useToast } from "@/hooks/use-toast";
 
-const METHOD_ICONS: Record<string, React.ElementType> = {
-  file: FileText,
-  dns: Globe,
-  meta: Code,
-};
-
-const METHOD_DESCRIPTIONS: Record<string, string> = {
-  file: "Place the authorization file within the web root of your target host.",
-  dns: "Publish a TXT record containing the verification token in your DNS configuration.",
-  meta: "Embed a verification metadata tag into the main HTML head of your index page.",
-};
-
+/* ── Method config ─────────────────────────────────────────────── */
 const METHODS = [
-  { key: "file" as const, label: "File Upload", icon: FileText, desc: "Place file in web root", color: "#5B6CFF" },
-  { key: "meta" as const, label: "Meta Tag", icon: Code, desc: "Embed HTML tag", color: "#7F5AF0" },
-  { key: "dns" as const, label: "DNS Record", icon: Globe, desc: "Add TXT record", color: "#00D4FF" },
+  { key: "file" as const, label: "File Upload", Icon: HardDrive, color: "#3B82F6", tag: "FILE", desc: "Upload a .txt file to your web root. Works with FTP, SSH, or cPanel." },
+  { key: "dns"  as const, label: "DNS Record",  Icon: Wifi,      color: "#8B5CF6", tag: "DNS",  desc: "Add a TXT record in Cloudflare, Namecheap, or any DNS panel." },
+  { key: "meta" as const, label: "Meta Tag",    Icon: FileCode2, color: "#06B6D4", tag: "META", desc: "Paste one <meta> tag in your homepage <head>. Works with any CMS." },
 ];
+const METHOD_MAP = Object.fromEntries(METHODS.map(m => [m.key, m])) as Record<string, typeof METHODS[0]>;
 
+/* ── Copy button ───────────────────────────────────────────────── */
+function CopyBtn({ text }: { text: string }) {
+  const [ok, setOk] = useState(false);
+  return (
+    <button
+      onClick={() => { navigator.clipboard.writeText(text); setOk(true); setTimeout(() => setOk(false), 2000); }}
+      className="flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold tracking-widest transition-all"
+      style={{ background: ok ? "hsl(var(--success)/0.1)" : "hsl(var(--muted))", color: ok ? "hsl(var(--success))" : "hsl(var(--muted-foreground))", border: `1px solid ${ok ? "hsl(var(--success)/0.25)" : "hsl(var(--border))"}` }}
+    >
+      {ok ? <><Check className="w-3 h-3" />COPIED</> : <><Copy className="w-3 h-3" />COPY</>}
+    </button>
+  );
+}
+
+/* ── Code line ─────────────────────────────────────────────────── */
+function CodeLine({ label, value, copy }: { label: string; value: string; copy?: boolean }) {
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{label}</p>
+      <div className="flex items-center gap-2 rounded-lg px-3.5 py-2.5" style={{ background: "hsl(220 20% 5%)", border: "1px solid hsl(var(--border))" }}>
+        <code className="flex-1 text-xs font-mono break-all" style={{ color: "#CBD5E1" }}>{value}</code>
+        {copy && <CopyBtn text={value} />}
+      </div>
+    </div>
+  );
+}
+
+/* ── Instructions drawer ───────────────────────────────────────── */
+function InstructionsDrawer({ instructions, verifying, onVerify, onClose }: {
+  instructions: VerificationInstructions;
+  verifying: boolean;
+  onVerify: () => void;
+  onClose: () => void;
+}) {
+  const m = METHOD_MAP[instructions.method] ?? METHOD_MAP.file;
+  const MIcon = m.Icon;
+  const tok = instructions.token;
+
+  const steps: { label: string; value: string; copy?: boolean }[] =
+    instructions.method === "file" ? [
+      { label: "File name — upload to your web root", value: "sentinel-verify.txt" },
+      { label: "Accessible URL (your server must serve this)", value: `https://${instructions.domain}/sentinel-verify.txt`, copy: true },
+      { label: "File content — ONLY this token, no extra lines", value: tok, copy: true },
+    ] : instructions.method === "dns" ? [
+      { label: "Record type", value: "TXT" },
+      { label: "Name / Host", value: `_sentinel-verify.${instructions.domain}`, copy: true },
+      { label: "Value / Content", value: tok, copy: true },
+      { label: "TTL", value: "Auto or 3600" },
+    ] : [
+      { label: "Open your homepage HTML file", value: "index.html  (or your CMS template)" },
+      { label: "Paste this inside the <head> section", value: `<meta name="sentinel-verify" content="${tok}">`, copy: true },
+      { label: "Verification token", value: tok, copy: true },
+    ];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: "auto" }}
+      exit={{ opacity: 0, height: 0 }}
+      style={{ overflow: "hidden" }}
+    >
+      <div className="mt-3 rounded-xl overflow-hidden" style={{ border: `1px solid hsl(var(--border))`, borderLeft: `2px solid ${m.color}` }}>
+        {/* Header */}
+        <div className="flex items-center gap-3 px-4 py-3" style={{ borderBottom: "1px solid hsl(var(--border))", background: "hsl(var(--muted)/0.2)" }}>
+          <div className="w-6 h-6 rounded flex items-center justify-center shrink-0" style={{ background: `${m.color}14`, border: `1px solid ${m.color}28` }}>
+            <MIcon className="w-3 h-3" style={{ color: m.color }} />
+          </div>
+          <p className="text-sm font-semibold text-foreground flex-1">{m.label} — step by step</p>
+          <span className="text-[9px] font-bold tracking-widest px-1.5 py-0.5 rounded" style={{ background: `${m.color}14`, color: m.color, border: `1px solid ${m.color}28` }}>{m.tag}</span>
+          <button onClick={onClose} className="w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* Steps */}
+        <div className="p-4 space-y-3">
+          {steps.map((s, i) => (
+            <div key={i} className="flex gap-3">
+              <div className="w-5 h-5 rounded-full shrink-0 flex items-center justify-center text-[10px] font-bold mt-0.5"
+                style={{ background: "hsl(var(--primary)/0.1)", border: "1px solid hsl(var(--primary)/0.3)", color: "hsl(var(--primary))" }}>
+                {i + 1}
+              </div>
+              <div className="flex-1 min-w-0"><CodeLine label={s.label} value={s.value} copy={s.copy} /></div>
+            </div>
+          ))}
+
+          {instructions.method === "dns" && (
+            <div className="flex items-start gap-2 px-3 py-2 rounded-lg" style={{ background: "hsl(38 92% 50%/0.06)", border: "1px solid hsl(38 92% 50%/0.18)" }}>
+              <AlertTriangle className="w-3.5 h-3.5 text-warning shrink-0 mt-0.5" />
+              <p className="text-[11px] text-warning/80">DNS propagation can take up to 48 hours. Click Verify again after your TXT record has spread.</p>
+            </div>
+          )}
+
+          <button onClick={onVerify} disabled={verifying}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold mt-1 transition-all"
+            style={{ background: verifying ? "hsl(var(--muted))" : "hsl(var(--primary))", color: verifying ? "hsl(var(--muted-foreground))" : "#fff" }}>
+            {verifying ? <><Loader2 className="w-4 h-4 animate-spin" />Checking...</> : <><ShieldCheck className="w-4 h-4" />Verify Ownership</>}
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+/* ── Delete confirmation inline ────────────────────────────────── */
+function DeleteConfirm({ domain, onConfirm, onCancel }: { domain: string; onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }}
+      className="flex items-center gap-3 px-4 py-3 rounded-lg" style={{ background: "hsl(var(--destructive)/0.08)", border: "1px solid hsl(var(--destructive)/0.25)" }}>
+      <AlertTriangle className="w-4 h-4 text-destructive shrink-0" />
+      <p className="text-sm text-foreground flex-1">Remove <span className="font-mono font-semibold">{domain}</span>?</p>
+      <button onClick={onCancel} className="text-xs px-3 py-1.5 rounded font-medium transition-all"
+        style={{ background: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))" }}>Cancel</button>
+      <button onClick={onConfirm} className="text-xs px-3 py-1.5 rounded font-semibold transition-all"
+        style={{ background: "hsl(var(--destructive))", color: "#fff" }}>Remove</button>
+    </motion.div>
+  );
+}
+
+/* ── Main page ─────────────────────────────────────────────────── */
 export default function DomainVerificationPage() {
   const [domains, setDomains] = useState<VerifiedDomain[]>([]);
   const [loading, setLoading] = useState(true);
   const [verifying, setVerifying] = useState(false);
   const [newDomain, setNewDomain] = useState("");
-  const [verificationMethod, setVerificationMethod] = useState<"file" | "dns" | "meta">("file");
+  const [selectedMethod, setSelectedMethod] = useState<"file" | "dns" | "meta">("file");
   const [instructions, setInstructions] = useState<VerificationInstructions | null>(null);
+  const [activeInstructionDomain, setActiveInstructionDomain] = useState<string | null>(null);
+  const [pendingMethods, setPendingMethods] = useState<Record<string, "file" | "dns" | "meta">>({});
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  useEffect(() => { loadDomains(); }, []);
+  useEffect(() => { load(); }, []);
 
-  const loadDomains = async () => {
-    try {
-      setLoading(true);
-      const data = await websiteScanService.getVerifiedDomains();
-      setDomains(data);
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed to load domains", variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
+  const load = async () => {
+    try { setLoading(true); setDomains(await websiteScanService.getVerifiedDomains()); }
+    catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
+    finally { setLoading(false); }
   };
 
-  const handleInitiateVerification = async () => {
-    if (!newDomain.trim()) { toast({ title: "Domain required", variant: "destructive" }); return; }
+  /* Add / get steps */
+  const handleGetSteps = async () => {
+    if (!newDomain.trim()) { toast({ title: "Enter a domain first", variant: "destructive" }); return; }
     try {
       setVerifying(true);
-      const result = await websiteScanService.initiateVerification(newDomain, verificationMethod);
+      const result = await websiteScanService.initiateVerification(newDomain.trim(), selectedMethod);
       setInstructions(result);
-      toast({ title: "Verification Initiated", description: "Follow the instructions below to verify your domain" });
-      await loadDomains();
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed to initiate verification", variant: "destructive" });
-    } finally { setVerifying(false); }
+      setActiveInstructionDomain(null);
+      setNewDomain("");
+      await load();
+      toast({ title: "Domain registered", description: "Follow the steps below to verify ownership." });
+    } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
+    finally { setVerifying(false); }
   };
 
-  const handleAddOwnedDomain = async () => {
-    if (!newDomain.trim()) { toast({ title: "Domain required", variant: "destructive" }); return; }
-    if (!confirm(`Add "${newDomain}" as an owned domain without verification?`)) return;
+  /* Show steps for existing domain */
+  const handleShowSteps = async (domain: VerifiedDomain) => {
+    if (activeInstructionDomain === domain.domain) {
+      setActiveInstructionDomain(null); setInstructions(null); return;
+    }
+    const method = pendingMethods[domain.domain] ?? domain.verificationMethod as "file"|"dns"|"meta";
     try {
       setVerifying(true);
-      const result = await websiteScanService.addOwnedDomain(newDomain);
-      if (result.success) {
-        toast({ title: "Domain added", description: result.message });
-        setNewDomain(""); setInstructions(null);
-        await loadDomains();
-      } else {
-        toast({ title: "Error", description: result.message, variant: "destructive" });
-      }
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed to add domain", variant: "destructive" });
-    } finally { setVerifying(false); }
+      const result = await websiteScanService.initiateVerification(domain.domain, method);
+      setInstructions(result);
+      setActiveInstructionDomain(domain.domain);
+    } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
+    finally { setVerifying(false); }
   };
 
-  const handleVerifyDomain = async (domain: string) => {
+  /* Switch method for existing domain */
+  const handleSwitchMethod = async (domainName: string, method: "file" | "dns" | "meta") => {
+    setPendingMethods(p => ({ ...p, [domainName]: method }));
     try {
       setVerifying(true);
-      const result = await websiteScanService.verifyDomain(domain);
+      const result = await websiteScanService.initiateVerification(domainName, method);
+      setInstructions(result);
+      setActiveInstructionDomain(domainName);
+    } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
+    finally { setVerifying(false); }
+  };
+
+  /* Verify ownership */
+  const handleVerify = async (domainName: string) => {
+    try {
+      setVerifying(true);
+      const result = await websiteScanService.verifyDomain(domainName);
       if (result.success) {
         toast({ title: "Domain verified", description: result.message });
-        setInstructions(null);
-        await loadDomains();
-      } else {
-        toast({ title: "Verification Failed", description: result.message, variant: "destructive" });
-      }
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed to verify domain", variant: "destructive" });
-    } finally { setVerifying(false); }
+        setInstructions(null); setActiveInstructionDomain(null);
+        await load();
+      } else { toast({ title: "Not verified", description: result.message, variant: "destructive" }); }
+    } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
+    finally { setVerifying(false); }
   };
 
-  const handleDeleteDomain = async (domain: string) => {
-    if (!confirm(`Remove ${domain}?`)) return;
+  /* Delete (no confirm() — uses inline UI instead) */
+  const handleDelete = async (domainName: string) => {
     try {
-      await websiteScanService.deleteDomain(domain);
+      await websiteScanService.deleteDomain(domainName);
       toast({ title: "Domain removed" });
-      await loadDomains();
-      if (instructions?.domain === domain) setInstructions(null);
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed to delete domain", variant: "destructive" });
-    }
+      setConfirmDelete(null);
+      if (instructions?.domain === domainName) { setInstructions(null); setActiveInstructionDomain(null); }
+      await load();
+    } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
   };
 
-  const verifiedCount = domains.filter(d => d.verified).length;
-  const pendingCount = domains.filter(d => !d.verified).length;
+  /* Quick add */
+  const handleQuickAdd = async () => {
+    if (!newDomain.trim()) { toast({ title: "Enter a domain first", variant: "destructive" }); return; }
+    try {
+      setVerifying(true);
+      const result = await websiteScanService.addOwnedDomain(newDomain.trim());
+      toast({ title: result.success ? "Domain added" : "Error", description: result.message, variant: result.success ? "default" : "destructive" });
+      if (result.success) { setNewDomain(""); await load(); }
+    } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
+    finally { setVerifying(false); }
+  };
+
+  const instructionTarget = activeInstructionDomain ?? (instructions ? instructions.domain : null);
+  const displayDomain = instructionTarget ? domains.find(d => d.domain === instructionTarget) : null;
 
   return (
     <PageLayout>
       <PageHeader
         title="Domain Verification"
-        description="Verify ownership of your domains to enable external vulnerability scanning and penetration testing."
+        description="Prove ownership of your domain before running scans, penetration tests, or load tests."
         breadcrumbs={[{ label: "Security Tools" }, { label: "Domains" }]}
-        actions={
-          <button onClick={loadDomains} className="btn-ghost-border gap-2 text-xs">
-            <RefreshCw className="w-3.5 h-3.5" /> Refresh
-          </button>
-        }
+        actions={<button onClick={load} className="btn-ghost-border gap-2 text-xs"><RefreshCw className="w-3.5 h-3.5" />Refresh</button>}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* ── Left: Add Domain Form ─────────────────────────── */}
-        <div className="lg:col-span-3 space-y-4">
+      <div className="max-w-2xl mx-auto space-y-5">
 
-          {/* Add domain card */}
-          <div className="card-elevated p-6 space-y-5">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                style={{ background: "hsl(234 100% 68% / 0.12)", border: "1px solid hsl(234 100% 68% / 0.25)" }}>
-                <Plus className="w-4 h-4 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-foreground text-sm">Add New Domain</h3>
-                <p className="text-xs text-muted-foreground">Verify ownership before scanning</p>
-              </div>
-            </div>
-
+        {/* ── Add domain card ────────────────────────────── */}
+        <div className="rounded-xl overflow-hidden" style={{ border: "1px solid hsl(var(--border))", background: "hsl(var(--card))" }}>
+          <div className="flex items-center gap-3 px-5 py-4" style={{ borderBottom: "1px solid hsl(var(--border))", background: "hsl(var(--muted)/0.25)" }}>
+            <Network className="w-4 h-4 text-primary" />
             <div>
-              <label className="section-label block mb-2">Domain or URL</label>
-              <div className="relative">
-                <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                <input
-                  placeholder="example.com or https://example.com"
-                  value={newDomain} onChange={e => setNewDomain(e.target.value)}
-                  disabled={verifying} className="input-base pl-10 text-sm font-mono"
-                  onKeyDown={e => e.key === "Enter" && handleInitiateVerification()}
-                />
-              </div>
+              <p className="text-sm font-semibold text-foreground">Register a Domain</p>
+              <p className="text-[11px] text-muted-foreground">Enter a domain you own, then choose how to prove ownership</p>
+            </div>
+          </div>
+          <div className="p-5 space-y-4">
+            {/* Input */}
+            <div className="relative">
+              <Terminal className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+              <input
+                className="input-base pl-10 font-mono text-sm w-full"
+                placeholder="example.com  or  https://example.com"
+                value={newDomain}
+                onChange={e => setNewDomain(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleGetSteps()}
+                disabled={verifying}
+              />
             </div>
 
-            <div>
-              <label className="section-label block mb-3">Verification Method</label>
-              <div className="grid grid-cols-3 gap-3">
-                {METHODS.map(method => {
-                  const Icon = method.icon;
-                  const isActive = verificationMethod === method.key;
-                  return (
-                    <button key={method.key} onClick={() => setVerificationMethod(method.key)}
-                      className="flex flex-col items-center gap-2.5 p-4 rounded-xl border transition-all text-center"
-                      style={{
-                        background: isActive ? `${method.color}10` : "transparent",
-                        borderColor: isActive ? `${method.color}60` : "hsl(var(--border))",
-                      }}>
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center"
-                        style={{ background: isActive ? `${method.color}20` : "hsl(var(--muted))" }}>
-                        <Icon className="w-4 h-4" style={{ color: isActive ? method.color : "hsl(var(--muted-foreground))" }} />
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold" style={{ color: isActive ? method.color : "hsl(var(--foreground))" }}>
-                          {method.label}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">{method.desc}</p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="text-xs text-muted-foreground mt-3 leading-relaxed p-3 rounded-lg"
-                style={{ background: "hsl(var(--muted) / 0.4)", border: "1px solid hsl(var(--border))" }}>
-                {METHOD_DESCRIPTIONS[verificationMethod]}
-              </p>
+            {/* Method picker */}
+            <div className="grid grid-cols-3 gap-2">
+              {METHODS.map(m => {
+                const MIcon = m.Icon;
+                const active = selectedMethod === m.key;
+                return (
+                  <button key={m.key} onClick={() => setSelectedMethod(m.key)}
+                    className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-left transition-all"
+                    style={{ background: active ? `${m.color}0C` : "transparent", border: `1px solid ${active ? m.color + "45" : "hsl(var(--border))"}` }}>
+                    <MIcon className="w-3.5 h-3.5 shrink-0" style={{ color: active ? m.color : "hsl(var(--muted-foreground))" }} />
+                    <span className="text-xs font-semibold" style={{ color: active ? m.color : "hsl(var(--foreground))" }}>{m.label}</span>
+                  </button>
+                );
+              })}
             </div>
+            <p className="text-[11px] text-muted-foreground -mt-1">{METHODS.find(m => m.key === selectedMethod)?.desc}</p>
 
-            <div className="flex gap-3">
-              <button onClick={handleInitiateVerification} disabled={verifying || !newDomain.trim()}
-                className="btn-primary flex-1 justify-center py-2.5 text-sm">
-                {verifying ? <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</> : <><Shield className="w-4 h-4" /> Start Verification</>}
+            {/* Action buttons */}
+            <div className="flex gap-2">
+              <button onClick={handleGetSteps} disabled={verifying || !newDomain.trim()} className="btn-primary flex-1 justify-center py-2.5">
+                {verifying ? <><Loader2 className="w-4 h-4 animate-spin" />Working...</> : <><Shield className="w-4 h-4" />Get Verification Steps</>}
               </button>
-              <button onClick={handleAddOwnedDomain} disabled={verifying || !newDomain.trim()}
-                className="btn-secondary px-5 text-sm shrink-0">
+              <button onClick={handleQuickAdd} disabled={verifying || !newDomain.trim()}
+                className="btn-secondary text-xs px-4 shrink-0" title="Add without verification — dev/localhost only">
                 Quick Add
               </button>
             </div>
-
-            <div className="flex items-start gap-2 text-xs text-muted-foreground p-3 rounded-lg"
-              style={{ background: "hsl(var(--muted) / 0.4)", border: "1px solid hsl(var(--border))" }}>
-              <Info className="w-3.5 h-3.5 shrink-0 mt-0.5 opacity-60" />
-              <span>Use <span className="font-medium text-foreground">Quick Add</span> for local testing or dev environments where verification isn't applicable.</span>
-            </div>
           </div>
-
-          {/* Verification instructions */}
-          <AnimatePresence>
-            {instructions && (
-              <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                className="card-elevated p-5 space-y-4"
-                style={{ borderLeft: "3px solid hsl(var(--primary))" }}>
-                <div className="flex items-center gap-2">
-                  <Info className="w-4 h-4 text-primary" />
-                  <h3 className="text-sm font-semibold text-foreground">Verification Instructions</h3>
-                  <span className="ml-auto text-xs text-muted-foreground font-mono">{instructions.domain}</span>
-                </div>
-                <pre className="text-xs text-muted-foreground p-4 rounded-xl overflow-auto whitespace-pre-wrap font-mono leading-relaxed"
-                  style={{ background: "hsl(var(--muted))", border: "1px solid hsl(var(--border))" }}>
-                  {instructions.instructions}
-                </pre>
-                <button onClick={() => handleVerifyDomain(instructions.domain)} disabled={verifying}
-                  className="btn-primary text-sm gap-2 w-full justify-center py-2.5">
-                  {verifying ? <><Loader2 className="w-4 h-4 animate-spin" /> Verifying...</> : <><CheckCircle className="w-4 h-4" /> Verify Ownership</>}
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
 
-        {/* ── Right: Domains List + Info ────────────────────── */}
-        <div className="lg:col-span-2 space-y-4">
-          {/* Stats row */}
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { label: "Total", value: domains.length, color: "text-foreground", bg: "hsl(var(--muted) / 0.5)" },
-              { label: "Verified", value: verifiedCount, color: "text-success", bg: "hsl(var(--success) / 0.08)" },
-              { label: "Pending", value: pendingCount, color: "text-warning", bg: "hsl(38 92% 50% / 0.08)" },
-            ].map(stat => (
-              <div key={stat.label} className="text-center p-4 rounded-xl"
-                style={{ background: stat.bg, border: "1px solid hsl(var(--border))" }}>
-                <div className={`text-2xl font-black metric-number ${stat.color}`}>{stat.value}</div>
-                <div className="text-[11px] text-muted-foreground mt-1">{stat.label}</div>
-              </div>
-            ))}
-          </div>
+        {/* ── Instructions for newly added domain ────────── */}
+        <AnimatePresence>
+          {instructions && !activeInstructionDomain && (
+            <InstructionsDrawer
+              key={instructions.domain + instructions.method}
+              instructions={instructions}
+              verifying={verifying}
+              onVerify={() => handleVerify(instructions.domain)}
+              onClose={() => setInstructions(null)}
+            />
+          )}
+        </AnimatePresence>
 
-          {/* Domains list */}
-          <div className="card-elevated p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-foreground">Your Domains</h3>
-              {domains.length > 0 && (
-                <span className="text-xs text-muted-foreground">{domains.length} domain{domains.length !== 1 ? "s" : ""}</span>
-              )}
+        {/* ── Domain list ────────────────────────────────── */}
+        {(loading || domains.length > 0) && (
+          <div className="rounded-xl overflow-hidden" style={{ border: "1px solid hsl(var(--border))", background: "hsl(var(--card))" }}>
+            {/* List header */}
+            <div className="flex items-center justify-between px-5 py-3.5" style={{ borderBottom: "1px solid hsl(var(--border))", background: "hsl(var(--muted)/0.25)" }}>
+              <span className="text-xs font-semibold text-foreground">Your Domains</span>
+              <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                <span>{domains.filter(d => d.verified).length} verified</span>
+                <span>{domains.filter(d => !d.verified).length} pending</span>
+              </div>
             </div>
 
             {loading ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map(i => <div key={i} className="skeleton h-16 rounded-xl" />)}
-              </div>
-            ) : domains.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-3"
-                  style={{ background: "hsl(var(--muted))", border: "1px solid hsl(var(--border))" }}>
-                  <Shield className="w-5 h-5 text-muted-foreground" />
-                </div>
-                <p className="text-sm font-medium text-foreground mb-1">No domains yet</p>
-                <p className="text-xs text-muted-foreground">Add a domain on the left to get started</p>
-              </div>
+              <div className="p-4 space-y-2">{[1,2].map(i => <div key={i} className="skeleton h-16 rounded-lg" />)}</div>
             ) : (
-              <div className="space-y-2">
+              <div className="divide-y" style={{ borderColor: "hsl(var(--border))" }}>
                 {domains.map((domain, i) => {
-                  const MethodIcon = METHOD_ICONS[domain.verificationMethod] || Globe;
+                  const m = METHOD_MAP[domain.verificationMethod] ?? METHOD_MAP.file;
+                  const MIcon = m.Icon;
+                  const isExpanded = activeInstructionDomain === domain.domain;
+                  const isDeleting = confirmDelete === domain.domain;
+                  const activeMethod = pendingMethods[domain.domain] ?? domain.verificationMethod;
+
                   return (
-                    <motion.div key={domain._id}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.05 }}
-                      className="group flex items-center gap-3 p-4 rounded-xl transition-all"
-                      style={{
-                        background: domain.verified ? "hsl(var(--success) / 0.05)" : "hsl(var(--muted) / 0.4)",
-                        border: `1px solid ${domain.verified ? "hsl(var(--success) / 0.2)" : "hsl(var(--border))"}`,
-                      }}>
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${domain.verified ? "text-success" : "text-warning"}`}
-                        style={{ background: domain.verified ? "hsl(var(--success) / 0.12)" : "hsl(38 92% 50% / 0.1)" }}>
-                        {domain.verified
-                          ? <CheckCircle className="w-4 h-4" />
-                          : <Clock className="w-4 h-4" />}
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-semibold text-foreground truncate">{domain.domain}</span>
-                          <span className={`badge text-[10px] ${domain.verified ? "badge-success" : "badge-warning"}`}>
-                            {domain.verified ? "Verified" : "Pending"}
+                    <motion.div key={domain._id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.04 }}>
+                      <div className="px-5 py-4 space-y-3">
+                        {/* Domain row */}
+                        <div className="flex items-center gap-3">
+                          {/* Status dot */}
+                          <span className="relative flex h-2 w-2 shrink-0">
+                            {domain.verified && <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-50" style={{ background: "hsl(var(--success))" }} />}
+                            <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: domain.verified ? "hsl(var(--success))" : "#F59E0B" }} />
                           </span>
-                        </div>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <MethodIcon className="w-3 h-3 text-muted-foreground" />
-                          <span className="text-[11px] text-muted-foreground uppercase tracking-wide">{domain.verificationMethod}</span>
-                          {domain.verifiedAt && (
-                            <span className="text-[11px] text-muted-foreground">
-                              · {new Date(domain.verifiedAt).toLocaleDateString()}
-                            </span>
-                          )}
-                        </div>
-                      </div>
 
-                      <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {!domain.verified && (
-                          <button onClick={() => handleVerifyDomain(domain.domain)} disabled={verifying}
-                            className="btn-ghost-border text-xs py-1 px-2.5">Verify</button>
-                        )}
-                        {domain.verified && (
-                          <button onClick={() => navigate(`/website-scan?url=https://${domain.domain}`)}
-                            className="btn-ghost-border text-xs py-1 px-2.5 gap-1">
-                            <Target className="w-3 h-3" /> Scan
-                          </button>
-                        )}
-                        <button onClick={() => handleDeleteDomain(domain.domain)}
-                          className="icon-btn text-destructive/60 hover:text-destructive hover:bg-destructive/10">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-mono text-sm font-semibold text-foreground">{domain.domain}</span>
+                              <span className="text-[9px] font-bold tracking-widest px-1.5 py-0.5 rounded"
+                                style={{ background: domain.verified ? "hsl(var(--success)/0.1)" : "hsl(38 92% 50%/0.1)", color: domain.verified ? "hsl(var(--success))" : "#F59E0B", border: `1px solid ${domain.verified ? "hsl(var(--success)/0.22)" : "hsl(38 92% 50%/0.22)"}` }}>
+                                {domain.verified ? "VERIFIED" : "PENDING"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <MIcon className="w-3 h-3 text-muted-foreground" />
+                              <span className="text-[10px] text-muted-foreground uppercase tracking-wide">{m.tag}</span>
+                              {domain.verifiedAt && <span className="text-[10px] text-muted-foreground">&middot; {new Date(domain.verifiedAt).toLocaleDateString()}</span>}
+                            </div>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {domain.verified ? (
+                              <button onClick={() => navigate(`/website-scan?url=https://${domain.domain}`)}
+                                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded font-medium transition-all"
+                                style={{ background: "hsl(var(--primary)/0.1)", color: "hsl(var(--primary))", border: "1px solid hsl(var(--primary)/0.25)" }}>
+                                <Target className="w-3 h-3" />Scan
+                              </button>
+                            ) : (
+                              <button onClick={() => handleShowSteps(domain)} disabled={verifying}
+                                className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded font-medium transition-all"
+                                style={{ background: isExpanded ? "hsl(var(--primary)/0.1)" : "hsl(var(--muted))", border: `1px solid ${isExpanded ? "hsl(var(--primary)/0.3)" : "hsl(var(--border))"}`, color: isExpanded ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }}>
+                                {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}Steps
+                              </button>
+                            )}
+                            <button onClick={() => setConfirmDelete(isDeleting ? null : domain.domain)}
+                              className="w-7 h-7 flex items-center justify-center rounded transition-all"
+                              style={{ color: isDeleting ? "hsl(var(--destructive))" : "hsl(var(--muted-foreground))", background: isDeleting ? "hsl(var(--destructive)/0.1)" : "transparent" }}>
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Delete confirmation */}
+                        <AnimatePresence>
+                          {isDeleting && (
+                            <DeleteConfirm
+                              domain={domain.domain}
+                              onConfirm={() => handleDelete(domain.domain)}
+                              onCancel={() => setConfirmDelete(null)}
+                            />
+                          )}
+                        </AnimatePresence>
+
+                        {/* Instructions for this domain (expanded) */}
+                        <AnimatePresence>
+                          {!domain.verified && isExpanded && instructions && (
+                            <div>
+                              {/* Method switcher */}
+                              <div className="flex gap-1.5 mb-3">
+                                {METHODS.map(mm => {
+                                  const MI = mm.Icon;
+                                  const active = activeMethod === mm.key;
+                                  return (
+                                    <button key={mm.key} onClick={() => handleSwitchMethod(domain.domain, mm.key)} disabled={verifying}
+                                      className="flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded flex-1 justify-center font-semibold transition-all"
+                                      style={{ background: active ? `${mm.color}10` : "transparent", border: `1px solid ${active ? mm.color + "38" : "hsl(var(--border))"}`, color: active ? mm.color : "hsl(var(--muted-foreground))" }}>
+                                      <MI className="w-3 h-3" />{mm.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <InstructionsDrawer
+                                instructions={instructions}
+                                verifying={verifying}
+                                onVerify={() => handleVerify(domain.domain)}
+                                onClose={() => { setActiveInstructionDomain(null); setInstructions(null); }}
+                              />
+                            </div>
+                          )}
+                        </AnimatePresence>
                       </div>
                     </motion.div>
                   );
@@ -333,36 +441,51 @@ export default function DomainVerificationPage() {
               </div>
             )}
           </div>
+        )}
 
-          {/* Why verify */}
-          <div className="card-elevated p-5 space-y-3">
-            <div className="flex items-center gap-2 mb-1">
-              <Lock className="w-4 h-4 text-primary" />
-              <h3 className="font-semibold text-foreground text-sm">Why Verify?</h3>
+        {/* ── Empty state ─────────────────────────────────── */}
+        {!loading && domains.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: "hsl(var(--muted))", border: "1px solid hsl(var(--border))" }}>
+              <Network className="w-5 h-5 text-muted-foreground" />
             </div>
+            <div>
+              <p className="text-sm font-semibold text-foreground">No domains yet</p>
+              <p className="text-xs text-muted-foreground mt-1">Add a domain above to start the verification process</p>
+            </div>
+          </div>
+        )}
+
+        {/* ── Why verify ──────────────────────────────────── */}
+        <div className="rounded-xl overflow-hidden" style={{ border: "1px solid hsl(var(--border))", background: "hsl(var(--card))" }}>
+          <div className="flex items-center gap-2 px-5 py-3.5" style={{ borderBottom: "1px solid hsl(var(--border))", background: "hsl(var(--muted)/0.25)" }}>
+            <Lock className="w-3.5 h-3.5 text-primary" />
+            <span className="text-xs font-semibold text-foreground">Why ownership verification is required</span>
+          </div>
+          <div className="divide-y" style={{ borderColor: "hsl(var(--border))" }}>
             {[
-              { icon: Target, label: "Penetration Testing", desc: "Required for active vuln scans", color: "#EF4444" },
-              { icon: Zap, label: "Load Testing", desc: "Required for stress testing", color: "#F59E0B" },
-              { icon: Globe, label: "Website Scanning", desc: "Full endpoint auditing", color: "#5B6CFF" },
-              { icon: Shield, label: "Authorized Access", desc: "Prevents unauthorized scans", color: "#22C55E" },
-            ].map((item, i) => {
-              const Icon = item.icon;
+              { Icon: Target,      color: "#EF4444", label: "Penetration Testing",  desc: "We actively probe your server — authorization required." },
+              { Icon: Zap,         color: "#F59E0B", label: "Load Testing",          desc: "We send high-volume traffic — only for site owners." },
+              { Icon: Globe,       color: "#3B82F6", label: "Website Scanning",      desc: "Full endpoint audit needs confirmed site ownership." },
+              { Icon: ShieldCheck, color: "#10B981", label: "Preventing Misuse",     desc: "Stops unauthorized scanning of third-party sites." },
+            ].map(item => {
+              const IIcon = item.Icon;
               return (
-                <div key={item.label} className="flex items-center gap-3 py-1">
-                  <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0"
-                    style={{ background: `${item.color}18` }}>
-                    <Icon className="w-3 h-3" style={{ color: item.color }} />
+                <div key={item.label} className="flex items-center gap-3 px-5 py-3">
+                  <div className="w-6 h-6 rounded flex items-center justify-center shrink-0" style={{ background: `${item.color}10` }}>
+                    <IIcon className="w-3 h-3" style={{ color: item.color }} />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-foreground">{item.label}</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-foreground">{item.label}</p>
                     <p className="text-[11px] text-muted-foreground">{item.desc}</p>
                   </div>
-                  <ArrowRight className="w-3 h-3 text-muted-foreground/40 shrink-0" />
+                  <ArrowRight className="w-3 h-3 text-muted-foreground/30 shrink-0" />
                 </div>
               );
             })}
           </div>
         </div>
+
       </div>
     </PageLayout>
   );

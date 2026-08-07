@@ -5,7 +5,34 @@ import { promisify } from 'util';
 import crypto from 'crypto';
 import { VerifiedDomain } from '../db/models/WebsiteScan.model.js';
 
-const resolveTxt = promisify(dns.resolveTxt);
+// Use explicit public DNS resolvers — the OS system resolver on Windows
+// caches NXDOMAIN and fails to resolve freshly-added records.
+const PUBLIC_DNS_SERVERS = [
+  ['1.1.1.1', '1.0.0.1'],   // Cloudflare
+  ['8.8.8.8', '8.8.4.4'],   // Google
+  ['9.9.9.9', '149.112.112.112'], // Quad9
+];
+
+async function resolveTxtWithPublicDNS(hostname: string): Promise<string[][]> {
+  // Try each resolver in parallel — return the first one that resolves
+  const attempts = PUBLIC_DNS_SERVERS.map(async (servers) => {
+    const resolver = new dns.Resolver();
+    resolver.setServers(servers);
+    const resolveTxtFn = promisify(resolver.resolveTxt.bind(resolver));
+    return resolveTxtFn(hostname);
+  });
+
+  // Also try the system resolver as a fallback
+  const systemAttempt = promisify(dns.resolveTxt)(hostname);
+
+  const results = await Promise.allSettled([...attempts, systemAttempt]);
+  for (const result of results) {
+    if (result.status === 'fulfilled' && result.value.length > 0) {
+      return result.value;
+    }
+  }
+  throw new Error(`No TXT records found for ${hostname} via any resolver`);
+}
 
 export interface VerificationRequest {
   domain: string;
@@ -22,11 +49,13 @@ export class DomainVerificationService {
   private static readonly TIMEOUT = 10000;
 
   /**
-   * Generate a verification token for a domain
+   * Generate a stable verification token for a domain.
+   * Uses a fixed salt so the token is reproducible for the same userId+domain pair.
+   * We do NOT include timestamp so the same token is always returned for re-displays.
    */
   static generateVerificationToken(userId: number, domain: string): string {
-    const timestamp = Date.now();
-    const data = `${userId}-${domain}-${timestamp}`;
+    // Fixed salt — token is stable per userId+domain (no timestamp).
+    const data = `sentinel-verify-${userId}-${domain}`;
     return crypto.createHash('sha256').update(data).digest('hex').substring(0, 32);
   }
 
@@ -43,7 +72,10 @@ export class DomainVerificationService {
   }
 
   /**
-   * Initiate domain verification
+   * Initiate domain verification.
+   * If the domain already has a pending record with the SAME method,
+   * we return the existing token (stable) so the user can upload/configure
+   * it once and keep clicking Verify without the token changing.
    */
   static async initiateVerification(
     userId: number,
@@ -51,27 +83,35 @@ export class DomainVerificationService {
     method: 'file' | 'dns' | 'meta'
   ): Promise<{ token: string; instructions: string }> {
     const normalizedDomain = domain.replace(/^www\./, '').toLowerCase();
-    const token = this.generateVerificationToken(userId, normalizedDomain);
 
     // Check if domain already exists
     let verifiedDomain = await VerifiedDomain.findOne({ userId, domain: normalizedDomain });
 
-    if (verifiedDomain) {
-      // Update existing record
-      verifiedDomain.verificationToken = token;
-      verifiedDomain.verificationMethod = method;
-      verifiedDomain.verified = false;
-      verifiedDomain.verifiedAt = undefined;
-      await verifiedDomain.save();
+    let token: string;
+
+    if (verifiedDomain && !verifiedDomain.verified && verifiedDomain.verificationMethod === method) {
+      // ✅ Same method, still pending: reuse the existing stable token.
+      // This preserves whatever the user already uploaded/configured.
+      token = verifiedDomain.verificationToken;
     } else {
-      // Create new record
-      verifiedDomain = await VerifiedDomain.create({
-        userId,
-        domain: normalizedDomain,
-        verificationToken: token,
-        verificationMethod: method,
-        verified: false,
-      });
+      // New domain, different method, or already verified: generate a fresh token.
+      token = this.generateVerificationToken(userId, normalizedDomain);
+
+      if (verifiedDomain) {
+        verifiedDomain.verificationToken = token;
+        verifiedDomain.verificationMethod = method;
+        verifiedDomain.verified = false;
+        verifiedDomain.verifiedAt = undefined;
+        await verifiedDomain.save();
+      } else {
+        verifiedDomain = await VerifiedDomain.create({
+          userId,
+          domain: normalizedDomain,
+          verificationToken: token,
+          verificationMethod: method,
+          verified: false,
+        });
+      }
     }
 
     const instructions = this.getVerificationInstructions(normalizedDomain, token, method);
@@ -89,14 +129,17 @@ export class DomainVerificationService {
   ): string {
     switch (method) {
       case 'file':
-        return `Upload a file named 'sentinel-verify.txt' to the root of your website (https://${encodeURIComponent(domain)}/sentinel-verify.txt) with the following content:\n\n${token}\n\nOnce uploaded, click 'Verify Ownership' to complete verification.`;
+        // Domain is shown as plain text in a <pre> block (JSX auto-escaped) — no encoding needed
+        return `Upload a file named 'sentinel-verify.txt' to the root of your website (https://${domain}/sentinel-verify.txt) with the following content:\n\n${token}\n\nOnce uploaded, click 'Verify Ownership' to complete verification.`;
 
       case 'dns':
-        return `Add a TXT record to your DNS configuration:\n\nName: _sentinel-verify.${encodeURIComponent(domain)}\nType: TXT\nValue: ${token}\n\nDNS changes may take up to 48 hours to propagate. Click 'Verify Ownership' once the record is added.`;
+        // DNS TXT record names must use raw domain — encoding would break DNS lookup
+        return `Add a TXT record to your DNS configuration:\n\nName: _sentinel-verify.${domain}\nType: TXT\nValue: ${token}\n\nDNS changes may take up to 48 hours to propagate. Click 'Verify Ownership' once the record is added.`;
 
       case 'meta':
-        // CWE-79: Encode token to prevent XSS if injected into HTML context
-        return `Add the following meta tag to the <head> section of your website's homepage (https://${encodeURIComponent(domain)}):\n\n<meta name="sentinel-verify" content="${encodeURIComponent(token)}">\n\nOnce added, click 'Verify Ownership' to complete verification.`;
+        // This is a raw HTML snippet shown in <pre>. JSX <pre> auto-escapes so no XSS risk.
+        // The token is a 32-char hex string (sha256 substring) — safe to embed as-is.
+        return `Add the following meta tag to the <head> section of your website's homepage (https://${domain}):\n\n<meta name="sentinel-verify" content="${token}">\n\nOnce added, click 'Verify Ownership' to complete verification.`;
 
       default:
         return 'Unknown verification method';
@@ -212,22 +255,32 @@ export class DomainVerificationService {
   }
 
   /**
-   * Verify via DNS TXT record method
+   * Verify via DNS TXT record method.
+   * Uses multiple public resolvers (Cloudflare, Google, Quad9) in parallel
+   * to avoid Windows system DNS caching issues with newly-added records.
    */
   private static async verifyDNSMethod(domain: string, expectedToken: string): Promise<boolean> {
+    const hostname = `_sentinel-verify.${domain}`;
+    console.log(`[DNS Verify] Checking TXT records for: ${hostname}`);
+    console.log(`[DNS Verify] Expected token: ${expectedToken}`);
     try {
-      const records = await resolveTxt(`_sentinel-verify.${domain}`);
-      
-      // DNS TXT records are returned as arrays of strings
+      const records = await resolveTxtWithPublicDNS(hostname);
+      console.log(`[DNS Verify] Records found:`, JSON.stringify(records));
+
       for (const record of records) {
-        const value = Array.isArray(record) ? record.join('') : record;
-        if (value.trim() === expectedToken) {
+        // record is string[] (chunks of a single TXT record)
+        const raw = Array.isArray(record) ? record.join('') : String(record);
+        // Strip surrounding double-quotes that some DNS providers add
+        const value = raw.trim().replace(/^"|"$/g, '');
+        console.log(`[DNS Verify] Comparing: "${value}" === "${expectedToken}" → ${value === expectedToken}`);
+        if (value === expectedToken) {
           return true;
         }
       }
-
+      console.log(`[DNS Verify] No matching record found`);
       return false;
-    } catch (error) {
+    } catch (error: any) {
+      console.error(`[DNS Verify] Lookup failed for ${hostname}:`, error.message);
       return false;
     }
   }

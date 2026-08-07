@@ -417,7 +417,8 @@ export class WebsiteScanController {
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
-      const normalizedDomain = DomainVerificationService.extractDomain(domain);
+      // Route param is already a bare hostname (e.g. "example.com") — normalize directly
+      const normalizedDomain = domain.replace(/^www\./, '').toLowerCase();
       const deleted = await DomainVerificationService.deleteDomain(userId, normalizedDomain);
 
       if (deleted) {

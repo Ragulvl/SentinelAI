@@ -103,7 +103,8 @@ export const websiteScanService = {
   },
 
   async deleteDomain(domain: string): Promise<void> {
-    return ApiClient.delete(`/api/website-scan/verify/domains/${encodeURIComponent(domain)}`);
+    // Domain names only contain [a-zA-Z0-9._-] — no encoding needed and would break route regex
+    return ApiClient.delete(`/api/website-scan/verify/domains/${domain}`);
   },
 
   async addOwnedDomain(domain: string): Promise<{ success: boolean; message: string; domain: string }> {

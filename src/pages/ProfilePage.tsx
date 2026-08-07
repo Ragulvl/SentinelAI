@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { User, Mail, Calendar, LogOut, Github, Shield, ExternalLink } from "lucide-react";
+import { User, Mail, Calendar, LogOut, Github, Shield, ExternalLink, Activity } from "lucide-react";
 import { PageLayout } from "@/components/PageLayout";
 import { PageHeader } from "@/components/PageHeader";
 
