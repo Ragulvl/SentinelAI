@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Shield, GitBranch, Globe, Target, Zap, Clock, AlertTriangle,
   XCircle, CheckCircle, Search, Activity, RefreshCw, ChevronRight,
+  ChevronLeft,
 } from "lucide-react";
 import { PageLayout } from "@/components/PageLayout";
 import { PageHeader } from "@/components/PageHeader";
@@ -57,6 +58,8 @@ function timeAgo(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString();
 }
 
+const ITEMS_PER_PAGE = 10;
+
 const UnifiedHistoryPage = () => {
   const navigate = useNavigate();
   const [history, setHistory] = useState<UnifiedScan[]>([]);
@@ -64,12 +67,15 @@ const UnifiedHistoryPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<ScanType | "all">("all");
+  const [currentPage, setCurrentPage] = useState(1);
   const [stats, setStats] = useState({
     totalScans: 0, repoScans: 0, websiteScans: 0, pentests: 0, loadTests: 0,
   });
 
   useEffect(() => { loadHistory(); }, []);
   useEffect(() => { filterHistory(); }, [history, searchQuery, filterType]);
+  // Reset to first page whenever filter/search changes
+  useEffect(() => { setCurrentPage(1); }, [filteredHistory]);
 
   const calculateRepoScore = (summary: any): number => {
     const total = summary.total || 0;
@@ -280,9 +286,12 @@ const UnifiedHistoryPage = () => {
           )}
         </div>
       ) : (
-        <div className="space-y-2">
+        <div>
+          <div className="space-y-2">
           <AnimatePresence mode="popLayout">
-            {filteredHistory.map((scan, i) => {
+            {filteredHistory
+              .slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
+              .map((scan, i) => {
               const tc = TYPE_CONFIG[scan.type];
               const sc = STATUS_CONFIG[scan.status] || STATUS_CONFIG.completed;
               const StatusIcon = sc.icon;
@@ -379,6 +388,55 @@ const UnifiedHistoryPage = () => {
               );
             })}
           </AnimatePresence>
+          </div>
+
+          {/* Pagination */}
+          {filteredHistory.length > ITEMS_PER_PAGE && (
+            <div className="flex items-center justify-between mt-5 pt-4" style={{ borderTop: "1px solid hsl(var(--border))" }}>
+              <span className="text-xs text-muted-foreground font-mono">
+                {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, filteredHistory.length)} of {filteredHistory.length}
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="btn-ghost-border p-1.5 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                {Array.from({ length: Math.ceil(filteredHistory.length / ITEMS_PER_PAGE) }, (_, i) => i + 1)
+                  .filter(p => p === 1 || p === Math.ceil(filteredHistory.length / ITEMS_PER_PAGE) || Math.abs(p - currentPage) <= 1)
+                  .reduce<(number | '...')[]>((acc, p, idx, arr) => {
+                    if (idx > 0 && (arr[idx - 1] as number) < p - 1) acc.push('...');
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((p, idx) => p === '...' ? (
+                    <span key={`dots-${idx}`} className="text-xs text-muted-foreground px-1">…</span>
+                  ) : (
+                    <button
+                      key={p}
+                      onClick={() => setCurrentPage(p as number)}
+                      className="w-7 h-7 rounded-lg text-xs font-mono font-medium transition-all"
+                      style={{
+                        background: currentPage === p ? 'hsl(var(--primary))' : 'transparent',
+                        color: currentPage === p ? 'hsl(var(--primary-foreground))' : 'hsl(var(--muted-foreground))',
+                        border: currentPage === p ? 'none' : '1px solid transparent',
+                      }}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(Math.ceil(filteredHistory.length / ITEMS_PER_PAGE), p + 1))}
+                  disabled={currentPage === Math.ceil(filteredHistory.length / ITEMS_PER_PAGE)}
+                  className="btn-ghost-border p-1.5 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </PageLayout>

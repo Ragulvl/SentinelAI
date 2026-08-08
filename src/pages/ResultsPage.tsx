@@ -5,6 +5,7 @@ import {
   AlertTriangle, Download, GitPullRequest, Code2,
   ChevronDown, ChevronRight, FileWarning, CheckCircle2,
   XCircle, Loader2, Shield, ArrowLeft, ExternalLink,
+  ChevronLeft,
 } from "lucide-react";
 import { Severity, Vulnerability, ScanResult } from "@/types/sentinel";
 import { PageLayout } from "@/components/PageLayout";
@@ -170,6 +171,9 @@ const ResultsPage = () => {
   const [creatingPR, setCreatingPR] = useState(false);
   const [prCreated, setPrCreated] = useState<{ url: string; number: number } | null>(null);
   const [filterSeverity, setFilterSeverity] = useState<Severity | "all">("all");
+  const [vulnPage, setVulnPage] = useState(1);
+
+  const VULNS_PER_PAGE = 15;
 
   useEffect(() => {
     if (!scanId && !isWebsite) { navigate("/repos"); return; }
@@ -265,9 +269,13 @@ const ResultsPage = () => {
   const scoreWeighted = (summary.critical * 10) + (summary.high * 5) + (summary.medium * 2) + summary.low;
   const score = Math.max(0, Math.min(100, 100 - scoreWeighted));
 
-  // Filtered vulns
+  // Reset page when severity filter changes
+  useEffect(() => { setVulnPage(1); }, [filterSeverity]);
+
   const filtered = filterSeverity === "all" ? vulnerabilities
     : vulnerabilities.filter(v => v.severity === filterSeverity);
+  const totalVulnPages = Math.ceil(filtered.length / VULNS_PER_PAGE);
+  const pagedVulns = filtered.slice((vulnPage - 1) * VULNS_PER_PAGE, vulnPage * VULNS_PER_PAGE);
 
   const severityFilters: Array<{ key: Severity | "all"; label: string }> = [
     { key: "all", label: `All (${vulnerabilities.length})` },
@@ -380,9 +388,59 @@ const ResultsPage = () => {
             No vulnerabilities for this filter.
           </div>
         ) : (
-          filtered.map(v => (
-            <VulnRow key={v.id} vuln={v} onViewDiff={() => navigate("/editor")} />
-          ))
+          <>
+            {pagedVulns.map(v => (
+              <VulnRow key={v.id} vuln={v} onViewDiff={() => navigate("/editor")} />
+            ))}
+
+            {/* Pagination */}
+            {totalVulnPages > 1 && (
+              <div className="flex items-center justify-between mt-5 pt-4" style={{ borderTop: "1px solid hsl(var(--border))" }}>
+                <span className="text-xs text-muted-foreground font-mono">
+                  {(vulnPage - 1) * VULNS_PER_PAGE + 1}–{Math.min(vulnPage * VULNS_PER_PAGE, filtered.length)} of {filtered.length} vulnerabilities
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setVulnPage(p => Math.max(1, p - 1))}
+                    disabled={vulnPage === 1}
+                    className="btn-ghost-border p-1.5 disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  {Array.from({ length: totalVulnPages }, (_, i) => i + 1)
+                    .filter(p => p === 1 || p === totalVulnPages || Math.abs(p - vulnPage) <= 1)
+                    .reduce<(number | '...')[]>((acc, p, idx, arr) => {
+                      if (idx > 0 && (arr[idx - 1] as number) < p - 1) acc.push('...');
+                      acc.push(p);
+                      return acc;
+                    }, [])
+                    .map((p, idx) => p === '...' ? (
+                      <span key={`dots-${idx}`} className="text-xs text-muted-foreground px-1">…</span>
+                    ) : (
+                      <button
+                        key={p}
+                        onClick={() => setVulnPage(p as number)}
+                        className="w-7 h-7 rounded-lg text-xs font-mono font-medium transition-all"
+                        style={{
+                          background: vulnPage === p ? 'hsl(var(--primary))' : 'transparent',
+                          color: vulnPage === p ? 'hsl(var(--primary-foreground))' : 'hsl(var(--muted-foreground))',
+                          border: vulnPage === p ? 'none' : '1px solid transparent',
+                        }}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  <button
+                    onClick={() => setVulnPage(p => Math.min(totalVulnPages, p + 1))}
+                    disabled={vulnPage === totalVulnPages}
+                    className="btn-ghost-border p-1.5 disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </PageLayout>

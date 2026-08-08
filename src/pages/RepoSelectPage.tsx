@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Search, Lock, Unlock, Star, ArrowRight, GitBranch,
   AlertCircle, Key, Eye, EyeOff, GitFork, Clock, RefreshCw,
-  ChevronDown, X, Zap,
+  ChevronDown, X, Zap, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { PageLayout } from "@/components/PageLayout";
 import { PageHeader } from "@/components/PageHeader";
@@ -67,8 +67,12 @@ const RepoSelectPage = () => {
   const [aiApiKey, setAiApiKey] = useState<string>("");
   const [showKey, setShowKey] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [repoPage, setRepoPage] = useState(1);
+  const REPOS_PER_PAGE = 12;
 
   useEffect(() => { fetchRepositories(); }, []);
+  // Reset repo page when search changes
+  useEffect(() => { setRepoPage(1); }, [search]);
 
   const fetchRepositories = async () => {
     try {
@@ -274,7 +278,9 @@ const RepoSelectPage = () => {
           className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
           style={{ paddingBottom: selected ? "140px" : "0" }}
         >
-          {filtered.map((repo, i) => {
+          {filtered
+            .slice((repoPage - 1) * REPOS_PER_PAGE, repoPage * REPOS_PER_PAGE)
+            .map((repo, i) => {
             const isSelected = selected === repo.id;
             const langShort = LANG_SHORT[repo.language] || repo.language?.toLowerCase()?.slice(0, 4);
 
@@ -378,6 +384,54 @@ const RepoSelectPage = () => {
             );
           })}
         </div>
+
+        {/* Pagination */}
+        {filtered.length > REPOS_PER_PAGE && (
+          <div className="flex items-center justify-between mt-4 pt-4" style={{ borderTop: "1px solid hsl(var(--border))" }}>
+            <span className="text-xs text-muted-foreground font-mono">
+              {(repoPage - 1) * REPOS_PER_PAGE + 1}–{Math.min(repoPage * REPOS_PER_PAGE, filtered.length)} of {filtered.length} repositories
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setRepoPage(p => Math.max(1, p - 1))}
+                disabled={repoPage === 1}
+                className="btn-ghost-border p-1.5 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              {Array.from({ length: Math.ceil(filtered.length / REPOS_PER_PAGE) }, (_, i) => i + 1)
+                .filter(p => p === 1 || p === Math.ceil(filtered.length / REPOS_PER_PAGE) || Math.abs(p - repoPage) <= 1)
+                .reduce<(number | '...')[]>((acc, p, idx, arr) => {
+                  if (idx > 0 && (arr[idx - 1] as number) < p - 1) acc.push('...');
+                  acc.push(p);
+                  return acc;
+                }, [])
+                .map((p, idx) => p === '...' ? (
+                  <span key={`dots-${idx}`} className="text-xs text-muted-foreground px-1">…</span>
+                ) : (
+                  <button
+                    key={p}
+                    onClick={() => setRepoPage(p as number)}
+                    className="w-7 h-7 rounded-lg text-xs font-mono font-medium transition-all"
+                    style={{
+                      background: repoPage === p ? 'hsl(var(--primary))' : 'transparent',
+                      color: repoPage === p ? 'hsl(var(--primary-foreground))' : 'hsl(var(--muted-foreground))',
+                      border: repoPage === p ? 'none' : '1px solid transparent',
+                    }}
+                  >
+                    {p}
+                  </button>
+                ))}
+              <button
+                onClick={() => setRepoPage(p => Math.min(Math.ceil(filtered.length / REPOS_PER_PAGE), p + 1))}
+                disabled={repoPage === Math.ceil(filtered.length / REPOS_PER_PAGE)}
+                className="btn-ghost-border p-1.5 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
       )}
 
       {/* ── Sticky Bottom Action Panel ─ flat, no blur ────────── */}
