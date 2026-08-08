@@ -158,36 +158,52 @@ export class RepoScannerService {
         return ['js', 'ts', 'jsx', 'tsx', 'py', 'java', 'go', 'php', 'rb', 'cs', 'cpp', 'c', 'h', 'rs', 'kt', 'swift'].includes(ext || '');
       });
 
-      // Fetch content for ALL files (no limit)
-      for (const file of codeFiles) {
-        try {
-          const contentResponse = await axios.get(
-            `${this.GITHUB_API_URL}/repos/${repoFullName}/contents/${file.path}?ref=${branch}`,
-            {
-              headers: {
-                Authorization: `Bearer ${accessToken}`,
-                Accept: 'application/vnd.github.v3+json',
-              },
-            }
-          );
+      // Sort by priority (descending) and cap at 80 files to keep scans fast
+      const prioritized = codeFiles
+        .map((f: any) => ({ ...f, priority: this.calculateFilePriority(f.path, '') }))
+        .sort((a: any, b: any) => b.priority - a.priority)
+        .slice(0, 80);
 
-          if (contentResponse.data.content) {
-            const content = Buffer.from(contentResponse.data.content, 'base64').toString('utf-8');
-            
-            allFiles.push({
-              path: file.path,
-              content: content,
-              size: content.length,
-              priority: this.calculateFilePriority(file.path, content),
-            });
+      // Fetch file contents concurrently in batches of 8
+      const CONCURRENT = 8;
+      for (let i = 0; i < prioritized.length; i += CONCURRENT) {
+        const batch = prioritized.slice(i, i + CONCURRENT);
+        const results = await Promise.allSettled(
+          batch.map(async (file: any) => {
+            const contentResponse = await axios.get(
+              `${this.GITHUB_API_URL}/repos/${repoFullName}/contents/${file.path}?ref=${branch}`,
+              {
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                  Accept: 'application/vnd.github.v3+json',
+                },
+                timeout: 15000,
+              }
+            );
+            if (contentResponse.data.content) {
+              const content = Buffer.from(contentResponse.data.content, 'base64').toString('utf-8');
+              return {
+                path: file.path,
+                content,
+                size: content.length,
+                priority: this.calculateFilePriority(file.path, content),
+              };
+            }
+            return null;
+          })
+        );
+
+        for (const result of results) {
+          if (result.status === 'fulfilled' && result.value) {
+            allFiles.push(result.value);
+          } else if (result.status === 'rejected') {
+            console.error(`Error fetching file:`, result.reason?.message || result.reason);
           }
-        } catch (error) {
-          console.error(`Error fetching file ${file.path}:`, error);
-          // Continue with other files
         }
       }
 
       return allFiles;
+
     } catch (error: any) {
       console.error('Error fetching repository content:', error);
       

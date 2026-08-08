@@ -74,6 +74,9 @@ export class ScanController {
       });
     } catch (error: any) {
       console.error('Error starting scan:', error);
+      if (error.message === 'Invalid or expired token') {
+        return res.status(401).json({ error: 'Invalid or expired token' });
+      }
       res.status(500).json({ error: 'Failed to start scan' });
     }
   }

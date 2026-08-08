@@ -239,7 +239,9 @@ export class AIService {
           ],
           temperature: 0.3,
           max_tokens: 8000,
+          response_format: { type: 'json_object' },
         },
+
         {
           headers: {
             'Authorization': `Bearer ${apiKey}`,
@@ -394,15 +396,41 @@ If you cannot describe how an attacker would exploit it, DO NOT include it.`;
   }
 
   private static parseAIResponse(content: string): AIAnalysisResult {
-    // Try to extract JSON from the response
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
+    // Step 1: Strip markdown code fences (```json ... ``` or ``` ... ```)
+    let cleaned = content.replace(/```(?:json)?\s*/gi, '').replace(/```\s*/g, '').trim();
+
+    // Step 2: Try to find the JSON object — look for the outermost { ... }
+    // Use a bracket-counting approach instead of greedy regex to handle nested braces correctly
+    let jsonStr: string | null = null;
+    const startIdx = cleaned.indexOf('{');
+    if (startIdx !== -1) {
+      let depth = 0;
+      let endIdx = -1;
+      for (let i = startIdx; i < cleaned.length; i++) {
+        if (cleaned[i] === '{') depth++;
+        else if (cleaned[i] === '}') {
+          depth--;
+          if (depth === 0) { endIdx = i; break; }
+        }
+      }
+      if (endIdx !== -1) {
+        jsonStr = cleaned.slice(startIdx, endIdx + 1);
+      }
+    }
+
+    if (!jsonStr) {
       logger.error('AI response did not contain valid JSON', { contentPreview: content.substring(0, 200) });
       throw new Error('Invalid JSON response from AI');
     }
 
-    const result = JSON.parse(jsonMatch[0]);
-    
+    let result: any;
+    try {
+      result = JSON.parse(jsonStr);
+    } catch (parseErr: any) {
+      logger.error('AI JSON parse failed', { error: parseErr.message, jsonPreview: jsonStr.substring(0, 300) });
+      throw new Error(`Invalid JSON response from AI: ${parseErr.message}`);
+    }
+
     // Validate and clean the result
     if (!result.vulnerabilities || !Array.isArray(result.vulnerabilities)) {
       logger.warn('AI returned invalid vulnerabilities array — returning empty result');
@@ -420,6 +448,7 @@ If you cannot describe how an attacker would exploit it, DO NOT include it.`;
 
     return result;
   }
+
 
   static async analyzeRepository(repoContent: Map<string, string>): Promise<AIAnalysisResult> {
     const files = Array.from(repoContent.entries()).map(([path, content]) => ({

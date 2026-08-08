@@ -18,12 +18,13 @@ export const config = {
   groq: {
     apiKey: process.env.GROQ_API_KEY || '',
     apiUrl: process.env.GROQ_API_URL || 'https://api.groq.com/openai/v1',
-    apiKeys: (process.env.GROQ_API_KEYS || '').split(',').filter(k => k.trim()),
+    apiKeys: (process.env.GROQ_API_KEYS || '').split(',').map(k => k.trim()).filter(Boolean),
   },
   gemini: {
-    apiKeys: (process.env.GEMINI_API_KEYS || '').split(',').filter(k => k.trim()),
+    apiKeys: (process.env.GEMINI_API_KEYS || '').split(',').map(k => k.trim()).filter(Boolean),
     apiUrl: process.env.GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1beta',
   },
+
   jwt: {
     // CWE-798: No insecure fallback — app fails fast if JWT_SECRET is missing
     secret: process.env.JWT_SECRET || (() => { throw new Error('FATAL: JWT_SECRET environment variable is not set'); })(),
