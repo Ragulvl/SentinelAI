@@ -13,7 +13,7 @@ import ResultsPage from "./pages/ResultsPage";
 import EditorPage from "./pages/EditorPage";
 import MonitoringPage from "./pages/MonitoringPage";
 import WebsiteScanPage from "./pages/WebsiteScanPage";
-import WebsiteScanResultsPage from "./pages/WebsiteScanResultsPage";
+
 import ComprehensiveWebsiteScanResults from "./pages/ComprehensiveWebsiteScanResults";
 import PenetrationTestPage from "./pages/PenetrationTestPage";
 import LoadTestPage from "./pages/LoadTestPage";
@@ -43,7 +43,7 @@ const App = () => (
             <Route path="/monitoring" element={<MonitoringPage />} />
             <Route path="/website-scan" element={<WebsiteScanPage />} />
             <Route path="/website-scan/:scanId" element={<ComprehensiveWebsiteScanResults />} />
-            <Route path="/website-scan-basic/:scanId" element={<WebsiteScanResultsPage />} />
+
             <Route path="/pentest" element={<PenetrationTestPage />} />
             <Route path="/loadtest" element={<LoadTestPage />} />
             <Route path="/domain-verification" element={<DomainVerificationPage />} />

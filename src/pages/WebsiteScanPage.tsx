@@ -3,13 +3,14 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Shield, Globe, AlertTriangle, Loader2, CheckCircle2,
-  XCircle, ExternalLink, History, ChevronRight, Lock,
-  Info, Zap, Target, Activity,
+  History, Info, Zap, Target, Activity,
 } from "lucide-react";
 import { PageLayout } from "@/components/PageLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { websiteScanService } from "@/services/websiteScan.service";
 import { useToast } from "@/hooks/use-toast";
+
+// WebsiteScanPage — comprehensive multi-stage website security scanner
 
 interface ScanProgress {
   stage: string;
@@ -18,41 +19,10 @@ interface ScanProgress {
 }
 
 const SCAN_STAGES = [
-  { id: "security", threshold: 10, doneAt: 30, label: "Security", icon: Shield },
-  { id: "pentest", threshold: 30, doneAt: 50, label: "Pentest", icon: Target },
-  { id: "load", threshold: 50, doneAt: 70, label: "Load Test", icon: Zap },
+  { id: "security",   threshold: 10, doneAt: 30,  label: "Security",   icon: Shield   },
+  { id: "pentest",    threshold: 30, doneAt: 50,  label: "Pentest",    icon: Target   },
+  { id: "load",       threshold: 50, doneAt: 70,  label: "Load Test",  icon: Zap      },
   { id: "resilience", threshold: 85, doneAt: 100, label: "Resilience", icon: Activity },
-];
-
-const SCAN_CAPABILITIES = [
-  {
-    title: "Security Scanning",
-    color: "text-primary",
-    bg: "hsl(234 100% 68% / 0.08)",
-    icon: Shield,
-    items: ["Security headers analysis", "SSL/TLS configuration", "Mixed content detection", "Information disclosure"],
-  },
-  {
-    title: "Penetration Testing",
-    color: "severity-high",
-    bg: "hsl(18 95% 60% / 0.08)",
-    icon: Target,
-    items: ["XSS vulnerabilities", "SQL injection", "CSRF protection", "Command injection"],
-  },
-  {
-    title: "Load Testing",
-    color: "text-warning",
-    bg: "hsl(38 92% 50% / 0.08)",
-    icon: Zap,
-    items: ["Performance under load", "Response time analysis", "Concurrent user handling", "Error rate monitoring"],
-  },
-  {
-    title: "Resilience Testing",
-    color: "text-success",
-    bg: "hsl(142 71% 45% / 0.08)",
-    icon: Activity,
-    items: ["Load capacity analysis", "DDoS protection check", "Breaking point analysis", "Scalability assessment"],
-  },
 ];
 
 export default function WebsiteScanPage() {
@@ -100,7 +70,7 @@ export default function WebsiteScanPage() {
       const loadTestResult = await websiteScanService.loadTest(url, { duration: 30, concurrentUsers: 10, requestsPerSecond: 10 });
 
       setScanProgress({ stage: "resilience", progress: 85, message: "Testing resilience..." });
-      const resilienceResult = await websiteScanService.testResilience(url);
+      await websiteScanService.testResilience(url);
 
       setScanProgress({ stage: "complete", progress: 100, message: "Scan complete!" });
       toast({ title: "Comprehensive Scan Complete", description: "All tests completed successfully." });
@@ -139,14 +109,19 @@ export default function WebsiteScanPage() {
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              className="p-4 rounded-xl flex items-start gap-3"
-              style={{ background: "hsl(38 92% 50% / 0.08)", border: "1px solid hsl(38 92% 50% / 0.3)" }}
+              className="p-4 flex items-start gap-3"
+              style={{
+                background: 'hsl(var(--destructive) / 0.06)',
+                border: '1px solid hsl(var(--destructive) / 0.4)',
+                borderRadius: 'var(--radius-md)',
+                borderLeft: '3px solid hsl(var(--destructive))',
+              }}
             >
-              <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" style={{ color: 'hsl(var(--destructive))' }} />
               <div className="flex-1">
-                <p className="text-sm text-foreground">{verificationError.message}</p>
+                <p style={{ fontSize: 13, color: 'hsl(var(--foreground))' }}>{verificationError.message}</p>
                 <div className="flex gap-3 mt-2">
-                  <button onClick={() => navigate("/domain-verification")} className="text-xs text-primary hover:underline">
+                  <button onClick={() => navigate("/domain-verification")} className="text-xs" style={{ color: '#C8FF00' }}>
                     Verify domain
                   </button>
                   <button onClick={() => setVerificationError(null)} className="text-xs text-muted-foreground hover:underline">
@@ -205,8 +180,21 @@ export default function WebsiteScanPage() {
                     const done = scanProgress.progress >= stage.doneAt;
                     const active = scanProgress.progress >= stage.threshold && !done;
                     return (
-                      <div key={stage.id} className={`flex items-center gap-1.5 text-[10px] ${done ? "text-success" : active ? "text-primary" : "text-muted-foreground/40"}`}>
-                        {done ? <CheckCircle2 className="w-3 h-3 shrink-0" /> : active ? <Loader2 className="w-3 h-3 animate-spin shrink-0" /> : <Icon className="w-3 h-3 shrink-0" />}
+                      <div
+                        key={stage.id}
+                        className="flex items-center gap-1.5"
+                        style={{
+                          fontSize: 10,
+                          fontFamily: "'JetBrains Mono', monospace",
+                          color: done ? '#C8FF00' : active ? 'hsl(var(--foreground))' : 'hsl(var(--muted-foreground) / 0.4)',
+                        }}
+                      >
+                        {done
+                          ? <CheckCircle2 className="w-3 h-3 shrink-0" />
+                          : active
+                            ? <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                            : <Icon className="w-3 h-3 shrink-0" />
+                        }
                         {stage.label}
                       </div>
                     );
@@ -235,8 +223,10 @@ export default function WebsiteScanPage() {
           </div>
 
           {/* Info box */}
-          <div className="flex items-start gap-2.5 p-3.5 rounded-xl text-xs text-muted-foreground"
-            style={{ background: "hsl(var(--muted) / 0.5)", border: "1px solid hsl(var(--border))" }}>
+          <div
+            className="flex items-start gap-2.5 p-3.5 rounded-xl text-xs text-muted-foreground"
+            style={{ background: "hsl(var(--muted) / 0.5)", border: "1px solid hsl(var(--border))" }}
+          >
             <Info className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground/60" />
             <ul className="space-y-1">
               <li>Verify domain ownership before scanning</li>
@@ -244,31 +234,6 @@ export default function WebsiteScanPage() {
               <li>Comprehensive scan takes 2–3 minutes</li>
             </ul>
           </div>
-        </div>
-
-        {/* Capabilities grid */}
-        <div className="grid grid-cols-2 gap-3">
-          {SCAN_CAPABILITIES.map((cap) => {
-            const Icon = cap.icon;
-            return (
-              <div key={cap.title} className="card-base p-4 space-y-2.5">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: cap.bg }}>
-                    <Icon className={`w-3.5 h-3.5 ${cap.color}`} />
-                  </div>
-                  <h3 className={`text-xs font-semibold ${cap.color}`}>{cap.title}</h3>
-                </div>
-                <ul className="space-y-1">
-                  {cap.items.map(item => (
-                    <li key={item} className="text-[10px] text-muted-foreground flex items-center gap-1.5">
-                      <ChevronRight className="w-2.5 h-2.5 shrink-0 opacity-50" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
         </div>
       </div>
     </PageLayout>

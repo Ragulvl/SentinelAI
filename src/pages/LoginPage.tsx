@@ -19,9 +19,9 @@ const Particle = ({ x, y, delay }: { x: number; y: number; delay: number }) => (
     style={{
       left: `${x}%`,
       top: `${y}%`,
-      width: Math.random() * 3 + 1,
-      height: Math.random() * 3 + 1,
-      background: "hsl(234 100% 68% / 0.5)",
+      width: Math.random() * 2 + 1,
+      height: Math.random() * 2 + 1,
+      background: "hsl(240 5% 45% / 0.3)",
     }}
     animate={{
       opacity: [0, 0.8, 0],
@@ -68,14 +68,14 @@ const LoginPage = () => {
       {/* ── Left panel — branding ─────────────────────────────────── */}
       <div
         className="hidden lg:flex lg:w-1/2 relative overflow-hidden flex-col items-center justify-center"
-        style={{ background: "hsl(222 24% 5%)" }}
+        style={{ background: "hsl(var(--background))" }}
       >
         {/* Background mesh */}
         <div className="absolute inset-0">
           <div
             className="absolute inset-0"
             style={{
-              background: "radial-gradient(ellipse 80% 60% at 50% 40%, hsl(234 100% 68% / 0.1) 0%, transparent 65%)",
+              background: "radial-gradient(ellipse 60% 50% at 50% 35%, hsl(240 10% 18% / 0.25) 0%, transparent 70%)",
             }}
           />
           <div className="absolute inset-0 line-grid opacity-[0.04]" />
@@ -96,9 +96,9 @@ const LoginPage = () => {
               <div
                 className="absolute inset-0 rounded-full"
                 style={{
-                  background: "hsl(234 100% 68% / 0.25)",
-                  filter: "blur(28px)",
-                  transform: "scale(1.8)",
+                  background: "hsl(240 5% 30% / 0.15)",
+                  filter: "blur(24px)",
+                  transform: "scale(1.6)",
                 }}
               />
               <SentinalLogo size={64} />
@@ -143,8 +143,8 @@ const LoginPage = () => {
                   <div
                     className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
                     style={{
-                      background: "hsl(234 100% 68% / 0.1)",
-                      border: "1px solid hsl(234 100% 68% / 0.2)",
+                      background: "hsl(var(--muted))",
+                      border: "1px solid hsl(var(--border-active))",
                     }}
                   >
                     <Icon className="w-3.5 h-3.5 text-primary" />
@@ -181,11 +181,11 @@ const LoginPage = () => {
         className="flex-1 flex items-center justify-center px-6 py-12 relative"
         style={{ background: "hsl(var(--background))" }}
       >
-        {/* Subtle background */}
+        {/* Subtle noise background */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
-            background: "radial-gradient(ellipse 60% 50% at 60% 40%, hsl(262 82% 70% / 0.03) 0%, transparent 60%)",
+            background: "radial-gradient(ellipse 50% 40% at 60% 40%, hsl(240 4% 11% / 0.4) 0%, transparent 70%)",
           }}
         />
 

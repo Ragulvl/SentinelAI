@@ -56,8 +56,13 @@ export const PageHeader = ({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-3 flex-wrap">
             <h1
-              className="text-xl md:text-2xl font-bold text-foreground tracking-tight"
-              style={{ letterSpacing: "-0.025em" }}
+              style={{
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 22,
+                fontWeight: 700,
+                letterSpacing: "-0.02em",
+                color: "hsl(var(--foreground))",
+              }}
             >
               {title}
             </h1>
@@ -65,7 +70,15 @@ export const PageHeader = ({
           </div>
 
           {description && (
-            <p className="text-sm text-muted-foreground mt-1.5 max-w-2xl leading-relaxed">
+            <p
+              style={{
+                fontSize: 13,
+                color: "hsl(var(--muted-foreground))",
+                marginTop: 6,
+                maxWidth: 560,
+                lineHeight: 1.55,
+              }}
+            >
               {description}
             </p>
           )}

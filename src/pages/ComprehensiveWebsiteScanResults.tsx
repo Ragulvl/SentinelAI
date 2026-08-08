@@ -230,8 +230,25 @@ export default function ComprehensiveWebsiteScanResults() {
     return count > 0 ? Math.round(total / count) : 0;
   };
 
+  // Severity color discipline: only critical/high get vivid color
   const getScoreColor = (score: number) =>
-    score >= 80 ? 'text-green-500' : score >= 60 ? 'text-yellow-500' : 'text-red-500';
+    score >= 80 ? '#C8FF00' : score >= 60 ? '#F2F2F2' : '#E5373A';
+
+  const getSeverityEdgeClass = (type: string) => {
+    const t = type?.toLowerCase();
+    if (t === 'critical') return 'severity-edge-critical';
+    if (t === 'high') return 'severity-edge-high';
+    return 'severity-edge-medium';
+  };
+
+  const getSeverityBadgeClass = (type: string) => {
+    const t = type?.toLowerCase();
+    if (t === 'critical') return 'badge badge-critical';
+    if (t === 'high') return 'badge badge-high';
+    if (t === 'medium') return 'badge badge-medium';
+    if (t === 'low') return 'badge badge-low';
+    return 'badge badge-info';
+  };
 
   const successRatePct = loadTestResults
     ? ((loadTestResults.successfulRequests / Math.max(loadTestResults.totalRequests, 1)) * 100).toFixed(1)
@@ -241,12 +258,12 @@ export default function ComprehensiveWebsiteScanResults() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black">
+      <div className="min-h-screen" style={{ background: 'hsl(var(--background))' }}>
         <Navigation />
-        <div className="container mx-auto py-8 px-4 flex items-center justify-center h-64">
-          <div className="text-center">
-            <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto mb-4" />
-            <p className="text-muted-foreground">Loading scan results…</p>
+        <div className="flex items-center justify-center h-screen">
+          <div className="text-center space-y-3">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto" style={{ color: 'hsl(var(--muted-foreground))' }} />
+            <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: 'hsl(var(--muted-foreground))' }}>Loading scan results…</p>
           </div>
         </div>
       </div>
@@ -255,10 +272,20 @@ export default function ComprehensiveWebsiteScanResults() {
 
   if (!securityScan) {
     return (
-      <div className="min-h-screen bg-black">
+      <div className="min-h-screen" style={{ background: 'hsl(var(--background))' }}>
         <Navigation />
-        <div className="container mx-auto py-8 px-4">
-          <Alert variant="destructive"><AlertDescription>Scan results not found</AlertDescription></Alert>
+        <div className="max-w-4xl mx-auto py-12 px-6">
+          <div
+            className="p-5 flex items-start gap-3"
+            style={{
+              borderRadius: 'var(--radius-lg)',
+              background: 'hsl(var(--destructive) / 0.08)',
+              border: '1px solid hsl(var(--destructive) / 0.25)',
+            }}
+          >
+            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" style={{ color: 'hsl(var(--destructive))' }} />
+            <p style={{ fontSize: 13, color: 'hsl(var(--destructive))' }}>Scan results not found</p>
+          </div>
         </div>
       </div>
     );
@@ -269,134 +296,198 @@ export default function ComprehensiveWebsiteScanResults() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen" style={{ background: 'hsl(var(--background))' }}>
       <Navigation />
-      <div className="container mx-auto py-8 px-4">
+      <div className="md:pl-[220px] min-h-screen">
+        <div className="max-w-5xl mx-auto py-8 px-6 md:px-8 space-y-6">
 
-        {/* Back + header */}
-        <div className="mb-6">
-          <Button variant="ghost" onClick={() => navigate('/website-scan')} className="mb-4">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Scanner
-          </Button>
-          <div className="flex items-start justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-foreground mb-2">Comprehensive Security Report</h1>
-              <p className="text-muted-foreground">{securityScan.url}</p>
-              <p className="text-sm text-muted-foreground">Scanned on {new Date(securityScan.scanDate).toLocaleString()}</p>
-            </div>
-            <Button variant="outline"><Download className="mr-2 h-4 w-4" /> Export Report</Button>
+          {/* Back + export row */}
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => navigate('/website-scan')}
+              className="flex items-center gap-1.5 btn-ghost"
+              style={{ fontSize: 12, fontFamily: "'JetBrains Mono', monospace" }}
+            >
+              <ArrowLeft className="w-3.5 h-3.5" strokeWidth={1.5} />
+              Back to Scanner
+            </button>
+            <button className="btn-secondary flex items-center gap-2" style={{ fontSize: 12, padding: '6px 12px' }}>
+              <Download className="w-3.5 h-3.5" strokeWidth={1.5} />
+              Export Report
+            </button>
           </div>
-        </div>
 
-        {/* Overall score */}
-        <Card className="mb-6 border-primary/50">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Shield className="h-5 w-5" /> Overall Security Score</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <div className={`text-6xl font-bold ${getScoreColor(overallScore)}`}>
-                  {overallScore}<span className="text-2xl text-muted-foreground">/100</span>
-                </div>
-                <p className="text-sm text-muted-foreground mt-2">
-                  {overallScore >= 80 ? 'Excellent security posture'
-                    : overallScore >= 60 ? 'Good security with room for improvement'
-                    : 'Critical issues require immediate attention'}
-                </p>
+          {/* ── HERO METRIC BLOCK ─────────────────────────────────── */}
+          {/* The score dominates — everything else is subordinate */}
+          <div className="py-2">
+            {/* Score number: the primary visual anchor */}
+            <div
+              className="hero-metric mb-3"
+              style={{
+                fontSize: 'clamp(64px, 8vw, 96px)',
+                color: getScoreColor(overallScore),
+              }}
+            >
+              {overallScore}
+              <span
+                style={{
+                  fontSize: 'clamp(20px, 2.5vw, 28px)',
+                  color: 'hsl(var(--muted-foreground))',
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontWeight: 400,
+                  marginLeft: 4,
+                }}
+              >
+                /100
+              </span>
+            </div>
+
+            {/* One-line context: status · issues · time · url */}
+            <div
+              className="flex items-center gap-1.5 flex-wrap mb-1"
+              style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'hsl(var(--muted-foreground))' }}
+            >
+              <span style={{ color: overallScore >= 80 ? '#C8FF00' : 'hsl(var(--destructive))' }}>
+                {overallScore >= 80 ? 'Excellent posture' : overallScore >= 60 ? 'Needs attention' : 'Critical issues'}
+              </span>
+              <span style={{ color: 'hsl(var(--border-active))' }}>·</span>
+              <span>{securityScan.vulnerabilities.length} issues found</span>
+              <span style={{ color: 'hsl(var(--border-active))' }}>·</span>
+              <span>{new Date(securityScan.scanDate).toLocaleDateString()}</span>
+              <span style={{ color: 'hsl(var(--border-active))' }}>·</span>
+              <span style={{ color: 'hsl(var(--dim-foreground))' }}>{securityScan.url}</span>
+            </div>
+
+            {/* Thin progress bar — 3px, accent colored */}
+            <div className="progress-bar mt-4" style={{ maxWidth: 360 }}>
+              <div
+                className={`progress-bar-fill ${overallScore < 60 ? 'critical' : ''}`}
+                style={{ width: `${overallScore}%` }}
+              />
+            </div>
+          </div>
+
+          {/* ── SUMMARY ROW: compact inline stats ─────────────────── */}
+          {/* Replace 4 equal-weight cards with a compact inline stat row */}
+          <div
+            className="grid grid-cols-2 md:grid-cols-4 gap-px"
+            style={{
+              background: 'hsl(var(--border))',
+              border: '1px solid hsl(var(--border))',
+              borderRadius: 'var(--radius-lg)',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Security Scan */}
+            <div className="p-4" style={{ background: 'hsl(var(--surface))' }}>
+              <div className="section-label mb-2 flex items-center gap-1.5">
+                <Lock className="w-3 h-3" strokeWidth={1.5} /> Security
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="text-center p-4 bg-muted/50 rounded-lg">
-                  <div className="text-2xl font-bold text-green-500">
-                    {securityScan.vulnerabilities.filter((v: any) => !['critical', 'high'].includes(v.type)).length}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Passed</div>
-                </div>
-                <div className="text-center p-4 bg-muted/50 rounded-lg">
-                  <div className="text-2xl font-bold text-red-500">
-                    {securityScan.vulnerabilities.filter((v: any) => ['critical', 'high'].includes(v.type)).length}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Critical / High</div>
-                </div>
+              <div
+                className="metric-number"
+                style={{ fontSize: 22, fontWeight: 700, color: 'hsl(var(--foreground))' }}
+              >
+                {securityScan.securityScore}/100
+              </div>
+              <div style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))', marginTop: 2 }}>
+                {securityScan.vulnerabilities.length} issues
               </div>
             </div>
-            <Progress value={overallScore} className="h-3" />
-          </CardContent>
-        </Card>
 
-        {/* Summary cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          {/* Security */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Lock className="h-4 w-4 text-primary" /> Security Scan
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{securityScan.securityScore}/100</div>
-              <p className="text-xs text-muted-foreground">{securityScan.vulnerabilities.length} issues found</p>
-            </CardContent>
-          </Card>
-
-          {/* Pentest */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Shield className="h-4 w-4 text-primary" /> Penetration Test
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+            {/* Pentest */}
+            <div className="p-4" style={{ background: 'hsl(var(--surface))' }}>
+              <div className="section-label mb-2 flex items-center gap-1.5">
+                <Shield className="w-3 h-3" strokeWidth={1.5} /> Pentest
+              </div>
               {pentestLoading
-                ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                ? <Loader2 className="h-4 w-4 animate-spin" style={{ color: 'hsl(var(--muted-foreground))' }} />
                 : pentestResults
-                  ? <><div className="text-2xl font-bold">{pentestResults.testsPerformed}</div>
-                      <p className="text-xs text-muted-foreground">{pentestResults.vulnerabilitiesFound} vulns · risk {pentestResults.riskScore}</p></>
-                  : <p className="text-xs text-muted-foreground">Not run yet</p>
+                  ? <>
+                    <div className="metric-number" style={{ fontSize: 22, fontWeight: 700 }}>{pentestResults.testsPerformed}</div>
+                    <div style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))', marginTop: 2 }}>
+                      {pentestResults.vulnerabilitiesFound} vulns · risk {pentestResults.riskScore}
+                    </div>
+                  </>
+                  : <div style={{ fontSize: 11, color: 'hsl(var(--dim-foreground))', fontFamily: "'JetBrains Mono', monospace" }}>Not run yet</div>
               }
-            </CardContent>
-          </Card>
+            </div>
 
-          {/* Load */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Activity className="h-4 w-4 text-primary" /> Load Test
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+            {/* Load Test */}
+            <div className="p-4" style={{ background: 'hsl(var(--surface))' }}>
+              <div className="section-label mb-2 flex items-center gap-1.5">
+                <Activity className="w-3 h-3" strokeWidth={1.5} /> Load Test
+              </div>
               {loadTestLoading
-                ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                ? <Loader2 className="h-4 w-4 animate-spin" style={{ color: 'hsl(var(--muted-foreground))' }} />
                 : loadTestResults
-                  ? <><div className="text-2xl font-bold">{loadTestResults.averageResponseTime}ms</div>
-                      <p className="text-xs text-muted-foreground">{successRatePct}% success</p></>
-                  : <p className="text-xs text-muted-foreground">Not run yet</p>
+                  ? <>
+                    <div className="metric-number" style={{ fontSize: 22, fontWeight: 700 }}>{loadTestResults.averageResponseTime}ms</div>
+                    <div style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))', marginTop: 2 }}>{successRatePct}% success</div>
+                  </>
+                  : <div style={{ fontSize: 11, color: 'hsl(var(--dim-foreground))', fontFamily: "'JetBrains Mono', monospace" }}>Not run yet</div>
               }
-            </CardContent>
-          </Card>
+            </div>
 
-          {/* Resilience */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Zap className="h-4 w-4 text-primary" /> Resilience
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+            {/* Resilience */}
+            <div className="p-4" style={{ background: 'hsl(var(--surface))' }}>
+              <div className="section-label mb-2 flex items-center gap-1.5">
+                <Zap className="w-3 h-3" strokeWidth={1.5} /> Resilience
+              </div>
               {resilienceLoading
-                ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                ? <Loader2 className="h-4 w-4 animate-spin" style={{ color: 'hsl(var(--muted-foreground))' }} />
                 : resilienceResults
-                  ? <><div className="text-2xl font-bold">{resilienceResults.maxConcurrentUsers}</div>
-                      <p className="text-xs text-muted-foreground">max concurrent users</p></>
-                  : <p className="text-xs text-muted-foreground">Not run yet</p>
+                  ? <>
+                    <div className="metric-number" style={{ fontSize: 22, fontWeight: 700 }}>{resilienceResults.maxConcurrentUsers}</div>
+                    <div style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))', marginTop: 2 }}>max concurrent users</div>
+                  </>
+                  : <div style={{ fontSize: 11, color: 'hsl(var(--dim-foreground))', fontFamily: "'JetBrains Mono', monospace" }}>Not run yet</div>
               }
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </div>
 
-        {/* Detail tabs */}
+          {/* Detail tabs */}
+          <div
+            style={{
+              borderRadius: 'var(--radius-lg)',
+              border: '1px solid hsl(var(--border))',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Tab bar — flat, compact, IBM Plex Mono */}
+            <div
+              className="flex items-center"
+              style={{
+                background: 'hsl(var(--surface))',
+                borderBottom: '1px solid hsl(var(--border))',
+              }}
+            >
+              {(['security', 'pentest', 'load', 'resilience'] as const).map((tab, i) => (
+                <button
+                  key={tab}
+                  id={`tab-${tab}`}
+                  style={{
+                    padding: '10px 16px',
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 11,
+                    fontWeight: 500,
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
+                    border: 'none',
+                    background: 'transparent',
+                    cursor: 'pointer',
+                    color: 'hsl(var(--muted-foreground))',
+                    borderBottom: '2px solid transparent',
+                    transition: 'color 140ms, border-color 140ms',
+                  }}
+                >
+                  {['Security', 'Pentest', 'Load Test', 'Resilience'][i]}
+                </button>
+              ))}
+            </div>
+            <div style={{ background: 'hsl(var(--background))' }}>
+
         <Tabs defaultValue="security" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-4" style={{ display: 'none' }}>
             <TabsTrigger value="security">Security</TabsTrigger>
             <TabsTrigger value="pentest">Penetration</TabsTrigger>
             <TabsTrigger value="load">Load Test</TabsTrigger>
@@ -404,79 +495,225 @@ export default function ComprehensiveWebsiteScanResults() {
           </TabsList>
 
           {/* ── Security ── */}
-          <TabsContent value="security" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Security Vulnerabilities</CardTitle>
-                <CardDescription>Found {securityScan.vulnerabilities.length} security issues</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {securityScan.vulnerabilities.map((vuln: any, i: number) => (
-                    <div key={i} className="border rounded-lg p-4">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          {getSeverityIcon(vuln.type)}
-                          <h3 className="font-medium">{vuln.title}</h3>
-                        </div>
-                        <Badge variant={getSeverityColor(vuln.type)}>{vuln.type.toUpperCase()}</Badge>
-                      </div>
-                      <p className="text-sm text-muted-foreground mb-2">{vuln.description}</p>
-                      <div className="bg-muted/50 p-3 rounded text-sm">
-                        <p className="font-medium mb-1">Recommendation:</p>
-                        <p className="text-muted-foreground">{vuln.recommendation}</p>
-                      </div>
-                      {vuln.evidence && (
-                        <div className="mt-2 text-xs text-muted-foreground">Evidence: {vuln.evidence}</div>
-                      )}
-                    </div>
-                  ))}
-                  {securityScan.vulnerabilities.length === 0 && (
-                    <p className="text-sm text-muted-foreground text-center py-6">No vulnerabilities found 🎉</p>
+          <TabsContent value="security">
+            {/* Vulnerability list — full width, severity edge lines */}
+            <div className="p-4 space-y-2">
+              <div
+                className="flex items-center justify-between mb-3"
+                style={{ paddingBottom: 12, borderBottom: '1px solid hsl(var(--border))' }}
+              >
+                <div>
+                  <h3 style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 14, fontWeight: 600 }}>Security Vulnerabilities</h3>
+                  <p style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))', marginTop: 2 }}>
+                    Found {securityScan.vulnerabilities.length} security issues
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {securityScan.vulnerabilities.filter((v: any) => v.type === 'critical').length > 0 && (
+                    <span className="badge badge-critical">
+                      {securityScan.vulnerabilities.filter((v: any) => v.type === 'critical').length} critical
+                    </span>
+                  )}
+                  {securityScan.vulnerabilities.filter((v: any) => v.type === 'high').length > 0 && (
+                    <span className="badge badge-high">
+                      {securityScan.vulnerabilities.filter((v: any) => v.type === 'high').length} high
+                    </span>
                   )}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
 
-            <Card>
-              <CardHeader><CardTitle>SSL/TLS Configuration</CardTitle></CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Valid Certificate:</span>
-                    <span className={securityScan.ssl.valid ? 'text-green-500' : 'text-red-500'}>
-                      {securityScan.ssl.valid ? 'Yes' : 'No'}
+              <div className="space-y-2">
+                {securityScan.vulnerabilities.map((vuln: any, i: number) => (
+                  <div
+                    key={i}
+                    className={`p-4 ${getSeverityEdgeClass(vuln.type)}`}
+                    style={{
+                      background: 'hsl(var(--surface))',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: 'var(--radius-md)',
+                    }}
+                  >
+                    <div className="flex items-start justify-between gap-4 mb-2.5">
+                      <h4
+                        style={{
+                          fontFamily: "'JetBrains Mono', monospace",
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: 'hsl(var(--foreground))',
+                          lineHeight: 1.4,
+                        }}
+                      >
+                        {vuln.title}
+                      </h4>
+                      <span className={getSeverityBadgeClass(vuln.type)} style={{ flexShrink: 0 }}>
+                        {vuln.type?.toUpperCase()}
+                      </span>
+                    </div>
+
+                    <p style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))', lineHeight: 1.65, marginBottom: 10 }}>
+                      {vuln.description}
+                    </p>
+
+                    <div
+                      style={{
+                        background: 'hsl(var(--background))',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: 'var(--radius-sm)',
+                        padding: '8px 12px',
+                      }}
+                    >
+                      <p
+                        style={{
+                          fontFamily: "'JetBrains Mono', monospace",
+                          fontSize: 10,
+                          fontWeight: 600,
+                          letterSpacing: '0.06em',
+                          textTransform: 'uppercase',
+                          color: 'hsl(var(--muted-foreground))',
+                          marginBottom: 4,
+                        }}
+                      >
+                        Recommendation
+                      </p>
+                      <p style={{ fontSize: 12, color: 'hsl(var(--foreground) / 0.8)', lineHeight: 1.65 }}>
+                        {vuln.recommendation}
+                      </p>
+                    </div>
+
+                    {vuln.evidence && (
+                      <p
+                        className="mt-2 line-clamp-2"
+                        style={{
+                          fontFamily: "'JetBrains Mono', monospace",
+                          fontSize: 10,
+                          color: 'hsl(var(--muted-foreground) / 0.5)',
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        {vuln.evidence}
+                      </p>
+                    )}
+                  </div>
+                ))}
+
+                {securityScan.vulnerabilities.length === 0 && (
+                  <div
+                    className="text-center py-12"
+                    style={{
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: 'var(--radius-lg)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontFamily: "'JetBrains Mono', monospace",
+                        fontSize: 12,
+                        color: '#C8FF00',
+                        marginBottom: 4,
+                      }}
+                    >
+                      ✔︎ All clear
+                    </div>
+                    <p style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))' }}>No vulnerabilities found</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* SSL/TLS */}
+            <div
+              className="mx-4 mb-4"
+              style={{
+                background: 'hsl(var(--surface))',
+                border: '1px solid hsl(var(--border))',
+                borderRadius: 'var(--radius-md)',
+              }}
+            >
+              <div
+                className="flex items-center gap-2 px-4 py-3"
+                style={{ borderBottom: '1px solid hsl(var(--border))' }}
+              >
+                <span
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    letterSpacing: '0.05em',
+                    textTransform: 'uppercase',
+                    color: 'hsl(var(--muted-foreground))',
+                  }}
+                >
+                  SSL / TLS Configuration
+                </span>
+              </div>
+              <div className="px-4 py-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))' }}>Valid Certificate</span>
+                  <span
+                    style={{
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: securityScan.ssl.valid ? '#C8FF00' : 'hsl(var(--destructive))',
+                    }}
+                  >
+                    {securityScan.ssl.valid ? 'Yes' : 'No'}
+                  </span>
+                </div>
+                {securityScan.ssl.issuer && (
+                  <div className="flex items-center justify-between">
+                    <span style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))' }}>Issuer</span>
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'hsl(var(--foreground))' }}>
+                      {securityScan.ssl.issuer}
                     </span>
                   </div>
-                  {securityScan.ssl.issuer && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Issuer:</span>
-                      <span>{securityScan.ssl.issuer}</span>
-                    </div>
-                  )}
-                  {securityScan.ssl.protocol && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Protocol:</span>
-                      <span>{securityScan.ssl.protocol}</span>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                )}
+                {securityScan.ssl.protocol && (
+                  <div className="flex items-center justify-between">
+                    <span style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))' }}>Protocol</span>
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'hsl(var(--foreground))' }}>
+                      {securityScan.ssl.protocol}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
 
-            <Card>
-              <CardHeader><CardTitle>Detected Technologies</CardTitle></CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {securityScan.technologies.map((tech: string, i: number) => (
-                    <Badge key={i} variant="secondary">{tech}</Badge>
-                  ))}
-                  {securityScan.technologies.length === 0 && (
-                    <p className="text-sm text-muted-foreground">No technologies detected</p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+            {/* Detected Technologies */}
+            <div
+              className="mx-4 mb-4"
+              style={{
+                background: 'hsl(var(--surface))',
+                border: '1px solid hsl(var(--border))',
+                borderRadius: 'var(--radius-md)',
+              }}
+            >
+              <div
+                className="flex items-center gap-2 px-4 py-3"
+                style={{ borderBottom: '1px solid hsl(var(--border))' }}
+              >
+                <span
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    letterSpacing: '0.05em',
+                    textTransform: 'uppercase',
+                    color: 'hsl(var(--muted-foreground))',
+                  }}
+                >
+                  Detected Technologies
+                </span>
+              </div>
+              <div className="px-4 py-3 flex flex-wrap gap-1.5">
+                {securityScan.technologies.map((tech: string, i: number) => (
+                  <span key={i} className="badge badge-muted">{tech}</span>
+                ))}
+                {securityScan.technologies.length === 0 && (
+                  <p style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))' }}>No technologies detected</p>
+                )}
+              </div>
+            </div>
           </TabsContent>
 
           {/* ── Penetration ── */}
@@ -671,6 +908,9 @@ export default function ComprehensiveWebsiteScanResults() {
             </Card>
           </TabsContent>
         </Tabs>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

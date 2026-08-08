@@ -37,17 +37,17 @@ const STATUS_CONFIG = {
 // ── Mini sparkline chart ──────────────────────────────────────────────────
 const Sparkline = ({ data, status }: { data: number[]; status: string }) => {
   const max = Math.max(...data, 1);
-  const color = status === "up" ? "#22C55E" : status === "degraded" ? "#F59E0B" : "#EF4444";
   return (
     <div className="flex items-end gap-px h-7">
       {data.map((v, i) => (
         <div
           key={i}
-          className="w-1 rounded-t-sm transition-all"
+          className="w-1 transition-all"
           style={{
             height: `${Math.max((v / max) * 100, 5)}%`,
-            background: v === 0 ? "#EF4444" : color,
-            opacity: 0.35 + (i / data.length) * 0.65,
+            // Zero = site was down = red; positive = muted foreground bars
+            background: v === 0 ? 'hsl(var(--destructive))' : 'hsl(var(--border-active))',
+            opacity: v === 0 ? 0.7 : 0.35 + (i / data.length) * 0.65,
           }}
         />
       ))}
@@ -55,7 +55,7 @@ const Sparkline = ({ data, status }: { data: number[]; status: string }) => {
   );
 };
 
-// ── Uptime bars ───────────────────────────────────────────────────────────
+// ── Uptime bars — flat: muted for up/degraded, destructive for down ────────
 const UptimeBar = ({ history }: { history: ("up" | "down" | "degraded")[] }) => (
   <div className="flex gap-px">
     {history.map((s, i) => (
@@ -64,9 +64,11 @@ const UptimeBar = ({ history }: { history: ("up" | "down" | "degraded")[] }) => 
         className="uptime-bar-segment h-4"
         style={{
           background:
-            s === "up" ? "hsl(142 71% 45% / 0.55)"
-            : s === "degraded" ? "hsl(38 92% 50% / 0.55)"
-            : "hsl(0 84% 60% / 0.55)",
+            s === "down"
+              ? 'hsl(var(--destructive) / 0.6)'
+              : s === "degraded"
+              ? 'hsl(var(--border-active) / 0.8)'
+              : 'hsl(var(--border-active) / 0.35)',
         }}
       />
     ))}
@@ -292,30 +294,33 @@ const MonitoringPage = () => {
         </div>
       ) : (
         <>
-          {/* Stats row */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          {/* Stats row — flat grid, no colored text */}
+          <div
+            className="grid grid-cols-2 md:grid-cols-4 gap-px mb-6"
+            style={{
+              background: 'hsl(var(--border))',
+              border: '1px solid hsl(var(--border))',
+              borderRadius: 'var(--radius-lg)',
+              overflow: 'hidden',
+            }}
+          >
             {[
-              { label: "Operational", value: overallUp, icon: Wifi, color: "text-success" },
-              { label: "Degraded", value: overallDegraded, icon: AlertTriangle, color: "text-warning" },
-              { label: "Down", value: overallDown, icon: WifiOff, color: "text-destructive" },
-              { label: "Avg Response", value: `${avgResponse}ms`, icon: Clock, color: "text-primary" },
+              { label: "Operational", value: overallUp, icon: Wifi },
+              { label: "Degraded", value: overallDegraded, icon: AlertTriangle },
+              { label: "Down", value: overallDown, icon: WifiOff },
+              { label: "Avg Response", value: `${avgResponse}ms`, icon: Clock },
             ].map(stat => {
               const Icon = stat.icon;
               return (
-                <motion.div
-                  key={stat.label}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="card-elevated p-4"
-                >
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                    <Icon className="w-3.5 h-3.5" />
+                <div key={stat.label} className="p-4" style={{ background: 'hsl(var(--surface))' }}>
+                  <div className="section-label mb-2 flex items-center gap-1.5">
+                    <Icon className="w-3 h-3" strokeWidth={1.5} />
                     {stat.label}
                   </div>
-                  <div className={`text-2xl font-bold metric-number ${stat.color}`}>
+                  <div className="metric-number" style={{ fontSize: 22, fontWeight: 700 }}>
                     {stat.value}
                   </div>
-                </motion.div>
+                </div>
               );
             })}
           </div>
@@ -346,13 +351,45 @@ const MonitoringPage = () => {
                         <div className="flex items-center gap-3 min-w-0">
                           <PulseDot status={site.status} />
                           <div className="min-w-0">
-                            <div className="font-semibold text-foreground text-sm">{site.name}</div>
-                            <div className="text-[10px] text-muted-foreground font-mono truncate">{site.url}</div>
+                            <div
+                              style={{
+                                fontFamily: "'JetBrains Mono', monospace",
+                                fontSize: 13,
+                                fontWeight: 600,
+                                color: 'hsl(var(--foreground))',
+                              }}
+                            >
+                              {site.name}
+                            </div>
+                            <div
+                              style={{
+                                fontFamily: "'JetBrains Mono', monospace",
+                                fontSize: 10,
+                                color: 'hsl(var(--muted-foreground))',
+                              }}
+                              className="truncate"
+                            >
+                              {site.url}
+                            </div>
                           </div>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
-                          <span className={`flex items-center gap-1 text-xs font-medium ${cfg.color}`}>
-                            <Icon className="w-3 h-3" />
+                          {/* Status badge: only Down uses red — severity discipline */}
+                          <span
+                            className="flex items-center gap-1"
+                            style={{
+                              fontFamily: "'JetBrains Mono', monospace",
+                              fontSize: 10,
+                              fontWeight: 600,
+                              letterSpacing: '0.04em',
+                              color: site.status === 'down'
+                                ? 'hsl(var(--destructive))'
+                                : site.status === 'degraded'
+                                ? 'hsl(var(--muted-foreground))'
+                                : 'hsl(var(--muted-foreground))',
+                            }}
+                          >
+                            <Icon className="w-3 h-3" strokeWidth={1.5} />
                             {cfg.label}
                           </span>
                           <button
@@ -366,26 +403,36 @@ const MonitoringPage = () => {
 
                       {/* Metrics row */}
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-5 text-xs">
+                        <div className="flex items-center gap-5">
                           <div>
-                            <div className="text-muted-foreground mb-0.5">Response</div>
-                            <div className="font-mono text-foreground flex items-center gap-1">
+                            <div className="section-label mb-1">Response</div>
+                            <div
+                              className="flex items-center gap-1"
+                              style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: 'hsl(var(--foreground))' }}
+                            >
                               {site.responseTime > 0 ? `${site.responseTime}ms` : "—"}
-                              {trend > 20 && <TrendingUp className="w-3 h-3 text-destructive" />}
-                              {trend < -20 && <TrendingDown className="w-3 h-3 text-success" />}
-                              {Math.abs(trend) <= 20 && site.responseTime > 0 && <Minus className="w-3 h-3 text-muted-foreground" />}
+                              {trend > 20 && <TrendingUp className="w-3 h-3" style={{ color: 'hsl(var(--destructive))' }} />}
+                              {trend < -20 && <TrendingDown className="w-3 h-3" style={{ color: '#C8FF00' }} />}
+                              {Math.abs(trend) <= 20 && site.responseTime > 0 && <Minus className="w-3 h-3" style={{ color: 'hsl(var(--border-active))' }} />}
                             </div>
                           </div>
                           <div>
-                            <div className="text-muted-foreground mb-0.5">Uptime</div>
-                            <div className={`font-mono ${site.uptime >= 99.9 ? "text-success" : site.uptime >= 99 ? "text-warning" : "text-destructive"}`}>
+                            <div className="section-label mb-1">Uptime</div>
+                            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: 'hsl(var(--foreground))' }}>
                               {site.uptime}%
                             </div>
                           </div>
                           <div>
-                            <div className="text-muted-foreground mb-0.5">SSL</div>
-                            <div className={`font-mono flex items-center gap-1 ${site.sslValid ? "text-success" : "text-destructive"}`}>
-                              <Lock className="w-3 h-3" />
+                            <div className="section-label mb-1">SSL</div>
+                            <div
+                              className="flex items-center gap-1"
+                              style={{
+                                fontFamily: "'JetBrains Mono', monospace",
+                                fontSize: 12,
+                                color: site.sslValid ? 'hsl(var(--foreground))' : 'hsl(var(--destructive))',
+                              }}
+                            >
+                              <Lock className="w-3 h-3" strokeWidth={1.5} />
                               {site.sslValid ? "Valid" : "Expired"}
                             </div>
                           </div>
@@ -429,15 +476,28 @@ const MonitoringPage = () => {
 
                     <div className="space-y-2.5 text-sm">
                       {[
-                        { label: "Status", value: STATUS_CONFIG[selected.status].label, color: STATUS_CONFIG[selected.status].color },
-                        { label: "Response", value: selected.responseTime > 0 ? `${selected.responseTime}ms` : "Timeout", color: "text-foreground" },
-                        { label: "Uptime (30d)", value: `${selected.uptime}%`, color: "text-foreground" },
-                        { label: "SSL", value: selected.sslValid ? "Valid" : "Expired!", color: selected.sslValid ? "text-success" : "text-destructive" },
-                        { label: "SSL Expiry", value: selected.sslExpiry, color: "text-foreground" },
+                        { label: "Status", value: STATUS_CONFIG[selected.status].label },
+                        { label: "Response", value: selected.responseTime > 0 ? `${selected.responseTime}ms` : "Timeout" },
+                        { label: "Uptime (30d)", value: `${selected.uptime}%` },
+                        {
+                          label: "SSL",
+                          value: selected.sslValid ? "Valid" : "Expired!",
+                          red: !selected.sslValid,
+                        },
+                        { label: "SSL Expiry", value: selected.sslExpiry },
                       ].map(row => (
-                        <div key={row.label} className="flex items-center justify-between">
-                          <span className="text-muted-foreground">{row.label}</span>
-                          <span className={`font-mono font-medium ${row.color}`}>{row.value}</span>
+                        <div key={row.label} className="flex items-center justify-between py-1" style={{ borderBottom: '1px solid hsl(var(--border))' }}>
+                          <span style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))' }}>{row.label}</span>
+                          <span
+                            style={{
+                              fontFamily: "'JetBrains Mono', monospace",
+                              fontSize: 12,
+                              fontWeight: 500,
+                              color: (row as any).red ? 'hsl(var(--destructive))' : 'hsl(var(--foreground))',
+                            }}
+                          >
+                            {row.value}
+                          </span>
                         </div>
                       ))}
                       <div className="flex items-center justify-between">
@@ -508,13 +568,32 @@ const MonitoringPage = () => {
                     .sort((a, b) => b.lastChecked.getTime() - a.lastChecked.getTime())
                     .slice(0, 6)
                     .map(site => (
-                      <div key={site.id + "-log"} className="flex items-center gap-2 text-xs">
+                      <div key={site.id + "-log"} className="flex items-center gap-2">
                         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_CONFIG[site.status].bg}`} />
-                        <span className="text-muted-foreground font-mono shrink-0">
+                        <span
+                          style={{
+                            fontFamily: "'JetBrains Mono', monospace",
+                            fontSize: 10,
+                            color: 'hsl(var(--muted-foreground))',
+                          }}
+                          className="shrink-0"
+                        >
                           {site.lastChecked.toLocaleTimeString()}
                         </span>
-                        <span className="text-foreground truncate">{site.name}</span>
-                        <span className={`ml-auto font-mono shrink-0 ${STATUS_CONFIG[site.status].color}`}>
+                        <span
+                          style={{ fontSize: 11, color: 'hsl(var(--foreground))' }}
+                          className="truncate"
+                        >
+                          {site.name}
+                        </span>
+                        <span
+                          className="ml-auto shrink-0"
+                          style={{
+                            fontFamily: "'JetBrains Mono', monospace",
+                            fontSize: 11,
+                            color: site.status === 'down' ? 'hsl(var(--destructive))' : 'hsl(var(--foreground))',
+                          }}
+                        >
                           {site.responseTime > 0 ? `${site.responseTime}ms` : "DOWN"}
                         </span>
                       </div>

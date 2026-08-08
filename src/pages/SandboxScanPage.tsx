@@ -200,8 +200,8 @@ const SandboxScanPage = () => {
               </motion.button>
             </div>
 
-            {/* How sandbox works */}
-            <div className="card-elevated p-5 space-y-4">
+            {/* Pipeline visualization */}
+            <div className="card-elevated p-5 space-y-3">
               <div className="flex items-center gap-2">
                 <Info className="w-4 h-4 text-primary" />
                 <h3 className="font-semibold text-foreground text-sm">How Sandbox Works</h3>
@@ -210,9 +210,7 @@ const SandboxScanPage = () => {
                   @vercel/sandbox v2
                 </span>
               </div>
-
-              {/* Pipeline visualization */}
-              <div className="flex items-center gap-2 py-2">
+              <div className="flex items-center gap-2 py-1">
                 {STEPS.map((step, i) => {
                   const Icon = step.icon;
                   return (
@@ -230,22 +228,6 @@ const SandboxScanPage = () => {
                     </div>
                   );
                 })}
-              </div>
-
-              <div className="space-y-2 pt-1">
-                {[
-                  "Spins up an isolated Linux microVM via @vercel/sandbox",
-                  "Clones the public repository — no GitHub token required",
-                  "Reads source files and runs AI vulnerability analysis",
-                  "Detects runtime (Node/Python/Go) and boots the application",
-                  "Runs security header checks and penetration test inside the VM",
-                  "MicroVM is destroyed after scan — zero data retention",
-                ].map((text, i) => (
-                  <div key={i} className="flex items-start gap-2.5 text-xs text-muted-foreground">
-                    <span className="text-primary shrink-0 mt-0.5 font-bold">{i + 1}.</span>
-                    {text}
-                  </div>
-                ))}
               </div>
             </div>
           </div>

@@ -47,7 +47,12 @@ const ScoreRing = ({ score }: { score: number }) => {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.6 }}
           className="text-2xl font-black metric-number"
-          style={{ color }}
+          style={{ 
+            color,
+            fontFamily: "'Departure Mono', monospace",
+            fontWeight: 400,
+            letterSpacing: "-0.03em",
+          }}
         >
           {score}
         </motion.span>

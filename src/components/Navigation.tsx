@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Home, GitBranch, Activity, Globe, Target, Zap, Box,
   Shield, History, User, Command, Menu, X,
-  LogOut, ChevronDown, Circle, Cpu, Lock,
+  LogOut, ChevronDown, Cpu,
 } from "lucide-react";
 import { CommandPalette } from "./CommandPalette";
 
@@ -43,50 +43,42 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   },
 ];
 
-// ── SentinalAI SVG Logo ──────────────────────────────────────────────────
+// ── SentinalAI Logo — redrawn: no gradient, flat lime accent ──────────────
 export const SentinalLogo = ({ size = 28 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <linearGradient id="sg-shield" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
-        <stop stopColor="#5B6CFF" />
-        <stop offset="1" stopColor="#7F5AF0" />
-      </linearGradient>
-      <linearGradient id="sg-inner" x1="8" y1="6" x2="24" y2="26" gradientUnits="userSpaceOnUse">
-        <stop stopColor="#00D4FF" stopOpacity="0.95" />
-        <stop offset="1" stopColor="#5B6CFF" stopOpacity="0.5" />
-      </linearGradient>
-      <filter id="sg-glow">
-        <feGaussianBlur stdDeviation="1.5" result="blur" />
-        <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-      </filter>
-    </defs>
-    {/* Shield body */}
-    <path d="M16 2L4 7v9c0 6.075 5.075 10.5 12 13 6.925-2.5 12-6.925 12-13V7L16 2Z"
-      fill="url(#sg-shield)" />
-    {/* Inner glow layer */}
-    <path d="M16 5.5L6.5 9.5V16c0 4.6 3.8 7.9 9.5 9.8 5.7-1.9 9.5-5.2 9.5-9.8V9.5L16 5.5Z"
-      fill="url(#sg-inner)" opacity="0.22" />
-    {/* Circuit mark */}
-    <circle cx="16" cy="16" r="2.8" fill="white" opacity="0.96" filter="url(#sg-glow)" />
-    <line x1="16" y1="10.5" x2="16" y2="13.2" stroke="white" strokeWidth="1.4" strokeLinecap="round" opacity="0.75" />
-    <line x1="16" y1="18.8" x2="16" y2="21.5" stroke="white" strokeWidth="1.4" strokeLinecap="round" opacity="0.75" />
-    <line x1="10.5" y1="16" x2="13.2" y2="16" stroke="white" strokeWidth="1.4" strokeLinecap="round" opacity="0.75" />
-    <line x1="18.8" y1="16" x2="21.5" y2="16" stroke="white" strokeWidth="1.4" strokeLinecap="round" opacity="0.75" />
-    {/* Corner nodes */}
-    <circle cx="13.2" cy="13.2" r="0.9" fill="white" opacity="0.35" />
-    <circle cx="18.8" cy="13.2" r="0.9" fill="white" opacity="0.35" />
-    <circle cx="13.2" cy="18.8" r="0.9" fill="white" opacity="0.35" />
-    <circle cx="18.8" cy="18.8" r="0.9" fill="white" opacity="0.35" />
+    {/* Shield body — flat near-white fill, not a gradient */}
+    <path
+      d="M16 2L4 7v9c0 6.075 5.075 10.5 12 13 6.925-2.5 12-6.925 12-13V7L16 2Z"
+      fill="#F2F2F2"
+      opacity="0.92"
+    />
+    {/* Inner shield — slightly darker */}
+    <path
+      d="M16 5.5L6.5 9.5V16c0 4.6 3.8 7.9 9.5 9.8 5.7-1.9 9.5-5.2 9.5-9.8V9.5L16 5.5Z"
+      fill="#141416"
+      opacity="0.85"
+    />
+    {/* Center crosshair — acid lime, the accent */}
+    <circle cx="16" cy="16" r="2.4" fill="#C8FF00" />
+    <line x1="16" y1="10.5" x2="16" y2="13.6" stroke="#C8FF00" strokeWidth="1.2" strokeLinecap="round" />
+    <line x1="16" y1="18.4" x2="16" y2="21.5" stroke="#C8FF00" strokeWidth="1.2" strokeLinecap="round" />
+    <line x1="10.5" y1="16" x2="13.6" y2="16" stroke="#C8FF00" strokeWidth="1.2" strokeLinecap="round" />
+    <line x1="18.4" y1="16" x2="21.5" y2="16" stroke="#C8FF00" strokeWidth="1.2" strokeLinecap="round" />
   </svg>
 );
 
-// ── User Avatar ──────────────────────────────────────────────────────────
-const UserAvatar = ({ name, src, size = 28 }: { name?: string; src?: string; size?: number }) => {
+// ── User Avatar — square (not circle), monospace initials ─────────────────
+const UserAvatar = ({ name, src, size = 26 }: { name?: string; src?: string; size?: number }) => {
   if (src) {
     return (
       <img src={src} alt={name || "User"}
-        className="rounded-full object-cover ring-1 ring-border"
-        style={{ width: size, height: size }} />
+        className="object-cover"
+        style={{
+          width: size,
+          height: size,
+          borderRadius: 3,
+          border: "1px solid hsl(var(--border-active))",
+        }} />
     );
   }
   const initials = name
@@ -94,11 +86,18 @@ const UserAvatar = ({ name, src, size = 28 }: { name?: string; src?: string; siz
     : "U";
   return (
     <div
-      className="rounded-full flex items-center justify-center text-white font-semibold shrink-0"
+      className="flex items-center justify-center shrink-0 font-display"
       style={{
-        width: size, height: size,
-        fontSize: size * 0.37,
-        background: "linear-gradient(135deg, hsl(234 100% 68%), hsl(262 82% 70%))",
+        width: size,
+        height: size,
+        fontSize: size * 0.36,
+        fontWeight: 600,
+        fontFamily: "'JetBrains Mono', monospace",
+        borderRadius: 3,
+        background: "hsl(var(--muted))",
+        border: "1px solid hsl(var(--border-active))",
+        color: "hsl(var(--foreground))",
+        letterSpacing: "-0.02em",
       }}
     >
       {initials}
@@ -144,18 +143,21 @@ export const Navigation = ({ minimal = false }: NavigationProps) => {
         <header
           className="fixed top-0 left-0 right-0 z-50 h-14 flex items-center justify-between px-6"
           style={{
-            background: "hsl(var(--background) / 0.82)",
-            backdropFilter: "blur(24px) saturate(1.5)",
-            borderBottom: "1px solid hsl(var(--border))",
+            background: "hsl(var(--background))",
+            borderBottom: "none",
+            boxShadow: "0 1px 0 0 hsl(var(--border) / 0.6)",
           }}
         >
           <button
             onClick={() => navigate("/")}
-            className="flex items-center gap-2.5 hover:opacity-90 transition-opacity group"
+            className="flex items-center gap-2.5 hover:opacity-80 transition-opacity"
           >
-            <SentinalLogo size={26} />
-            <span className="font-bold text-sm tracking-tight text-foreground">
-              Sentinal<span className="text-primary">AI</span>
+            <SentinalLogo size={22} />
+            <span
+              className="text-sm tracking-tight"
+              style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, color: "hsl(var(--foreground))" }}
+            >
+              Sentinal<span style={{ color: "#C8FF00" }}>AI</span>
             </span>
           </button>
 
@@ -168,7 +170,7 @@ export const Navigation = ({ minimal = false }: NavigationProps) => {
             <button onClick={() => navigate("/login")} className="btn-ghost text-sm">
               Sign in
             </button>
-            <button onClick={() => navigate("/login")} className="btn-primary text-xs py-2 px-3">
+            <button onClick={() => navigate("/login")} className="btn-primary" style={{ fontSize: 12, padding: "6px 12px" }}>
               Get started
             </button>
           </div>
@@ -182,10 +184,16 @@ export const Navigation = ({ minimal = false }: NavigationProps) => {
   const SidebarContent = () => (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-4 h-14 shrink-0" style={{ borderBottom: "1px solid hsl(var(--sidebar-border))" }}>
-        <SentinalLogo size={24} />
-        <span className="font-bold text-sm tracking-tight text-foreground">
-          Sentinal<span className="text-primary">AI</span>
+      <div
+        className="flex items-center gap-2.5 px-4 h-14 shrink-0"
+        style={{ borderBottom: "none", boxShadow: "0 1px 0 0 hsl(var(--sidebar-border) / 0.6)" }}
+      >
+        <SentinalLogo size={22} />
+        <span
+          className="text-sm tracking-tight"
+          style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, color: "hsl(var(--foreground))" }}
+        >
+          Sentinal<span style={{ color: "#C8FF00" }}>AI</span>
         </span>
       </div>
 
@@ -193,16 +201,25 @@ export const Navigation = ({ minimal = false }: NavigationProps) => {
       <div className="px-3 pt-3 pb-1 shrink-0">
         <button
           onClick={() => setCmdOpen(true)}
-          className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs text-muted-foreground transition-all group"
+          className="w-full flex items-center gap-2 text-xs text-muted-foreground transition-all"
           style={{
+            padding: "6px 10px",
+            borderRadius: "var(--radius-md)",
             background: "hsl(var(--sidebar-accent))",
             border: "1px solid hsl(var(--sidebar-border))",
           }}
         >
-          <Command className="w-3.5 h-3.5 shrink-0" />
+          <Command className="w-3 h-3 shrink-0" strokeWidth={1.5} />
           <span className="flex-1 text-left">Search...</span>
-          <kbd className="hidden sm:flex items-center gap-0.5 font-mono text-[10px] px-1.5 py-0.5 rounded"
-            style={{ background: "hsl(var(--border))", color: "hsl(var(--muted-foreground))" }}>
+          <kbd
+            className="hidden sm:flex items-center gap-0.5 font-display text-[10px] px-1.5 py-0.5"
+            style={{
+              borderRadius: "2px",
+              background: "hsl(var(--border))",
+              color: "hsl(var(--muted-foreground))",
+              fontFamily: "'JetBrains Mono', monospace",
+            }}
+          >
             ⌘K
           </kbd>
         </button>
@@ -212,7 +229,7 @@ export const Navigation = ({ minimal = false }: NavigationProps) => {
       <nav className="flex-1 px-2 py-2 space-y-4 overflow-y-auto">
         {NAV_GROUPS.map(group => (
           <div key={group.label}>
-            <div className="sidebar-section-label pb-1">{group.label}</div>
+            <div className="sidebar-section-label pb-1.5">{group.label}</div>
             <div className="space-y-0.5">
               {group.items.map(item => {
                 const Icon = item.icon;
@@ -223,17 +240,13 @@ export const Navigation = ({ minimal = false }: NavigationProps) => {
                     onClick={() => navigate(item.path)}
                     className={`sidebar-nav-item w-full group ${active ? "active" : ""}`}
                   >
-                    <Icon className="w-4 h-4 nav-icon shrink-0 transition-transform group-hover:scale-105" />
+                    <Icon
+                      className="w-3.5 h-3.5 nav-icon shrink-0"
+                      strokeWidth={active ? 2 : 1.5}
+                    />
                     <span className="flex-1 text-left truncate">{item.label}</span>
                     {item.badge && (
-                      <span className="badge badge-primary text-[10px] px-1.5 py-0.5">{item.badge}</span>
-                    )}
-                    {active && (
-                      <motion.span
-                        layoutId="active-indicator"
-                        className="w-1.5 h-1.5 rounded-full shrink-0"
-                        style={{ background: "hsl(var(--primary))" }}
-                      />
+                      <span className="badge badge-accent text-[9px]">{item.badge}</span>
                     )}
                   </button>
                 );
@@ -245,11 +258,15 @@ export const Navigation = ({ minimal = false }: NavigationProps) => {
 
       {/* System Status */}
       <div className="px-3 py-2 shrink-0" style={{ borderTop: "1px solid hsl(var(--sidebar-border))" }}>
-        <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg"
-          style={{ background: "hsl(var(--success) / 0.06)" }}>
-          <span className="status-dot up animate-status-blink" />
-          <span className="text-xs text-muted-foreground flex-1">All Systems Operational</span>
-          <Cpu className="w-3 h-3 text-muted-foreground/40" />
+        <div
+          className="flex items-center gap-2 px-2 py-1.5"
+          style={{ borderRadius: "var(--radius-md)" }}
+        >
+          {/* Square status indicator — technical, not rounded/friendly */}
+          <span className="status-square up animate-status-blink" />
+          <span className="text-xs flex-1" style={{ color: "hsl(var(--muted-foreground))", fontFamily: "'JetBrains Mono', monospace", fontSize: 10 }}>
+            All systems operational
+          </span>
         </div>
       </div>
 
@@ -258,36 +275,42 @@ export const Navigation = ({ minimal = false }: NavigationProps) => {
         <div className="relative">
           <button
             onClick={() => setUserMenuOpen(v => !v)}
-            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-sidebar-accent transition-colors group"
+            className="w-full flex items-center gap-2.5 hover:bg-sidebar-accent transition-colors"
+            style={{ padding: "6px 8px", borderRadius: "var(--radius-md)" }}
           >
             <UserAvatar
               name={user?.name || user?.username}
               src={user?.avatarUrl}
-              size={28}
+              size={26}
             />
             <div className="flex-1 min-w-0 text-left">
-              <div className="text-xs font-semibold text-foreground truncate">
+              <div
+                className="text-xs font-medium truncate"
+                style={{ color: "hsl(var(--foreground))", fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}
+              >
                 {user?.name || user?.username || "User"}
               </div>
-              <div className="text-[10px] text-muted-foreground truncate flex items-center gap-1">
-                <Lock className="w-2.5 h-2.5" />
+              <div className="text-[10px] truncate" style={{ color: "hsl(var(--muted-foreground))" }}>
                 Free plan
               </div>
             </div>
             <ChevronDown
-              className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-200 ${userMenuOpen ? "rotate-180" : ""}`}
+              className={`w-3 h-3 transition-transform duration-200 ${userMenuOpen ? "rotate-180" : ""}`}
+              strokeWidth={1.5}
+              style={{ color: "hsl(var(--muted-foreground))" }}
             />
           </button>
 
           <AnimatePresence>
             {userMenuOpen && (
               <motion.div
-                initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                initial={{ opacity: 0, y: 6, scale: 0.97 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                exit={{ opacity: 0, y: 6, scale: 0.97 }}
                 transition={{ duration: 0.14, ease: "easeOut" }}
-                className="absolute bottom-full mb-1.5 left-0 right-0 rounded-xl overflow-hidden z-50"
+                className="absolute bottom-full mb-1.5 left-0 right-0 overflow-hidden z-50"
                 style={{
+                  borderRadius: "var(--radius-lg)",
                   background: "hsl(var(--popover))",
                   border: "1px solid hsl(var(--border-active))",
                   boxShadow: "var(--shadow-xl)",
@@ -296,9 +319,9 @@ export const Navigation = ({ minimal = false }: NavigationProps) => {
                 <div className="p-1">
                   <button
                     onClick={() => { navigate("/profile"); setUserMenuOpen(false); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                   >
-                    <User className="w-3.5 h-3.5" />
+                    <User className="w-3.5 h-3.5" strokeWidth={1.5} />
                     <span>Profile & Settings</span>
                   </button>
                 </div>
@@ -306,12 +329,12 @@ export const Navigation = ({ minimal = false }: NavigationProps) => {
                 <div className="p-1">
                   <button
                     onClick={async () => { await logout(); navigate("/"); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-colors"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors"
                     style={{ color: "hsl(var(--destructive) / 0.8)" }}
                     onMouseEnter={e => (e.currentTarget.style.background = "hsl(var(--destructive) / 0.06)")}
                     onMouseLeave={e => (e.currentTarget.style.background = "")}
                   >
-                    <LogOut className="w-3.5 h-3.5" />
+                    <LogOut className="w-3.5 h-3.5" strokeWidth={1.5} />
                     <span>Sign out</span>
                   </button>
                 </div>
@@ -325,11 +348,11 @@ export const Navigation = ({ minimal = false }: NavigationProps) => {
 
   return (
     <>
-      {/* Desktop Sidebar */}
+      {/* Desktop Sidebar — solid background, no blur */}
       <aside
         className="fixed top-0 left-0 bottom-0 z-40 hidden md:flex flex-col"
         style={{
-          width: "var(--sidebar-width, 224px)",
+          width: "var(--sidebar-width, 220px)",
           background: "hsl(var(--sidebar-background))",
           borderRight: "1px solid hsl(var(--sidebar-border))",
         }}
@@ -341,19 +364,22 @@ export const Navigation = ({ minimal = false }: NavigationProps) => {
       <header
         className="md:hidden fixed top-0 left-0 right-0 z-50 h-14 flex items-center justify-between px-4"
         style={{
-          background: "hsl(var(--background) / 0.9)",
-          backdropFilter: "blur(24px)",
-          borderBottom: "1px solid hsl(var(--border))",
+          background: "hsl(var(--background))",
+          borderBottom: "none",
+          boxShadow: "0 1px 0 0 hsl(var(--border) / 0.6)",
         }}
       >
-        <button onClick={() => navigate("/")} className="flex items-center gap-2 hover:opacity-90 transition-opacity">
-          <SentinalLogo size={24} />
-          <span className="font-bold text-sm text-foreground">
-            Sentinal<span className="text-primary">AI</span>
+        <button onClick={() => navigate("/")} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+          <SentinalLogo size={22} />
+          <span
+            className="text-sm"
+            style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, color: "hsl(var(--foreground))" }}
+          >
+            Sentinal<span style={{ color: "#C8FF00" }}>AI</span>
           </span>
         </button>
         <button onClick={() => setMobileOpen(true)} className="icon-btn">
-          <Menu className="w-5 h-5" />
+          <Menu className="w-4.5 h-4.5" strokeWidth={1.5} />
         </button>
       </header>
 
@@ -367,7 +393,7 @@ export const Navigation = ({ minimal = false }: NavigationProps) => {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
               className="fixed inset-0 z-50 md:hidden"
-              style={{ background: "hsl(var(--background) / 0.6)", backdropFilter: "blur(4px)" }}
+              style={{ background: "hsl(0 0% 0% / 0.7)" }}
               onClick={() => setMobileOpen(false)}
             />
             <motion.aside
@@ -385,7 +411,7 @@ export const Navigation = ({ minimal = false }: NavigationProps) => {
                 onClick={() => setMobileOpen(false)}
                 className="icon-btn absolute top-3.5 right-3"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" strokeWidth={1.5} />
               </button>
               <SidebarContent />
             </motion.aside>

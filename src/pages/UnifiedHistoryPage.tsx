@@ -31,20 +31,19 @@ interface UnifiedScan {
 const TYPE_CONFIG: Record<ScanType, {
   label: string;
   icon: React.ElementType;
-  color: string;
-  bg: string;
+  short: string;
 }> = {
-  repository: { label: "Repo Scan", icon: GitBranch, color: "text-primary", bg: "hsl(234 100% 68% / 0.1)" },
-  website: { label: "Website", icon: Globe, color: "text-success", bg: "hsl(142 71% 45% / 0.1)" },
-  penetration: { label: "Pentest", icon: Target, color: "text-destructive", bg: "hsl(0 84% 60% / 0.1)" },
-  load: { label: "Load Test", icon: Zap, color: "text-warning", bg: "hsl(38 92% 50% / 0.1)" },
+  repository: { label: "Repo Scan", icon: GitBranch, short: "repo" },
+  website: { label: "Website", icon: Globe, short: "web" },
+  penetration: { label: "Pentest", icon: Target, short: "pentest" },
+  load: { label: "Load Test", icon: Zap, short: "load" },
 };
 
-const STATUS_CONFIG: Record<string, { icon: React.ElementType; color: string; label: string }> = {
-  completed: { icon: CheckCircle, color: "text-success", label: "Completed" },
-  failed: { icon: XCircle, color: "text-destructive", label: "Failed" },
-  running: { icon: Activity, color: "text-primary", label: "Running" },
-  pending: { icon: Clock, color: "text-muted-foreground", label: "Pending" },
+const STATUS_CONFIG: Record<string, { icon: React.ElementType; label: string }> = {
+  completed: { icon: CheckCircle, label: "Completed" },
+  failed: { icon: XCircle, label: "Failed" },
+  running: { icon: Activity, label: "Running" },
+  pending: { icon: Clock, label: "Pending" },
 };
 
 function timeAgo(dateStr: string): string {
@@ -171,8 +170,16 @@ const UnifiedHistoryPage = () => {
         }
       />
 
-      {/* Stats row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      {/* Stats row — flat, no gradient text */}
+      <div
+        className="grid grid-cols-2 md:grid-cols-4 gap-px mb-6"
+        style={{
+          background: 'hsl(var(--border))',
+          border: '1px solid hsl(var(--border))',
+          borderRadius: 'var(--radius-lg)',
+          overflow: 'hidden',
+        }}
+      >
         {[
           { label: "Total Scans", value: stats.totalScans, icon: Shield },
           { label: "Repo Scans", value: stats.repoScans, icon: GitBranch },
@@ -181,18 +188,13 @@ const UnifiedHistoryPage = () => {
         ].map(s => {
           const Icon = s.icon;
           return (
-            <motion.div
-              key={s.label}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="card-elevated p-4"
-            >
-              <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                <Icon className="w-3.5 h-3.5" />
+            <div key={s.label} className="p-4" style={{ background: 'hsl(var(--surface))' }}>
+              <div className="section-label mb-2 flex items-center gap-1.5">
+                <Icon className="w-3 h-3" strokeWidth={1.5} />
                 {s.label}
               </div>
-              <div className="text-2xl font-black gradient-text-primary metric-number">{s.value}</div>
-            </motion.div>
+              <div className="metric-number" style={{ fontSize: 22, fontWeight: 700 }}>{s.value}</div>
+            </div>
           );
         })}
       </div>
@@ -208,20 +210,37 @@ const UnifiedHistoryPage = () => {
             className="input-base pl-10"
           />
         </div>
-        <div className="flex items-center gap-1 p-1 rounded-xl" style={{ background: "hsl(var(--muted))", border: "1px solid hsl(var(--border))" }}>
+        {/* Filter tabs — flat, IBM Plex Mono */}
+        <div
+          className="flex items-center"
+          style={{
+            background: 'hsl(var(--surface))',
+            border: '1px solid hsl(var(--border))',
+            borderRadius: 'var(--radius-md)',
+            overflow: 'hidden',
+          }}
+        >
           {filterTabs.map(tab => (
             <button
               key={tab.key}
               onClick={() => setFilterType(tab.key)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                filterType === tab.key
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
+              style={{
+                padding: '7px 12px',
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 11,
+                fontWeight: 500,
+                letterSpacing: '0.04em',
+                border: 'none',
+                cursor: 'pointer',
+                borderRight: '1px solid hsl(var(--border))',
+                transition: 'background 140ms, color 140ms',
+                background: filterType === tab.key ? '#C8FF00' : 'transparent',
+                color: filterType === tab.key ? '#080808' : 'hsl(var(--muted-foreground))',
+              }}
             >
               {tab.label}
               {tab.count > 0 && (
-                <span className="ml-1.5 text-[10px] opacity-60">{tab.count}</span>
+                <span style={{ marginLeft: 4, opacity: filterType === tab.key ? 0.5 : 0.4, fontSize: 9 }}>{tab.count}</span>
               )}
             </button>
           ))}
@@ -281,33 +300,46 @@ const UnifiedHistoryPage = () => {
                   exit={{ opacity: 0, x: -16 }}
                   transition={{ delay: i * 0.03 }}
                   onClick={() => handleScanClick(scan)}
-                  className="card-interactive p-4 flex items-center gap-4 group"
+                  className="card-interactive flex items-center gap-4 group"
+                  style={{ padding: '12px 16px' }}
                 >
-                  {/* Type icon */}
+                  {/* Type icon: flat, monochrome square */}
                   <div
-                    className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105"
-                    style={{ background: tc.bg }}
+                    className="shrink-0 flex items-center justify-center"
+                    style={{
+                      width: 32, height: 32,
+                      borderRadius: 'var(--radius-md)',
+                      background: 'hsl(var(--muted))',
+                      border: '1px solid hsl(var(--border))',
+                    }}
                   >
-                    <TypeIcon className={`w-4 h-4 ${tc.color}`} />
+                    <TypeIcon className="w-3.5 h-3.5" style={{ color: 'hsl(var(--muted-foreground))' }} strokeWidth={1.5} />
                   </div>
 
                   {/* Main info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                      <span className="font-semibold text-sm text-foreground truncate">{scan.target}</span>
-                      <span className={`badge text-[10px] ${tc.color}`}
-                        style={{ background: tc.bg, border: `1px solid ${tc.bg}` }}>
-                        {tc.label}
+                      <span
+                        style={{
+                          fontFamily: "'JetBrains Mono', monospace",
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: 'hsl(var(--foreground))',
+                        }}
+                        className="truncate"
+                      >
+                        {scan.target}
                       </span>
+                      <span className="badge badge-muted">{tc.short}</span>
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-3" style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))' }}>
                       <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
+                        <Clock className="w-3 h-3" strokeWidth={1.5} />
                         {timeAgo(scan.date)}
                       </span>
                       {scan.vulnerabilities !== undefined && (
                         <span className="flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3" />
+                          <AlertTriangle className="w-3 h-3" strokeWidth={1.5} />
                           {scan.vulnerabilities} issues
                         </span>
                       )}
@@ -317,18 +349,32 @@ const UnifiedHistoryPage = () => {
                   {/* Score */}
                   {scan.score !== undefined && (
                     <div className="text-center shrink-0">
-                      <div className={`text-lg font-black metric-number ${scoreColor}`}>{scan.score}</div>
-                      <div className="text-[9px] text-muted-foreground">score</div>
+                      <div
+                        className="metric-number"
+                        style={{
+                          fontSize: 18,
+                          fontWeight: 700,
+                          color: scan.score < 60 ? 'hsl(var(--destructive))' : 'hsl(var(--foreground))',
+                        }}
+                      >
+                        {scan.score}
+                      </div>
+                      <div style={{ fontSize: 9, color: 'hsl(var(--muted-foreground))', letterSpacing: '0.05em' }}>SCORE</div>
                     </div>
                   )}
 
                   {/* Status */}
-                  <div className={`flex items-center gap-1.5 text-xs shrink-0 ${sc.color}`}>
-                    <StatusIcon className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline font-medium">{sc.label}</span>
+                  <div
+                    className="flex items-center gap-1.5 shrink-0"
+                    style={{ fontSize: 11, color: scan.status === 'failed' ? 'hsl(var(--destructive))' : 'hsl(var(--muted-foreground))' }}
+                  >
+                    <StatusIcon className="w-3.5 h-3.5" strokeWidth={1.5} />
+                    <span className="hidden sm:inline" style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 500 }}>
+                      {sc.label}
+                    </span>
                   </div>
 
-                  <ChevronRight className="w-4 h-4 text-muted-foreground/40 shrink-0 transition-transform group-hover:translate-x-0.5" />
+                  <ChevronRight className="w-4 h-4 shrink-0" style={{ color: 'hsl(var(--muted-foreground) / 0.3)' }} />
                 </motion.div>
               );
             })}

@@ -19,17 +19,12 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ["Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "system-ui", "sans-serif"],
-        mono: ["JetBrains Mono", "Cascadia Code", "Fira Code", "monospace"],
-        display: ["Inter", "sans-serif"],
-      },
-      fontWeight: {
-        light: "300",
-        normal: "400",
-        medium: "500",
-        semibold: "600",
-        bold: "700",
-        extrabold: "800",
+        // Display (hero H1, primary score number only) — Departure Mono 400
+        display: ["'Departure Mono'", "monospace"],
+        // All other mono: headings, nav, buttons, badges, data strings — JetBrains Mono
+        mono: ["'JetBrains Mono'", "'Cascadia Code'", "monospace"],
+        // Body / UI — Inter (unchanged)
+        sans: ["Inter", "-apple-system", "BlinkMacSystemFont", "system-ui", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -38,6 +33,7 @@ export default {
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         surface: "hsl(var(--surface))",
+        "surface-2": "hsl(var(--surface-2))",
         foreground: "hsl(var(--foreground))",
         primary: {
           DEFAULT: "hsl(var(--primary))",
@@ -58,6 +54,7 @@ export default {
         accent: {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",
+          dim: "hsl(var(--accent-dim))",
         },
         popover: {
           DEFAULT: "hsl(var(--popover))",
@@ -76,10 +73,6 @@ export default {
           DEFAULT: "hsl(var(--success))",
           foreground: "hsl(var(--success-foreground))",
         },
-        info: {
-          DEFAULT: "hsl(var(--info))",
-          foreground: "hsl(var(--info-foreground))",
-        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
@@ -92,21 +85,22 @@ export default {
         },
       },
       borderRadius: {
-        lg: "var(--radius-lg)",
-        md: "var(--radius)",
-        sm: "var(--radius-sm)",
-        xl: "var(--radius-xl)",
+        // Tighter radii — technical precision over friendly roundness
+        none: "0px",
+        sm: "2px",
+        DEFAULT: "4px",
+        md: "4px",
+        lg: "6px",
+        xl: "8px",
+        "2xl": "10px",
+        full: "9999px",
       },
       boxShadow: {
-        sm: "var(--shadow-sm)",
-        md: "var(--shadow-md)",
-        lg: "var(--shadow-lg)",
-        xl: "var(--shadow-xl)",
-        "glow-primary": "var(--glow-primary)",
-        "glow-primary-sm": "var(--glow-primary-sm)",
-        "glow-accent": "var(--glow-accent)",
-        "glow-destructive": "var(--glow-destructive)",
-        "glow-success": "var(--glow-success)",
+        // No glow shadows — depth through shadow only
+        sm: "0 1px 3px 0 rgb(0 0 0 / 0.6)",
+        md: "0 4px 12px 0 rgb(0 0 0 / 0.65), 0 1px 3px 0 rgb(0 0 0 / 0.5)",
+        lg: "0 10px 28px 0 rgb(0 0 0 / 0.7), 0 4px 8px 0 rgb(0 0 0 / 0.5)",
+        xl: "0 20px 48px 0 rgb(0 0 0 / 0.8), 0 8px 16px 0 rgb(0 0 0 / 0.6)",
       },
       keyframes: {
         "accordion-down": {
@@ -119,11 +113,7 @@ export default {
         },
         shimmer: {
           "0%": { transform: "translateX(-100%)" },
-          "100%": { transform: "translateX(100%)" },
-        },
-        float: {
-          "0%, 100%": { transform: "translateY(0px)" },
-          "50%": { transform: "translateY(-6px)" },
+          "100%": { transform: "translateX(200%)" },
         },
         "slide-up": {
           from: { opacity: "0", transform: "translateY(12px)" },
@@ -133,39 +123,59 @@ export default {
           from: { opacity: "0", transform: "translateY(-8px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
+        "slide-left": {
+          from: { opacity: "0", transform: "translateX(12px)" },
+          to: { opacity: "1", transform: "translateX(0)" },
+        },
         "fade-in": {
           from: { opacity: "0" },
           to: { opacity: "1" },
         },
         "scale-in": {
-          from: { opacity: "0", transform: "scale(0.95)" },
+          from: { opacity: "0", transform: "scale(0.97)" },
           to: { opacity: "1", transform: "scale(1)" },
         },
-        "gradient-x": {
-          "0%, 100%": { backgroundPosition: "0% 50%" },
-          "50%": { backgroundPosition: "100% 50%" },
+        "status-blink": {
+          "0%, 100%": { opacity: "0.4" },
+          "50%": { opacity: "1" },
+        },
+        "cursor-blink": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0" },
+        },
+        "scan-line": {
+          "0%": { transform: "translateY(-100%)", opacity: "0" },
+          "10%": { opacity: "1" },
+          "90%": { opacity: "1" },
+          "100%": { transform: "translateY(100vh)", opacity: "0" },
+        },
+        "count-up": {
+          from: { opacity: "0", transform: "translateY(8px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
         },
         "spin-slow": {
           from: { transform: "rotate(0deg)" },
           to: { transform: "rotate(360deg)" },
         },
         "pulse-ring": {
-          "0%": { transform: "scale(1)", opacity: "1" },
+          "0%": { transform: "scale(1)", opacity: "0.8" },
           "80%, 100%": { transform: "scale(2.2)", opacity: "0" },
         },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        shimmer: "shimmer 2s ease-in-out infinite",
-        float: "float 3s ease-in-out infinite",
+        shimmer: "shimmer 2.2s ease-in-out infinite",
         "slide-up": "slide-up 0.35s cubic-bezier(0.4, 0, 0.2, 1) both",
         "slide-down": "slide-down 0.25s cubic-bezier(0.4, 0, 0.2, 1) both",
+        "slide-left": "slide-left 0.3s cubic-bezier(0.4, 0, 0.2, 1) both",
         "fade-in": "fade-in 0.3s ease both",
         "scale-in": "scale-in 0.2s cubic-bezier(0.4, 0, 0.2, 1) both",
-        "gradient-x": "gradient-x 4s ease infinite",
-        "spin-slow": "spin-slow 3s linear infinite",
+        "status-blink": "status-blink 2s ease-in-out infinite",
+        "cursor-blink": "cursor-blink 1s step-end infinite",
+        "spin-slow": "spin-slow 4s linear infinite",
         "pulse-ring": "pulse-ring 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+        "count-up": "count-up 0.5s cubic-bezier(0.4, 0, 0.2, 1) both",
       },
     },
   },

@@ -31,12 +31,13 @@ interface Branch {
   protected: boolean;
 }
 
-const LANG_COLORS: Record<string, string> = {
-  TypeScript: "#3178c6", JavaScript: "#f7df1e", Python: "#3572A5",
-  Go: "#00ADD8", Rust: "#dea584", Java: "#b07219", "C++": "#f34b7d",
-  C: "#555555", Ruby: "#701516", PHP: "#4F5D95", Swift: "#FA7343",
-  Kotlin: "#A97BFF", Dart: "#00B4AB", Shell: "#89e051", HTML: "#e34c26",
-  CSS: "#563d7c", Vue: "#4FC08D", Svelte: "#ff3e00",
+// Language short codes — monospace labels instead of colored dots
+const LANG_SHORT: Record<string, string> = {
+  TypeScript: ".ts", JavaScript: ".js", Python: ".py",
+  Go: ".go", Rust: ".rs", Java: ".java", "C++": ".cpp",
+  C: ".c", Ruby: ".rb", PHP: ".php", Swift: ".swift",
+  Kotlin: ".kt", Dart: ".dart", Shell: ".sh", HTML: ".html",
+  CSS: ".css", Vue: ".vue", Svelte: ".svelte",
 };
 
 function timeAgo(dateStr: string): string {
@@ -205,7 +206,7 @@ const RepoSelectPage = () => {
       {/* Search + stats */}
       <div className="flex items-center gap-4 mb-5">
         <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
           <input
             value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search repositories by name or description..."
@@ -230,13 +231,12 @@ const RepoSelectPage = () => {
 
       {/* Loading skeletons */}
       {loading && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {Array.from({ length: 8 }).map((_, i) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {Array.from({ length: 9 }).map((_, i) => (
             <div key={i} className="card-base p-4 space-y-3">
-              <div className="skeleton h-4 w-2/3 rounded" />
-              <div className="skeleton h-3 w-full rounded" />
-              <div className="skeleton h-3 w-1/2 rounded" />
-              <div className="skeleton h-8 w-full rounded mt-2" />
+              <div className="skeleton h-4 w-2/3" style={{ borderRadius: 2 }} />
+              <div className="skeleton h-3 w-full" style={{ borderRadius: 2 }} />
+              <div className="skeleton h-3 w-1/2" style={{ borderRadius: 2 }} />
             </div>
           ))}
         </div>
@@ -268,85 +268,109 @@ const RepoSelectPage = () => {
         </div>
       )}
 
-      {/* Repo Grid — cards do NOT expand, selection is tracked separately */}
+      {/* Repo Grid — 3 cols, compact, flat cards */}
       {!loading && !error && filtered.length > 0 && (
         <div
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
-          style={{ paddingBottom: selected ? "160px" : "0" }}
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+          style={{ paddingBottom: selected ? "140px" : "0" }}
         >
           {filtered.map((repo, i) => {
             const isSelected = selected === repo.id;
-            const langColor = LANG_COLORS[repo.language] || "#94A3B8";
+            const langShort = LANG_SHORT[repo.language] || repo.language?.toLowerCase()?.slice(0, 4);
 
             return (
               <motion.div
                 key={repo.id}
-                initial={{ opacity: 0, y: 12 }}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.03, duration: 0.3 }}
+                transition={{ delay: i * 0.025, duration: 0.28 }}
               >
                 <div
                   onClick={() => handleSelect(repo)}
-                  className={`relative rounded-xl cursor-pointer transition-all overflow-hidden h-full flex flex-col ${isSelected ? "card-glow ring-2" : "card-interactive"}`}
-                  style={isSelected ? { ringColor: "hsl(var(--primary) / 0.5)" } : undefined}
+                  className={`relative cursor-pointer transition-all h-full flex flex-col ${isSelected ? "card-interactive selected" : "card-interactive"}`}
+                  style={isSelected ? {
+                    borderColor: "hsl(72 100% 50% / 0.5)",
+                    borderLeftColor: "#C8FF00",
+                    borderLeftWidth: 3,
+                  } : undefined}
                 >
-                  {/* Selected indicator */}
-                  {isSelected && (
-                    <motion.div
-                      initial={{ scaleX: 0 }}
-                      animate={{ scaleX: 1 }}
-                      className="absolute top-0 left-0 right-0 h-0.5 rounded-t-xl"
-                      style={{ background: "linear-gradient(90deg, hsl(var(--primary)), hsl(var(--secondary)))" }}
-                    />
-                  )}
-
-                  <div className="p-4 space-y-3 flex-1">
+                  <div className="p-4 space-y-2.5 flex-1">
                     {/* Header */}
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5 mb-0.5">
                           {repo.isPrivate
-                            ? <Lock className="w-3 h-3 text-muted-foreground shrink-0" />
-                            : <Unlock className="w-3 h-3 text-muted-foreground shrink-0" />}
-                          <h3 className="font-semibold text-foreground text-sm truncate">{repo.name}</h3>
+                            ? <Lock className="w-3 h-3 shrink-0" strokeWidth={1.5} style={{ color: "hsl(var(--muted-foreground))" }} />
+                            : <Unlock className="w-3 h-3 shrink-0" strokeWidth={1.5} style={{ color: "hsl(var(--dim-foreground))" }} />}
+                          <h3
+                            className="truncate"
+                            style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, fontWeight: 600, color: "hsl(var(--foreground))" }}
+                          >
+                            {repo.name}
+                          </h3>
                         </div>
-                        <p className="text-[10px] text-muted-foreground/60 font-mono truncate">{repo.fullName}</p>
+                        <p
+                          className="truncate"
+                          style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: "hsl(var(--muted-foreground) / 0.5)" }}
+                        >
+                          {repo.fullName}
+                        </p>
                       </div>
-                      <motion.div
-                        animate={{ scale: isSelected ? 1 : 0, opacity: isSelected ? 1 : 0 }}
-                        className="w-5 h-5 rounded-full flex items-center justify-center shrink-0"
-                        style={{ background: "hsl(var(--primary))" }}
-                      >
-                        <div className="w-2 h-2 rounded-full bg-white" />
-                      </motion.div>
+                      {isSelected && (
+                        <div
+                          className="w-4 h-4 shrink-0 flex items-center justify-center"
+                          style={{ borderRadius: 2, background: "#C8FF00" }}
+                        >
+                          <div style={{ width: 6, height: 6, borderRadius: 1, background: "#080808" }} />
+                        </div>
+                      )}
                     </div>
 
                     {/* Description */}
                     {repo.description && (
-                      <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                      <p className="line-clamp-2" style={{ fontSize: 12, color: "hsl(var(--muted-foreground))", lineHeight: 1.55 }}>
                         {repo.description}
                       </p>
                     )}
 
                     {/* Meta row */}
-                    <div className="flex items-center gap-3 pt-2 text-xs text-muted-foreground mt-auto"
-                      style={{ borderTop: "1px solid hsl(var(--border))" }}>
-                      {repo.language && (
-                        <span className="flex items-center gap-1.5 min-w-0 truncate">
-                          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: langColor }} />
-                          <span className="truncate">{repo.language}</span>
+                    <div
+                      className="flex items-center gap-3 pt-2.5 mt-auto"
+                      style={{ borderTop: "1px solid hsl(var(--border))" }}
+                    >
+                      {langShort && (
+                        <span
+                          style={{
+                            fontFamily: "'JetBrains Mono', monospace",
+                            fontSize: 10,
+                            fontWeight: 500,
+                            color: "hsl(var(--muted-foreground))",
+                            background: "hsl(var(--muted))",
+                            border: "1px solid hsl(var(--border))",
+                            borderRadius: 2,
+                            padding: "1px 5px",
+                          }}
+                        >
+                          {langShort}
                         </span>
                       )}
-                      <span className="flex items-center gap-1 shrink-0 ml-auto">
-                        <Star className="w-3 h-3" />{repo.stars}
+                      <span
+                        className="flex items-center gap-1 ml-auto"
+                        style={{ fontSize: 11, color: "hsl(var(--muted-foreground))" }}
+                      >
+                        <Star className="w-3 h-3" strokeWidth={1.5} />{repo.stars}
                       </span>
-                      <span className="flex items-center gap-1 shrink-0">
-                        <GitFork className="w-3 h-3" />{repo.forks}
+                      <span
+                        className="flex items-center gap-1"
+                        style={{ fontSize: 11, color: "hsl(var(--muted-foreground))" }}
+                      >
+                        <GitFork className="w-3 h-3" strokeWidth={1.5} />{repo.forks}
                       </span>
-                    </div>
-                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground/50">
-                      <Clock className="w-3 h-3" />
-                      Updated {timeAgo(repo.updatedAt)}
+                      <span
+                        style={{ fontSize: 10, color: "hsl(var(--dim-foreground))", fontFamily: "'JetBrains Mono', monospace" }}
+                      >
+                        {timeAgo(repo.updatedAt)}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -356,23 +380,22 @@ const RepoSelectPage = () => {
         </div>
       )}
 
-      {/* ── Sticky Bottom Action Panel ───────────────────────── */}
+      {/* ── Sticky Bottom Action Panel ─ flat, no blur ────────── */}
       <AnimatePresence>
         {selectedRepo && (
           <motion.div
-            initial={{ y: 120, opacity: 0 }}
+            initial={{ y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 120, opacity: 0 }}
+            exit={{ y: 100, opacity: 0 }}
             transition={{ type: "spring", stiffness: 400, damping: 35 }}
-            className="fixed bottom-0 left-0 right-0 md:left-[224px] z-40"
-            style={{ backdropFilter: "blur(24px)" }}
+            className="fixed bottom-0 left-0 right-0 md:left-[220px] z-40"
           >
             <div
               className="border-t"
               style={{
-                background: "hsl(222 22% 7% / 0.97)",
-                borderColor: "hsl(var(--border))",
-                boxShadow: "0 -8px 40px hsl(234 100% 68% / 0.1)",
+                background: "hsl(var(--surface-2))",
+                borderColor: "hsl(var(--border-active))",
+                boxShadow: "0 -4px 20px rgb(0 0 0 / 0.7)",
               }}
             >
               <div className="max-w-7xl mx-auto px-4 md:px-6 py-4">
