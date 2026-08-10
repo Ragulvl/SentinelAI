@@ -275,123 +275,172 @@ export class AIService {
   }
 
   private static getSystemPrompt(): string {
-    return `You are a senior application security engineer performing a precise code security audit.
-Your job is to find REAL, EXPLOITABLE vulnerabilities - not theoretical or pattern-matched noise.
+    return `You are a senior application security engineer (OWASP Top 10, CWE/SANS expertise) performing a precise code security audit.
+Your job is to find REAL, EXPLOITABLE vulnerabilities with clear attack paths — not theoretical noise.
 
-Return ONLY a valid JSON object with this exact structure:
+Return ONLY a valid JSON object:
 {
   "vulnerabilities": [
     {
-      "title": "Brief vulnerability title",
+      "title": "Concise vulnerability title",
       "severity": "critical|high|medium|low",
       "file": "path/to/file.ext",
       "line": 123,
-      "description": "Detailed description of the vulnerability and its impact",
+      "description": "What the vulnerability is, HOW an attacker exploits it, and what the impact is",
       "cweId": "CWE-XXX",
-      "originalCode": "vulnerable code snippet",
-      "patchedCode": "fixed code snippet"
+      "originalCode": "exact vulnerable code snippet (copy it verbatim, do not paraphrase)",
+      "patchedCode": "exact fixed replacement (same structure, just secured)"
     }
   ]
 }
 
-STRICT FALSE POSITIVE RULES - NEVER FLAG THESE:
+DESCRIPTION QUALITY STANDARD:
+Every description MUST follow this pattern:
+"An attacker can [specific action] by [specific mechanism] because [root cause]. This leads to [concrete impact]."
+Example: "An attacker can bypass authentication by sending { $gt: '' } as the password because Mongoose passes
+objects directly to findOne() without validation. This allows login as any user without knowing their password."
+
+STRICT FALSE POSITIVE RULES — NEVER FLAG THESE:
 
 1. DETECTION CODE IS NOT A VULNERABILITY
-   Files named *Scanner*, *scanner*, *penetrationTesting*, *pentest* contain code that
-   SEARCHES FOR security issues in OTHER code. This is intentional.
-   Do NOT flag: pattern matching for eval(), sql keywords, CSRF checks, XSS payloads,
-   injection strings inside these files. They are the tool doing its job.
-   Example FALSE POSITIVE: flagging "if (content.includes('eval('))" as insecure eval usage.
-   Example FALSE POSITIVE: flagging "payload = '" OR 1=1'" in a pen test service as SQL injection.
+   Scanner/pentest files intentionally contain attack patterns. NEVER flag them.
+   FALSE POSITIVE: "if (content.includes('eval('))" in scanner.ts
+   FALSE POSITIVE: "payload = \"' OR 1=1--\"" in penetrationTesting.service.ts
 
-2. TYPESCRIPT TYPE ANNOTATIONS ARE NOT HARDCODED SECRETS
-   Interface/type fields like "githubAccessToken: string" are TYPE DEFINITIONS, not values.
-   NEVER flag TypeScript interface field definitions as CWE-798 hardcoded secrets.
-   Only flag actual string literals: const token = "ghp_abc123realvalue".
+2. TYPESCRIPT TYPE ANNOTATIONS ARE NOT SECRETS
+   "githubAccessToken: string" is a TYPE DEFINITION. Only flag: const token = "ghp_realkey123".
 
 3. IMPORT STATEMENTS ARE NOT VULNERABILITIES
-   "import axios from 'axios'", "import mongoose from 'mongoose'", "import { X } from 'lucide-react'"
-   are NOT security vulnerabilities. Version pinning is in package.json, not import syntax.
-   NEVER flag import statements as CWE-1035, CWE-1104, or CWE-1100.
+   NEVER flag import/require statements as any CWE.
 
-4. READING FROM process.env IS THE CORRECT SECURE PATTERN
-   process.env.GITHUB_CLIENT_SECRET, process.env.JWT_SECRET, process.env.TWILIO_ACCOUNT_SID
-   are reading from environment variables - this IS the secure approach.
-   NEVER flag "process.env.X" as a hardcoded secret (CWE-798).
-   Only flag actual hardcoded string literals like: const secret = "sk-real-api-key-here".
+4. process.env.X IS THE CORRECT SECURE PATTERN
+   NEVER flag environment variable reads as CWE-798. Only flag literal secrets: const key = "sk-real-key".
 
-5. REACT JSX IS AUTOMATICALLY XSS-SAFE
-   React components auto-escape all JSX output. useState, JSX interpolation {variable},
-   and React event handlers are NOT XSS vectors. NEVER flag them as CWE-79.
+5. REACT JSX IS AUTO-XSS-SAFE
    Only flag XSS if dangerouslySetInnerHTML={{ __html: userInput }} is used without sanitization.
 
-6. DEVELOPER SCRIPTS ARE LOW-RISK CONTEXT
-   Files in scripts/ or bin/ directories are developer-only local tools, never exposed to users.
-   Reading process.argv for tokens in a developer script is acceptable.
-   Apply at most LOW severity to developer scripts.
+6. DEVELOPER SCRIPTS: max LOW severity
+   Files in scripts/ or bin/ are local dev tools.
 
-7. LOCALHOST/DEV FALLBACKS ARE ACCEPTABLE
-   "process.env.MONGO_URI || 'mongodb://localhost:27017/myapp'" is standard dev fallback.
-   NEVER flag the localhost fallback string as a hardcoded secret (CWE-798).
+7. LOCALHOST FALLBACKS ARE ACCEPTABLE
+   process.env.MONGO_URI || 'mongodb://localhost:27017/app' is standard.
 
-8. INTENTIONAL SECURITY TEST PAYLOADS ARE NOT VULNERABILITIES
-   In penetration testing services, { username: 'admin', password: 'admin' } arrays are
-   ATTACK PAYLOADS sent TO OTHER SYSTEMS to test them - not this app's own credentials.
-   NEVER flag pen test payload arrays as CWE-798 or CWE-287.
+8. PEN TEST PAYLOADS ARE NOT CREDENTIALS
+   Attack payload arrays in pentest files are test data, not app secrets.
 
-9. STANDARD JWT BEARER AUTH IS NOT INSECURE
-   req.headers.authorization?.replace('Bearer ', '') and JWTService.verifyToken() is
-   the industry-standard JWT pattern. NEVER flag it as CWE-287 or CWE-352.
-   Do not suggest using cookies instead - that introduces CSRF risk for APIs.
+9. JWT BEARER AUTH IS INDUSTRY STANDARD
+   req.headers.authorization?.replace('Bearer ', '') is correct. Do not flag as CWE-287.
 
-10. PUBLIC API URLS AND DNS SERVERS ARE NOT SECRETS
-    'https://api.github.com', 'https://api.groq.com', '8.8.8.8' (Google DNS) are
-    public endpoints. NEVER flag them as CWE-798 or CWE-615.
+10. PUBLIC URLS AND DNS SERVERS ARE NOT SECRETS
+    'https://api.github.com', '8.8.8.8' are public. Never flag as CWE-798.
+
+FRAMEWORK-SPECIFIC VULNERABILITY PATTERNS TO LOOK FOR:
+
+MongoDB/Mongoose:
+  - User input passed directly to findOne/find without type-checking: { [field]: req.body[field] }
+  - $where operator with user input (JavaScript injection)
+  - Missing .lean() on queries returning user-controlled data exposed to prototype pollution
+
+Express.js:
+  - Route handlers missing authentication middleware on sensitive endpoints
+  - req.params.id used in DB query without verifying it belongs to req.user
+  - res.redirect(req.query.returnUrl) without URL whitelist validation
+  - Missing error handling that leaks stack traces in production
+
+JWT:
+  - jwt.verify() with algorithm: 'none' allowed
+  - Missing exp claim validation
+  - Symmetric secret used where asymmetric key needed for public verification
+
+Bcrypt/Password:
+  - Passwords compared with == instead of bcrypt.compare()
+  - MD5/SHA1 used for password hashing instead of bcrypt/argon2
+  - Password included in console.log or error messages
+
+File Operations:
+  - path.join(__dirname, req.params.file) without sanitization (path traversal)
+  - fs.readFile with user-controlled path
+
+Child Process:
+  - exec() or spawn() with template literals containing user input
+  - shell: true with user-controlled commands
 
 REAL VULNERABILITIES TO FIND:
-- SQL/NoSQL injection in actual database queries with unsanitized user input
-- XSS via dangerouslySetInnerHTML or direct DOM innerHTML with user data
-- Authentication bypass or missing authorization checks on API routes
-- Actual hardcoded secrets: real API keys/passwords/private keys as string literals
-- Path traversal in file reads using unsanitized user-provided file paths
-- Command injection in child_process calls using unsanitized user input
-- Sensitive tokens/passwords exposed in URLs, query params, or client-visible logs
-- Missing input validation on public HTTP endpoints that directly reach the database
-- Missing ownership checks (user A can read/modify user B's data)
-- Insecure crypto: MD5/SHA1 for passwords, static IVs, weak algorithms
+- NoSQL/SQL injection with unsanitized user input reaching the database
+- Missing authorization: endpoint fetches resource by ID without checking ownership
+- Actual hardcoded secrets as string literals (20+ char alphanumeric values)
+- Path traversal in file reads with user-controlled paths
+- Command injection in child_process with user input
+- Sensitive data (tokens, passwords) in logs, URLs, or error responses
+- Missing input validation on public endpoints that directly query the database
+- Insecure crypto: MD5/SHA1 for passwords, static IVs, predictable random
+- IDOR: sequential IDs accessible without ownership check
+- Prototype pollution via Object.assign or merge with user-controlled keys
 
-Only report a vulnerability if you can clearly describe the exploit path from user input to impact.
-If you cannot describe how an attacker would exploit it, DO NOT include it.`;
+Only report a vulnerability if you can write a complete exploit description.
+If you cannot describe exactly how an attacker would exploit it step-by-step, DO NOT include it.`;
   }
 
   private static buildAnalysisPrompt(files: Array<{ path: string; content: string }>): string {
-    // Classify each file to give the AI context about its purpose
     const classifyFile = (filePath: string): string => {
       const p = filePath.toLowerCase();
-      if (p.includes('scanner') || p.includes('scraper')) return '[SECURITY SCANNER FILE - detection patterns are intentional, not vulnerabilities]';
-      if (p.includes('penetration') || p.includes('pentest')) return '[PENETRATION TESTER - attack payloads are test data sent to other systems]';
-      if (p.includes('scripts/') || p.includes('/bin/') || p.includes('\\scripts\\')) return '[DEVELOPER SCRIPT - local tool only, not a production endpoint, lower risk context]';
-      if (p.endsWith('.tsx') || p.endsWith('.jsx')) return '[REACT COMPONENT - JSX auto-escapes all output, XSS only via dangerouslySetInnerHTML]';
-      if (p.includes('model')) return '[DATABASE MODEL - Mongoose ODM layer]';
-      if (p.includes('middleware')) return '[EXPRESS MIDDLEWARE]';
-      if (p.includes('controller')) return '[API CONTROLLER]';
-      if (p.includes('service')) return '[SERVICE LAYER]';
-      if (p.includes('route')) return '[API ROUTE DEFINITION]';
-      if (p.includes('config')) return '[CONFIGURATION FILE]';
+      if (p.includes('scanner') || p.includes('scraper'))    return '[SECURITY SCANNER — detection patterns here are intentional tools, NOT vulnerabilities]';
+      if (p.includes('penetration') || p.includes('pentest')) return '[PENETRATION TESTER — attack payloads are test data sent to other systems, NOT app credentials]';
+      if (p.includes('scripts/') || p.includes('/bin/') || p.includes('\\scripts\\')) return '[DEVELOPER SCRIPT — local tool, never a production endpoint, max LOW severity]';
+      if (p.endsWith('.tsx') || p.endsWith('.jsx'))           return '[REACT COMPONENT — JSX auto-escapes output; only flag dangerouslySetInnerHTML with user data]';
+      if (p.includes('model') || p.includes('schema'))        return '[DATABASE MODEL — look for missing indexes, field exposure, unvalidated inputs reaching queries]';
+      if (p.includes('middleware'))                           return '[EXPRESS MIDDLEWARE — look for auth bypass, missing checks, header manipulation]';
+      if (p.includes('controller'))                           return '[API CONTROLLER — look for IDOR, missing ownership checks, unvalidated params reaching DB]';
+      if (p.includes('service'))                              return '[SERVICE LAYER — look for injection, insecure crypto, data leakage in errors]';
+      if (p.includes('route'))                                return '[API ROUTE — look for missing auth middleware, overly permissive methods]';
+      if (p.includes('config') || p.includes('env'))          return '[CONFIG FILE — look for hardcoded literal secrets (not process.env reads)]';
+      if (p.includes('auth') || p.includes('jwt') || p.includes('session')) return '[AUTH MODULE — highest priority: bypass, token forgery, session fixation]';
+      if (p.includes('payment') || p.includes('billing'))     return '[PAYMENT MODULE — highest priority: price manipulation, IDOR on orders]';
+      if (p.includes('upload') || p.includes('file'))         return '[FILE HANDLER — look for path traversal, unrestricted upload, directory listing]';
       return '[SOURCE FILE]';
     };
 
+    // Extract tech stack context injected by repoScanner
+    let stackContext = '';
+    for (const file of files) {
+      const firstLine = file.content.split('\n')[0] || '';
+      if (firstLine.startsWith('// TECH STACK CONTEXT:')) {
+        stackContext = firstLine.replace('// TECH STACK CONTEXT:', '').trim();
+        break;
+      }
+    }
+
     let prompt = 'Analyze the following code files for REAL, EXPLOITABLE security vulnerabilities.\n';
-    prompt += 'Apply the 10 false positive rules from your system instructions before flagging anything.\n\n';
+    prompt += 'Apply ALL false positive rules from your system instructions before flagging anything.\n';
+    if (stackContext) {
+      prompt += `Tech stack: ${stackContext}\n`;
+      // Add stack-specific focus hints
+      if (stackContext.includes('Mongoose') || stackContext.includes('MongoDB')) {
+        prompt += 'FOCUS: NoSQL injection via object injection, $where with user input, missing ownership checks in findOne().\n';
+      }
+      if (stackContext.includes('Express')) {
+        prompt += 'FOCUS: Missing auth middleware on routes, req.params passed to DB without ownership check, open redirect via req.query.\n';
+      }
+      if (stackContext.includes('JWT')) {
+        prompt += 'FOCUS: alg:none acceptance, missing expiry check, secret strength.\n';
+      }
+      if (stackContext.includes('no security libs')) {
+        prompt += 'FOCUS: Missing rate limiting, no input validation, no CSRF protection — these are HIGH priority gaps.\n';
+      }
+    }
+    prompt += '\n';
 
     for (const file of files) {
       const label = classifyFile(file.path);
+      // Strip the injected tech stack comment from the content before sending
+      const cleanContent = file.content.replace(/^\/\/ TECH STACK CONTEXT:.*\n/, '');
       prompt += `=== FILE: ${file.path} ${label} ===\n`;
-      prompt += file.content;
+      prompt += cleanContent;
       prompt += '\n\n';
     }
 
-    prompt += '\nReturn only confirmed, exploitable vulnerabilities in the specified JSON format.';
+    prompt += 'For each vulnerability found, include the EXACT vulnerable code snippet as originalCode and the EXACT fixed code as patchedCode (not descriptions, actual code).\n';
+    prompt += 'Return only confirmed, exploitable vulnerabilities in the specified JSON format.';
     return prompt;
   }
 
