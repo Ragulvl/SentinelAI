@@ -6,24 +6,37 @@ import { config } from '../config/env.js';
 import type { AuthResponse } from '../types/auth.js';
 import crypto from 'crypto';
 
-// Store state temporarily (in production, use Redis or database)
-const stateStore = new Map<string, number>();
+// ---------------------------------------------------------------------------
+// Stateless CSRF state: nonce + expiry encoded as "nonce:expiry", signed with
+// HMAC-SHA256(JWT_SECRET). Works across restarts and multiple instances.
+// ---------------------------------------------------------------------------
+function createOAuthState(): string {
+  const nonce = crypto.randomBytes(16).toString('hex');
+  const expiry = Date.now() + 10 * 60 * 1000; // 10 min
+  const payload = `${nonce}:${expiry}`;
+  const sig = crypto.createHmac('sha256', config.jwt.secret).update(payload).digest('hex');
+  return Buffer.from(`${payload}:${sig}`).toString('base64url');
+}
+
+function verifyOAuthState(state: string): boolean {
+  try {
+    const decoded = Buffer.from(state, 'base64url').toString();
+    const lastColon = decoded.lastIndexOf(':');
+    const payload = decoded.substring(0, lastColon);
+    const sig = decoded.substring(lastColon + 1);
+    const expectedSig = crypto.createHmac('sha256', config.jwt.secret).update(payload).digest('hex');
+    if (!crypto.timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expectedSig, 'hex'))) return false;
+    const expiry = Number(payload.split(':')[1]);
+    return Date.now() < expiry;
+  } catch {
+    return false;
+  }
+}
 
 export class AuthController {
   static async initiateGitHubLogin(req: Request, res: Response) {
     try {
-      // Generate random state for CSRF protection
-      const state = crypto.randomBytes(32).toString('hex');
-      stateStore.set(state, Date.now());
-
-      // Clean up old states (older than 10 minutes)
-      const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
-      for (const [key, timestamp] of stateStore.entries()) {
-        if (timestamp < tenMinutesAgo) {
-          stateStore.delete(key);
-        }
-      }
-
+      const state = createOAuthState();
       const authUrl = GitHubAuthService.getAuthorizationUrl(state);
       res.json({ url: authUrl });
     } catch (error) {
@@ -36,11 +49,10 @@ export class AuthController {
     const { code, state } = req.query;
 
     try {
-      // Verify state to prevent CSRF
-      if (!state || !stateStore.has(state as string)) {
-        throw new Error('Invalid state parameter');
+      // Verify state (HMAC-signed, stateless)
+      if (!state || !verifyOAuthState(state as string)) {
+        throw new Error('Invalid or expired state parameter');
       }
-      stateStore.delete(state as string);
 
       if (!code) {
         throw new Error('No authorization code provided');

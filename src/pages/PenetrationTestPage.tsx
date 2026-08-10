@@ -9,7 +9,6 @@ import {
 import { PageLayout } from "@/components/PageLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { websiteScanService, PenetrationTestReport } from "@/services/websiteScan.service";
-import { ApiClient } from "@/utils/api";
 import { useToast } from "@/hooks/use-toast";
 import { API_ENDPOINTS } from "@/config/api";
 import { AuthService } from "@/services/auth.service";
@@ -50,31 +49,35 @@ export default function PenetrationTestPage() {
   const [viewMode, setViewMode] = useState<"new" | "view">(resultId ? "view" : "new");
   const [authorized, setAuthorized] = useState(false);
   const [domainVerified, setDomainVerified] = useState<boolean | null>(null);
-  const [checkingDomain, setCheckingDomain] = useState(false);
+  const [checkingDomain, setCheckingDomain] = useState(true); // true while initial fetch runs
+  const [verifiedDomainsList, setVerifiedDomainsList] = useState<string[]>([]);
 
   useEffect(() => { if (resultId) loadExistingResult(resultId); }, [resultId]);
 
-  // Live domain verification check (600ms debounce)
+  // Fetch verified domains ONCE on mount (same as DomainVerificationPage)
   useEffect(() => {
-    const check = async () => {
-      if (!url.trim() || !url.includes('.')) { setDomainVerified(null); return; }
-      try {
-        setCheckingDomain(true);
-        let hostname: string;
-        try {
-          hostname = new URL(url.startsWith('http') ? url : `https://${url}`).hostname.replace(/^www\./, '').toLowerCase();
-        } catch { setDomainVerified(false); return; }
-        const domains: any[] = await ApiClient.get('/api/website-scan/verify/domains');
-        const isVerified = Array.isArray(domains) && domains.some(
-          (d: any) => d.domain?.toLowerCase() === hostname && d.verified === true
-        );
-        setDomainVerified(isVerified);
-      } catch { setDomainVerified(false); }
-      finally { setCheckingDomain(false); }
-    };
-    const t = setTimeout(check, 600);
-    return () => clearTimeout(t);
-  }, [url]);
+    websiteScanService.getVerifiedDomains()
+      .then(domains => {
+        const verified = (Array.isArray(domains) ? domains : [])
+          .filter((d: any) => d.verified === true)
+          .map((d: any) => (d.domain ?? '').toLowerCase().trim());
+        setVerifiedDomainsList(verified);
+      })
+      .catch(() => { setVerifiedDomainsList([]); })
+      .finally(() => { setCheckingDomain(false); });
+  }, []);
+
+  // When URL changes, check synchronously against the cached list
+  useEffect(() => {
+    if (!url.trim() || !url.includes('.')) { setDomainVerified(null); return; }
+    if (checkingDomain) return; // still loading the list
+    try {
+      const hostname = new URL(url.startsWith('http') ? url : `https://${url}`)
+        .hostname.replace(/^www\./, '').toLowerCase();
+      setDomainVerified(verifiedDomainsList.includes(hostname));
+    } catch { setDomainVerified(null); }
+  }, [url, verifiedDomainsList, checkingDomain]);
+
 
   const loadExistingResult = async (id: string) => {
     try {

@@ -62,16 +62,11 @@ const EditorPage = () => {
   };
 
   const loadFileContent = async (filePath: string) => {
-    if (!scanData) return;
-    
+    if (!scanData || !scanId) return;
     try {
       setLoadingFile(true);
-      const response = await ScanService.getFileContent(
-        scanData.repository.owner,
-        scanData.repository.name,
-        filePath,
-        scanData.repository.branch
-      );
+      // getFileContent(scanId, filePath) - scanId lets backend look up repo owner/name
+      const response = await ScanService.getFileContent(scanId, filePath);
       setFileContent(response.content);
       setFileSha(response.sha);
     } catch (error) {
@@ -83,16 +78,15 @@ const EditorPage = () => {
 
   const handleSaveFile = async () => {
     if (!scanData || !scanId) return;
-
+    const vuln = scanData.vulnerabilities[selectedFile];
     try {
       setSaving(true);
-      await ScanService.updateFile(
-        scanData.repository.owner,
-        scanData.repository.name,
-        scanData.vulnerabilities[selectedFile].file,
+      await ScanService.updateFileContent(
+        scanId,
+        vuln.file,
         fileContent,
         fileSha,
-        `Fix: ${scanData.vulnerabilities[selectedFile].title}`
+        `fix: Security fix for ${vuln.title}`
       );
       alert("File saved successfully!");
     } catch (error) {
@@ -157,7 +151,7 @@ const EditorPage = () => {
       {/* Header */}
       <header className="border-b border-border/50 px-4 py-3 flex items-center justify-between shrink-0 backdrop-blur-sm bg-black/50">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate("/results")} className="text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => navigate(`/results?scanId=${scanId}`)} className="text-muted-foreground hover:text-foreground transition-colors">
             <ChevronLeft className="w-5 h-5" />
           </button>
           <button onClick={() => navigate("/")} className="font-medium text-foreground text-sm hover:text-primary transition-colors">

@@ -446,6 +446,79 @@ If you cannot describe how an attacker would exploit it, DO NOT include it.`;
       patchedCode: v.patchedCode || '// Fix not available',
     }));
 
+    // ── Deterministic false-positive filter ──────────────────────────────────
+    // LLMs sometimes ignore prompt rules. This code-level filter is the safety net.
+    result.vulnerabilities = result.vulnerabilities.filter((v: any) => {
+      const code = (v.originalCode || '').trim();
+      const file = (v.file || '').toLowerCase();
+      const cwe  = (v.cweId || '').toUpperCase();
+
+      // 1. Import statements are never vulnerabilities
+      if (/^import\s/.test(code) || /^from\s/.test(code)) {
+        logger.debug('FP-filter: removed import-statement finding', { file: v.file, title: v.title });
+        return false;
+      }
+
+      // 2. Stub code snippets the AI invented (not real code)
+      if (code === '// Code snippet not available' || code === '// Fix not available') {
+        logger.debug('FP-filter: removed stub code finding', { file: v.file, title: v.title });
+        return false;
+      }
+
+      // 3. Reading from process.env or config.* is the CORRECT secure pattern — never CWE-798
+      if (cwe === 'CWE-798') {
+        const envRead = /process\.env\.|config\.\w+\.\w+/.test(code);
+        const typeAnnotation = /^\s*(readonly\s+)?\w+[\?!]?\s*:\s*string/.test(code);
+        const localhostOnly = /^['"`]https?:\/\/localhost/.test(code) || /^['"`]mongodb:\/\/localhost/.test(code);
+        const publicUrl = /^['"`]https?:\/\/(api\.github|api\.groq|googleapis|generativelanguage)/.test(code);
+        // Real secret pattern: actual key-like value (alphanumeric 20+ chars) in a string literal
+        const hasRealSecret = /['"`][a-zA-Z0-9_\-]{20,}['"`]/.test(code) && !envRead;
+        if (envRead || typeAnnotation || localhostOnly || publicUrl || !hasRealSecret) {
+          logger.debug('FP-filter: removed false CWE-798 finding', { file: v.file, title: v.title, code: code.substring(0, 80) });
+          return false;
+        }
+      }
+
+      // 4. TypeScript interface/type fields are not real vulnerabilities (any CWE)
+      if (/^\s*(readonly\s+)?\w+[\?!]?\s*:\s*(string|number|boolean|any|unknown)/.test(code)) {
+        logger.debug('FP-filter: removed TS type annotation finding', { file: v.file, title: v.title });
+        return false;
+      }
+
+      // 5. Scanner/penetration-test files flagged for their own detection patterns
+      if ((file.includes('scanner') || file.includes('pentest') || file.includes('penetration')) &&
+          (cwe === 'CWE-89' || cwe === 'CWE-79' || cwe === 'CWE-78')) {
+        logger.debug('FP-filter: removed scanner detection code finding', { file: v.file, title: v.title });
+        return false;
+      }
+
+      // 6. Developer scripts should be at most LOW severity
+      if ((file.includes('/scripts/') || file.includes('\\scripts\\') || file.includes('/bin/')) &&
+          (v.severity === 'critical' || v.severity === 'high')) {
+        v.severity = 'low';
+        logger.debug('FP-filter: downgraded severity for developer script', { file: v.file, title: v.title });
+      }
+
+      // 7. React JSX files cannot have XSS unless dangerouslySetInnerHTML is present
+      if ((file.endsWith('.tsx') || file.endsWith('.jsx')) && cwe === 'CWE-79') {
+        if (!code.includes('dangerouslySetInnerHTML') && !code.includes('innerHTML')) {
+          logger.debug('FP-filter: removed JSX XSS false positive', { file: v.file, title: v.title });
+          return false;
+        }
+      }
+
+      // 8. Dependency import flags (component libraries, Axios, Mongoose, etc.)
+      if ((cwe === 'CWE-1035' || cwe === 'CWE-1104' || cwe === 'CWE-1100') &&
+          /^import\s/.test(code)) {
+        logger.debug('FP-filter: removed dependency import flag', { file: v.file, title: v.title });
+        return false;
+      }
+
+      return true;
+    });
+    // ── End false-positive filter ─────────────────────────────────────────────
+
+    logger.info('AI analysis complete', { vulnerabilities: result.vulnerabilities.length });
     return result;
   }
 

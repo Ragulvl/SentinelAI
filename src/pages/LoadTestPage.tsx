@@ -10,6 +10,7 @@ import {
 import { PageLayout } from "@/components/PageLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { ApiClient } from "@/utils/api";
+import { websiteScanService } from "@/services/websiteScan.service";
 import { useToast } from "@/hooks/use-toast";
 import { API_ENDPOINTS } from "@/config/api";
 import { AuthService } from "@/services/auth.service";
@@ -81,33 +82,35 @@ export default function LoadTestPage() {
   const [testType, setTestType] = useState<"load" | "resilience">("load");
   const [viewMode] = useState<"new" | "view">(resultId ? "view" : "new");
   const [domainVerified, setDomainVerified] = useState<boolean | null>(null);
-  const [checkingDomain, setCheckingDomain] = useState(false);
+  const [checkingDomain, setCheckingDomain] = useState(true); // true while initial fetch runs
+  const [verifiedDomainsList, setVerifiedDomainsList] = useState<string[]>([]);
 
   useEffect(() => { if (resultId) loadExistingResult(resultId); }, [resultId]);
 
-  // Check domain verification status whenever URL changes
+  // Fetch all verified domains ONCE on mount (same as DomainVerificationPage)
   useEffect(() => {
-    const checkVerification = async () => {
-      if (!url.trim() || !url.includes('.')) { setDomainVerified(null); return; }
-      try {
-        setCheckingDomain(true);
-        let hostname: string;
-        try {
-          hostname = new URL(url.startsWith('http') ? url : `https://${url}`).hostname.replace(/^www\./, '').toLowerCase();
-        } catch (e) { console.error('[LoadTest] URL parse error:', e); setDomainVerified(false); return; }
-        console.log('[LoadTest] Checking domain:', hostname);
-        const domains: any = await ApiClient.get('/api/website-scan/verify/domains');
-        console.log('[LoadTest] Domains response:', JSON.stringify(domains));
-        const arr = Array.isArray(domains) ? domains : (domains?.data ?? []);
-        const isVerified = arr.some((d: any) => d.domain?.toLowerCase() === hostname && d.verified === true);
-        console.log('[LoadTest] isVerified:', isVerified, '| hostname:', hostname);
-        setDomainVerified(isVerified);
-      } catch (e) { console.error('[LoadTest] Domain check error:', e); setDomainVerified(false); }
-      finally { setCheckingDomain(false); }
-    };
-    const debounce = setTimeout(checkVerification, 600);
-    return () => clearTimeout(debounce);
-  }, [url]);
+    websiteScanService.getVerifiedDomains()
+      .then(domains => {
+        // getVerifiedDomains returns all domains (verified + pending); filter to verified only
+        const verified = (Array.isArray(domains) ? domains : [])
+          .filter((d: any) => d.verified === true)
+          .map((d: any) => (d.domain ?? '').toLowerCase().trim());
+        setVerifiedDomainsList(verified);
+      })
+      .catch(() => { setVerifiedDomainsList([]); })
+      .finally(() => { setCheckingDomain(false); });
+  }, []);
+
+  // When URL changes, check synchronously against the cached list
+  useEffect(() => {
+    if (!url.trim() || !url.includes('.')) { setDomainVerified(null); return; }
+    if (checkingDomain) return; // still loading the list
+    try {
+      const hostname = new URL(url.startsWith('http') ? url : `https://${url}`)
+        .hostname.replace(/^www\./, '').toLowerCase();
+      setDomainVerified(verifiedDomainsList.includes(hostname));
+    } catch { setDomainVerified(null); }
+  }, [url, verifiedDomainsList, checkingDomain]);
 
   const loadExistingResult = async (id: string) => {
     try {

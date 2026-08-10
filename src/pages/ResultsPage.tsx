@@ -181,6 +181,9 @@ const ResultsPage = () => {
     else setLoading(false);
   }, [scanId]);
 
+  // Reset vuln page when filter changes — must be here (before early returns) to avoid hooks-order violation
+  useEffect(() => { setVulnPage(1); }, [filterSeverity]);
+
   const fetchScanResults = async () => {
     if (!scanId) return;
     try {
@@ -261,16 +264,11 @@ const ResultsPage = () => {
       </PageLayout>
     );
   }
-
   const { summary, vulnerabilities } = scanData;
   const fixableCount = vulnerabilities.filter(v => v.fixAvailable).length;
 
-  // Compute security score
   const scoreWeighted = (summary.critical * 10) + (summary.high * 5) + (summary.medium * 2) + summary.low;
   const score = Math.max(0, Math.min(100, 100 - scoreWeighted));
-
-  // Reset page when severity filter changes
-  useEffect(() => { setVulnPage(1); }, [filterSeverity]);
 
   const filtered = filterSeverity === "all" ? vulnerabilities
     : vulnerabilities.filter(v => v.severity === filterSeverity);
@@ -293,7 +291,7 @@ const ResultsPage = () => {
         breadcrumbs={[{ label: "Code Scan", path: "/repos" }, { label: "Results" }]}
         actions={
           <div className="flex items-center gap-2">
-            <button onClick={() => navigate("/editor")} className="btn-ghost-border gap-2 text-xs">
+            <button onClick={() => navigate(`/editor?scanId=${scanId}`)} className="btn-ghost-border gap-2 text-xs">
               <Code2 className="w-3.5 h-3.5" /> Editor
             </button>
             <button
@@ -390,7 +388,7 @@ const ResultsPage = () => {
         ) : (
           <>
             {pagedVulns.map(v => (
-              <VulnRow key={v.id} vuln={v} onViewDiff={() => navigate("/editor")} />
+              <VulnRow key={v.id} vuln={v} onViewDiff={() => navigate(`/editor?scanId=${scanId}`)} />
             ))}
 
             {/* Pagination */}

@@ -6,6 +6,8 @@ setServers(['8.8.8.8', '8.8.4.4']);
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import mongoose from 'mongoose';
 import { config } from './config/env.js';
 import { logger } from './config/logger.js';
@@ -23,6 +25,58 @@ import { WhatsAppWorker } from './workers/whatsapp.worker.js';
 import { NotificationService } from './services/notification.service.js';
 
 const app = express();
+
+// ── Security headers (fixes CSP unsafe-inline, adds Permissions-Policy) ──────
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:       ["'self'"],
+      scriptSrc:        ["'self'"],                 // No unsafe-inline
+      styleSrc:         ["'self'", "'unsafe-inline'"], // Styles need inline for most UIs
+      imgSrc:           ["'self'", 'data:', 'https:'],
+      connectSrc:       ["'self'"],
+      fontSrc:          ["'self'", 'https:', 'data:'],
+      objectSrc:        ["'none'"],
+      frameSrc:         ["'none'"],
+      frameAncestors:   ["'none'"],                // Clickjacking protection
+      upgradeInsecureRequests: [],
+    },
+  },
+  crossOriginEmbedderPolicy: false,   // Needed for some API clients
+  permittedCrossDomainPolicies: false,
+  // Permissions-Policy header (fixes missing header finding)
+  // helmet sets this via the 'permissionsPolicy' option in v7+
+}));
+
+// Set Permissions-Policy explicitly (helmet covers most, this ensures full coverage)
+app.use((_req, res, next) => {
+  res.setHeader(
+    'Permissions-Policy',
+    'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()'
+  );
+  next();
+});
+
+// ── Rate limiting ──────────────────────────────────────────────────────────────
+// Auth endpoints: strict (10 req / 15 min)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,   // Return rate limit info in RateLimit-* headers
+  legacyHeaders: false,
+  message: { error: 'Too many requests — please try again later.' },
+  skip: (req) => config.nodeEnv === 'development', // Don't rate-limit in local dev
+});
+
+// General API: permissive (100 req / 15 min)
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests — please try again later.' },
+  skip: (req) => config.nodeEnv === 'development',
+});
 
 // CORS configuration - support production, Vercel previews, and local dev
 const frontendUrl = config.frontendUrl.replace(/\/$/, '');
@@ -62,15 +116,15 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/scan', scanRoutes);
-app.use('/api/monitoring', monitoringRoutes);
-app.use('/api/website-scan', websiteScanRoutes);
-app.use('/api/sandbox', sandboxScanRoutes);
-app.use('/api/history', historyRoutes);
-app.use('/api/notifications', notificationRoutes);
-app.use('/api/whatsapp', whatsappRoutes);
+// Routes — rate limiters applied per route group
+app.use('/api/auth',         authLimiter, authRoutes);
+app.use('/api/scan',         apiLimiter,  scanRoutes);
+app.use('/api/monitoring',   apiLimiter,  monitoringRoutes);
+app.use('/api/website-scan', apiLimiter,  websiteScanRoutes);
+app.use('/api/sandbox',      apiLimiter,  sandboxScanRoutes);
+app.use('/api/history',      apiLimiter,  historyRoutes);
+app.use('/api/notifications', apiLimiter, notificationRoutes);
+app.use('/api/whatsapp',     apiLimiter,  whatsappRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
