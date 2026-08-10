@@ -20,11 +20,11 @@ interface TechStack {
 
 export class RepoScannerService {
   private static readonly GITHUB_API_URL = 'https://api.github.com';
-  private static readonly MAX_FILES_PER_BATCH = 5;       // Up from 3
-  private static readonly MAX_CHARS_PER_FILE = 3000;     // Up from 1500
-  private static readonly MAX_FILES_TOTAL = 120;         // Up from 80
-  private static readonly PARALLEL_BATCHES = 4;          // NEW: run 4 batches simultaneously
-  private static readonly CONCURRENT_FETCH = 15;         // Up from 8
+  private static readonly MAX_FILES_PER_BATCH = 5;       // 5 files per AI call
+  private static readonly MAX_CHARS_PER_FILE = 2500;     // ~625 tokens — keeps batch under 6000 token limit
+  private static readonly MAX_FILES_TOTAL = 120;         // max files to scan
+  private static readonly PARALLEL_BATCHES = 3;          // 3 parallel = safe for Groq free tier (each key ~4500 tokens/wave)
+  private static readonly CONCURRENT_FETCH = 15;         // concurrent GitHub file fetches
 
   static async scanRepository(
     scanId: string,
