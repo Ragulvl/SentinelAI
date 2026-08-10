@@ -274,10 +274,11 @@ const RepoSelectPage = () => {
 
       {/* Repo Grid — 3 cols, compact, flat cards */}
       {!loading && !error && filtered.length > 0 && (
-        <div
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
-          style={{ paddingBottom: selected ? "140px" : "0" }}
-        >
+        <>
+          <div
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+            style={{ paddingBottom: selected ? "140px" : "0" }}
+          >
           {filtered
             .slice((repoPage - 1) * REPOS_PER_PAGE, repoPage * REPOS_PER_PAGE)
             .map((repo, i) => {
@@ -432,6 +433,7 @@ const RepoSelectPage = () => {
             </div>
           </div>
         )}
+        </>
       )}
 
       {/* ── Sticky Bottom Action Panel ─ flat, no blur ────────── */}

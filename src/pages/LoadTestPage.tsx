@@ -80,8 +80,34 @@ export default function LoadTestPage() {
   const [resilienceResult, setResilienceResult] = useState<any>(null);
   const [testType, setTestType] = useState<"load" | "resilience">("load");
   const [viewMode] = useState<"new" | "view">(resultId ? "view" : "new");
+  const [domainVerified, setDomainVerified] = useState<boolean | null>(null);
+  const [checkingDomain, setCheckingDomain] = useState(false);
 
   useEffect(() => { if (resultId) loadExistingResult(resultId); }, [resultId]);
+
+  // Check domain verification status whenever URL changes
+  useEffect(() => {
+    const checkVerification = async () => {
+      if (!url.trim() || !url.includes('.')) { setDomainVerified(null); return; }
+      try {
+        setCheckingDomain(true);
+        let hostname: string;
+        try {
+          hostname = new URL(url.startsWith('http') ? url : `https://${url}`).hostname.replace(/^www\./, '').toLowerCase();
+        } catch (e) { console.error('[LoadTest] URL parse error:', e); setDomainVerified(false); return; }
+        console.log('[LoadTest] Checking domain:', hostname);
+        const domains: any = await ApiClient.get('/api/website-scan/verify/domains');
+        console.log('[LoadTest] Domains response:', JSON.stringify(domains));
+        const arr = Array.isArray(domains) ? domains : (domains?.data ?? []);
+        const isVerified = arr.some((d: any) => d.domain?.toLowerCase() === hostname && d.verified === true);
+        console.log('[LoadTest] isVerified:', isVerified, '| hostname:', hostname);
+        setDomainVerified(isVerified);
+      } catch (e) { console.error('[LoadTest] Domain check error:', e); setDomainVerified(false); }
+      finally { setCheckingDomain(false); }
+    };
+    const debounce = setTimeout(checkVerification, 600);
+    return () => clearTimeout(debounce);
+  }, [url]);
 
   const loadExistingResult = async (id: string) => {
     try {
@@ -111,6 +137,10 @@ export default function LoadTestPage() {
 
   const handleLoadTest = async () => {
     if (!url.trim()) { toast({ title: "URL required", variant: "destructive" }); return; }
+    if (domainVerified === false) {
+      toast({ title: "Domain Not Verified", description: "Please verify domain ownership first.", variant: "destructive" });
+      return;
+    }
     const estimated = concurrentUsers * requestsPerSecond * duration;
     if (!confirm(`This will send ~${estimated} requests to the target. Proceed?`)) return;
     try {
@@ -122,8 +152,8 @@ export default function LoadTestPage() {
       toast({ title: "Load Test Complete", description: `Sent ${response.totalRequests} requests` });
     } catch (error: any) {
       if (error.response?.data?.requiresVerification) {
+        setDomainVerified(false);
         toast({ title: "Domain Not Verified", description: error.response.data.message, variant: "destructive" });
-        navigate("/domain-verification");
       } else {
         toast({ title: "Test Failed", description: error.response?.data?.error || error.message || "Failed to perform load test", variant: "destructive" });
       }
@@ -132,6 +162,10 @@ export default function LoadTestPage() {
 
   const handleResilienceTest = async () => {
     if (!url.trim()) { toast({ title: "URL required", variant: "destructive" }); return; }
+    if (domainVerified === false) {
+      toast({ title: "Domain Not Verified", description: "Please verify domain ownership first.", variant: "destructive" });
+      return;
+    }
     try {
       setTesting(true);
       setResilienceResult(null);
@@ -139,7 +173,12 @@ export default function LoadTestPage() {
       setResilienceResult(response);
       toast({ title: "Resilience Test Complete", description: `Max concurrent users: ${response.maxConcurrentUsers}` });
     } catch (error: any) {
-      toast({ title: "Test Failed", description: error.response?.data?.error || "Failed to test resilience", variant: "destructive" });
+      if (error.response?.data?.requiresVerification) {
+        setDomainVerified(false);
+        toast({ title: "Domain Not Verified", description: error.response.data.message, variant: "destructive" });
+      } else {
+        toast({ title: "Test Failed", description: error.response?.data?.error || "Failed to test resilience", variant: "destructive" });
+      }
     } finally { setTesting(false); }
   };
 
@@ -225,6 +264,36 @@ export default function LoadTestPage() {
                         disabled={testing} placeholder="https://example.com"
                         className="input-base pl-10 font-mono text-sm" />
                     </div>
+
+                    {/* Domain verification status */}
+                    {url.trim() && !checkingDomain && domainVerified === false && (
+                      <div className="mt-3 p-3 rounded-lg flex items-start gap-3"
+                        style={{ background: "hsl(var(--destructive) / 0.08)", border: "1px solid hsl(var(--destructive) / 0.3)" }}>
+                        <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-destructive">Domain not verified</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">You must verify ownership of this domain before running load tests.</p>
+                        </div>
+                        <button onClick={() => navigate("/domain-verification")}
+                          className="text-xs font-medium shrink-0 px-3 py-1.5 rounded-lg transition-colors"
+                          style={{ background: "hsl(var(--destructive) / 0.15)", color: "hsl(var(--destructive))", border: "1px solid hsl(var(--destructive) / 0.3)" }}>
+                          Verify Domain
+                        </button>
+                      </div>
+                    )}
+                    {url.trim() && !checkingDomain && domainVerified === true && (
+                      <div className="mt-3 p-2.5 rounded-lg flex items-center gap-2"
+                        style={{ background: "hsl(var(--success) / 0.08)", border: "1px solid hsl(var(--success) / 0.25)" }}>
+                        <CheckCircle className="w-3.5 h-3.5 text-success shrink-0" />
+                        <p className="text-xs text-success font-medium">Domain verified — ready to test</p>
+                      </div>
+                    )}
+                    {url.trim() && checkingDomain && (
+                      <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Checking domain verification...
+                      </div>
+                    )}
                   </div>
 
                   {/* Test type tabs */}

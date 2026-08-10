@@ -9,6 +9,7 @@ import {
 import { PageLayout } from "@/components/PageLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { websiteScanService, PenetrationTestReport } from "@/services/websiteScan.service";
+import { ApiClient } from "@/utils/api";
 import { useToast } from "@/hooks/use-toast";
 import { API_ENDPOINTS } from "@/config/api";
 import { AuthService } from "@/services/auth.service";
@@ -48,8 +49,32 @@ export default function PenetrationTestPage() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"new" | "view">(resultId ? "view" : "new");
   const [authorized, setAuthorized] = useState(false);
+  const [domainVerified, setDomainVerified] = useState<boolean | null>(null);
+  const [checkingDomain, setCheckingDomain] = useState(false);
 
   useEffect(() => { if (resultId) loadExistingResult(resultId); }, [resultId]);
+
+  // Live domain verification check (600ms debounce)
+  useEffect(() => {
+    const check = async () => {
+      if (!url.trim() || !url.includes('.')) { setDomainVerified(null); return; }
+      try {
+        setCheckingDomain(true);
+        let hostname: string;
+        try {
+          hostname = new URL(url.startsWith('http') ? url : `https://${url}`).hostname.replace(/^www\./, '').toLowerCase();
+        } catch { setDomainVerified(false); return; }
+        const domains: any[] = await ApiClient.get('/api/website-scan/verify/domains');
+        const isVerified = Array.isArray(domains) && domains.some(
+          (d: any) => d.domain?.toLowerCase() === hostname && d.verified === true
+        );
+        setDomainVerified(isVerified);
+      } catch { setDomainVerified(false); }
+      finally { setCheckingDomain(false); }
+    };
+    const t = setTimeout(check, 600);
+    return () => clearTimeout(t);
+  }, [url]);
 
   const loadExistingResult = async (id: string) => {
     try {
@@ -89,6 +114,10 @@ export default function PenetrationTestPage() {
       toast({ title: "Authorization required", description: "Please confirm you are authorized to test this domain.", variant: "destructive" });
       return;
     }
+    if (domainVerified === false) {
+      toast({ title: "Domain Not Verified", description: "Please verify domain ownership before running penetration tests.", variant: "destructive" });
+      return;
+    }
 
     try {
       setTesting(true);
@@ -98,8 +127,8 @@ export default function PenetrationTestPage() {
       toast({ title: "Penetration Test Complete", description: `Found ${result.vulnerabilitiesFound} vulnerabilities` });
     } catch (error: any) {
       if (error.response?.data?.requiresVerification) {
+        setDomainVerified(false);
         toast({ title: "Domain Not Verified", description: error.response.data.message, variant: "destructive" });
-        navigate("/domain-verification");
       } else {
         toast({ title: "Test Failed", description: error.response?.data?.error || error.message || "Failed to perform penetration test", variant: "destructive" });
       }
@@ -214,9 +243,36 @@ export default function PenetrationTestPage() {
                         onKeyDown={e => e.key === "Enter" && handleTest()}
                       />
                     </div>
-                    <p className="text-[11px] text-muted-foreground mt-1.5">
-                      Must be a verified domain. <button onClick={() => navigate("/domain-verification")} className="text-primary hover:underline">Verify domain →</button>
-                    </p>
+
+                    {/* Domain verification status */}
+                    {url.trim() && !checkingDomain && domainVerified === false && (
+                      <div className="mt-3 p-3 rounded-lg flex items-start gap-3"
+                        style={{ background: "hsl(var(--destructive) / 0.08)", border: "1px solid hsl(var(--destructive) / 0.3)" }}>
+                        <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-destructive">Domain not verified</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">You must verify ownership before running penetration tests.</p>
+                        </div>
+                        <button onClick={() => navigate("/domain-verification")}
+                          className="text-xs font-medium shrink-0 px-3 py-1.5 rounded-lg transition-colors"
+                          style={{ background: "hsl(var(--destructive) / 0.15)", color: "hsl(var(--destructive))", border: "1px solid hsl(var(--destructive) / 0.3)" }}>
+                          Verify Domain
+                        </button>
+                      </div>
+                    )}
+                    {url.trim() && !checkingDomain && domainVerified === true && (
+                      <div className="mt-3 p-2.5 rounded-lg flex items-center gap-2"
+                        style={{ background: "hsl(142 70% 45% / 0.08)", border: "1px solid hsl(142 70% 45% / 0.25)" }}>
+                        <CheckCircle className="w-3.5 h-3.5 shrink-0" style={{ color: "hsl(142 70% 45%)" }} />
+                        <p className="text-xs font-medium" style={{ color: "hsl(142 70% 45%)" }}>Domain verified — ready to test</p>
+                      </div>
+                    )}
+                    {url.trim() && checkingDomain && (
+                      <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Checking domain verification...
+                      </div>
+                    )}
                   </div>
 
                   {/* Authorization checkbox */}
