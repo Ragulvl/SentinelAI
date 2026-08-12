@@ -161,7 +161,7 @@ const startServer = async () => {
     const port = config.port;
     // Bind to 0.0.0.0 in production or if RENDER environment variable is set
     const isProduction = config.nodeEnv === 'production' || process.env.RENDER === 'true';
-    const host = isProduction ? '0.0.0.0' : 'localhost';
+    const host = isProduction ? '0.0.0.0' : '127.0.0.1';
     
     logger.info('Binding server', { host, port, mode: isProduction ? 'production' : 'development' });
     
