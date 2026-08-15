@@ -1,6 +1,8 @@
-// In production (Vercel same-domain), VITE_API_URL is empty → relative URLs are used.
-// In local dev, falls back to http://localhost:5000.
-export const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5000';
+// In production (Vercel same-domain), VITE_API_URL should be left EMPTY in Vercel env vars.
+// Empty string → relative URLs like /api/auth/github are used (same-domain, no CORS).
+// In local dev, VITE_API_URL is not set at all → falls back to http://localhost:5000.
+const rawApiUrl = import.meta.env.VITE_API_URL;
+export const API_URL = (rawApiUrl !== undefined && rawApiUrl !== '') ? rawApiUrl : (import.meta.env.DEV ? 'http://localhost:5000' : '');
 
 export const API_BASE_URL = API_URL; // Alias for compatibility
 
