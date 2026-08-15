@@ -223,10 +223,14 @@ export class AIService {
       const prompt = this.buildAnalysisPrompt(files);
       const systemPrompt = this.getSystemPrompt();
 
+      // Groq model: llama-3.3-70b-versatile was deprecated June 2026.
+      // Replacement: openai/gpt-oss-120b (Groq's recommended production model).
+      const GROQ_MODEL = 'openai/gpt-oss-120b';
+
       const response = await axios.post(
         `${config.groq.apiUrl}/chat/completions`,
         {
-          model: 'llama-3.3-70b-versatile',
+          model: GROQ_MODEL,
           messages: [
             {
               role: 'system',
