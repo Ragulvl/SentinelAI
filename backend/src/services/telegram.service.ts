@@ -97,4 +97,23 @@ export class TelegramService {
       return null;
     }
   }
+
+  /**
+   * Long-poll Telegram for updates (local dev — no public URL needed)
+   */
+  static async getUpdates(offset: number): Promise<any[]> {
+    if (!this.token) return [];
+    try {
+      const res = await axios.get(`${TELEGRAM_API}${this.token}/getUpdates`, {
+        params: { offset, timeout: 30, allowed_updates: ['message'] },
+        timeout: 35000,
+      });
+      return res.data.result || [];
+    } catch (error: any) {
+      if (error.code !== 'ECONNABORTED' && error.code !== 'ERR_CANCELED') {
+        console.error('❌ getUpdates error:', error?.response?.data || error.message);
+      }
+      return [];
+    }
+  }
 }

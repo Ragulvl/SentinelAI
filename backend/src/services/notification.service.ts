@@ -1,6 +1,7 @@
 import webpush from 'web-push';
 import { User } from '../db/models/User.model.js';
 import { TelegramService } from './telegram.service.js';
+import { TelegramWorker } from '../workers/telegram.worker.js';
 
 interface NotificationPayload {
   title: string;
@@ -14,6 +15,7 @@ interface NotificationPayload {
 export class NotificationService {
   private static vapidPublicKey: string;
   private static vapidPrivateKey: string;
+  private static pollingActive = false;
 
   static initialize() {
     this.vapidPublicKey  = process.env.VAPID_PUBLIC_KEY  || '';
@@ -32,10 +34,16 @@ export class NotificationService {
 
     if (TelegramService.isConfigured()) {
       console.log('✅ Telegram notifications initialized');
-      // Register webhook on startup
       const backendUrl = process.env.BACKEND_URL || process.env.RENDER_EXTERNAL_URL;
       if (backendUrl) {
+        // Production: use webhook (Telegram pushes updates to our server)
         TelegramService.setWebhook(`${backendUrl}/api/telegram/webhook`).catch(() => {});
+      } else {
+        // Local dev: use polling (we pull updates from Telegram every ~1s)
+        console.log('🔄 No BACKEND_URL set — starting Telegram polling mode for local dev');
+        TelegramService.deleteWebhook().then(() => {
+          NotificationService.startPolling();
+        }).catch(() => {});
       }
     } else {
       console.warn('⚠️  Telegram bot token not configured. Telegram notifications disabled.');
@@ -48,6 +56,35 @@ export class NotificationService {
     console.log('VAPID Public Key:', vapidKeys.publicKey);
     console.log('VAPID Private Key:', vapidKeys.privateKey);
     return vapidKeys;
+  }
+
+  // ── Telegram polling (local dev mode) ─────────────────────────────────────
+
+  static startPolling() {
+    if (this.pollingActive) return;
+    this.pollingActive = true;
+    console.log('🤖 Telegram polling started — bot commands now work locally');
+
+    let offset = 0;
+    const poll = async () => {
+      if (!this.pollingActive) return;
+      try {
+        const updates = await TelegramService.getUpdates(offset);
+        for (const update of updates) {
+          offset = update.update_id + 1;
+          TelegramWorker.handleUpdate(update).catch((e: any) =>
+            console.error('Error handling update:', e.message)
+          );
+        }
+      } catch { /* ignore — loop continues */ }
+      if (this.pollingActive) setImmediate(poll);
+    };
+    poll();
+  }
+
+  static stopPolling() {
+    this.pollingActive = false;
+    console.log('🛑 Telegram polling stopped');
   }
 
   // ── Push notifications ─────────────────────────────────────────────────────

@@ -219,12 +219,14 @@ const startServer = async () => {
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received — shutting down gracefully');
   MonitoringWorker.stop();
+  NotificationService.stopPolling();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
   logger.info('SIGINT received — shutting down gracefully');
   MonitoringWorker.stop();
+  NotificationService.stopPolling();
   process.exit(0);
 });
 
