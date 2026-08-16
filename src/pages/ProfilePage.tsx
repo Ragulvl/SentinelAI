@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { User, Mail, Calendar, LogOut, Github, Shield, ExternalLink, Activity } from "lucide-react";
 import { PageLayout } from "@/components/PageLayout";
 import { PageHeader } from "@/components/PageHeader";
+import { NotificationSettings } from "@/components/NotificationSettings";
 
 const ProfilePage = () => {
   const navigate = useNavigate();
@@ -173,6 +174,15 @@ const ProfilePage = () => {
               <div className="text-[10px] text-muted-foreground">Audit an endpoint</div>
             </button>
           </div>
+        </motion.div>
+
+        {/* Notification Settings */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.18 }}
+        >
+          <NotificationSettings />
         </motion.div>
 
         {/* Danger zone */}
