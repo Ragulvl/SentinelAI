@@ -37,6 +37,22 @@ export class TelegramService {
   }
 
   /**
+   * Show "typing..." indicator — fires instantly, makes bot feel responsive
+   * Call this at the VERY start of every command handler
+   */
+  static async sendTyping(chatId: string): Promise<void> {
+    if (!this.token) return;
+    try {
+      await axios.post(`${TELEGRAM_API}${this.token}/sendChatAction`, {
+        chat_id: chatId,
+        action: 'typing',
+      });
+    } catch {
+      // non-critical — ignore failures
+    }
+  }
+
+  /**
    * Register a webhook URL so Telegram pushes updates to your server
    */
   static async setWebhook(webhookUrl: string): Promise<boolean> {
@@ -45,6 +61,7 @@ export class TelegramService {
       const res = await axios.post(`${TELEGRAM_API}${this.token}/setWebhook`, {
         url: webhookUrl,
         allowed_updates: ['message'],
+        max_connections: 40,
       });
       console.log(`✅ Telegram webhook set: ${webhookUrl}`, res.data);
       return true;

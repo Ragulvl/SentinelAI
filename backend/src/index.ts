@@ -187,6 +187,27 @@ const startServer = async () => {
       } else {
         logger.warn('Monitoring worker not started — no database connection');
       }
+
+      // Keep-warm ping — prevents Render free-tier cold starts (spins down after 15 min idle)
+      // Pings the health endpoint every 14 minutes so the bot always responds instantly
+      if (isProduction) {
+        const selfUrl = process.env.RENDER_EXTERNAL_URL || process.env.BACKEND_URL;
+        if (selfUrl) {
+          setInterval(async () => {
+            try {
+              const http = await import('http');
+              const https = await import('https');
+              const url = new URL(`${selfUrl}/health`);
+              const client = url.protocol === 'https:' ? https : http;
+              client.get(url.toString(), (res) => {
+                logger.debug('Keep-warm ping', { status: res.statusCode });
+              }).on('error', () => {});
+            } catch { /* non-critical */ }
+          }, 14 * 60 * 1000); // every 14 minutes
+          logger.info('Keep-warm ping enabled', { url: `${selfUrl}/health` });
+        }
+      }
+
     });
   } catch (error: any) {
     logger.error('Failed to start server', { error: error.message });

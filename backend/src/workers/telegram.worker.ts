@@ -36,7 +36,9 @@ export class TelegramWorker {
 
     console.log(`📨 Telegram [${chatId}]: ${text}`);
 
-    // Route commands
+    // Route commands — always fire typing indicator first for instant feedback
+    await TelegramService.sendTyping(chatId);
+
     switch (cmd) {
       case '/start':   return this.cmdStart(chatId, message.from);
       case '/help':    return this.cmdHelp(chatId);
@@ -50,6 +52,7 @@ export class TelegramWorker {
       case '/unlink':  return this.cmdUnlink(chatId);
       default:         return this.cmdUnknown(chatId);
     }
+
   }
 
   // ── /start ─────────────────────────────────────────────────────────────────
