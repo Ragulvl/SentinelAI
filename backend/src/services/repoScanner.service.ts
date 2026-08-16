@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { AIService } from './ai.service.js';
 import { Scan, IVulnerability } from '../db/models/Scan.model.js';
+import { NotificationService } from './notification.service.js';
 import crypto from 'crypto';
 
 interface FileInfo {
@@ -96,12 +97,44 @@ export class RepoScannerService {
       await this.addLog(scanId, 'info',
         `${summary.critical} critical · ${summary.high} high · ${summary.medium} medium · ${summary.low} low · ${summary.patchable} auto-patchable`
       );
+
+      // Send WhatsApp security alert
+      if (summary.total > 0) {
+        const severity = summary.critical > 0 ? '🚨 CRITICAL' : summary.high > 0 ? '⚠️ HIGH' : '🟡 MEDIUM/LOW';
+        const topIssues = allVulnerabilities
+          .filter(v => v.severity === 'critical' || v.severity === 'high')
+          .slice(0, 3)
+          .map((v, i) => `${i + 1}. [${v.severity.toUpperCase()}] ${v.title} — ${v.file}:${v.line}`)
+          .join('\n');
+
+        const whatsappMsg =
+          `${severity} — Security Scan Complete\n\n` +
+          `Repository: ${scan.repoFullName}\n` +
+          `Found: ${summary.critical} critical, ${summary.high} high, ${summary.medium} medium, ${summary.low} low\n` +
+          (topIssues ? `\nTop Issues:\n${topIssues}\n` : '') +
+          `\n👉 Fix them now: https://sentinalsec.vercel.app/results?scanId=${scanId}`;
+
+        NotificationService.sendWhatsAppNotification(scan.userId, whatsappMsg).catch(err =>
+          console.error('WhatsApp scan alert failed:', err.message)
+        );
+      } else {
+        NotificationService.sendWhatsAppNotification(
+          scan.userId,
+          `✅ Scan Complete — No vulnerabilities found in ${scan.repoFullName}! Your code is clean.`
+        ).catch(() => {});
+      }
     } catch (error: any) {
       console.error('Error scanning repository:', error);
       scan.status = 'failed';
       scan.error = error.message;
       await scan.save();
       await this.addLog(scanId, 'error', `Scan failed: ${error.message}`);
+
+      // Notify user of failure
+      NotificationService.sendWhatsAppNotification(
+        scan.userId,
+        `❌ Scan Failed for ${scan.repoFullName}\n\nError: ${error.message}\n\nPlease try again: https://sentinalsec.vercel.app`
+      ).catch(() => {});
     }
   }
 

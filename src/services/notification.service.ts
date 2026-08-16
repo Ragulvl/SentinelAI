@@ -2,10 +2,10 @@ import { API_BASE_URL } from '@/config/api';
 
 export interface NotificationPreferences {
   pushEnabled: boolean;
-  whatsappEnabled: boolean;
+  telegramEnabled: boolean;
   hasPushSubscription: boolean;
-  hasWhatsAppNumber: boolean;
-  whatsappNumber: string | null;
+  hasTelegramChatId: boolean;
+  telegramChatId: string | null;
 }
 
 class NotificationServiceClass {
@@ -142,62 +142,61 @@ class NotificationServiceClass {
     }
   }
 
-  // Save WhatsApp number
-  async saveWhatsAppNumber(phoneNumber: string): Promise<boolean> {
+  // Link Telegram — sends chat_id to backend which verifies it by messaging the user
+  async linkTelegram(chatId: string): Promise<boolean> {
     try {
       const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('Unauthorized');
-      }
+      if (!token) throw new Error('Unauthorized');
 
-      const response = await fetch(`${API_BASE_URL}/api/notifications/whatsapp/save`, {
+      const response = await fetch(`${API_BASE_URL}/api/telegram/link`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         credentials: 'include',
-        body: JSON.stringify({ phoneNumber }),
+        body: JSON.stringify({ chatId }),
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to save WhatsApp number');
+        throw new Error(error.error || 'Failed to link Telegram');
       }
 
-      console.log('WhatsApp notifications enabled');
+      console.log('Telegram notifications enabled');
       return true;
     } catch (error) {
-      console.error('Error saving WhatsApp number:', error);
+      console.error('Error linking Telegram:', error);
       throw error;
     }
   }
 
-  // Remove WhatsApp number
-  async removeWhatsAppNumber(): Promise<boolean> {
+  // Unlink Telegram
+  async unlinkTelegram(): Promise<boolean> {
     try {
       const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('Unauthorized');
-      }
+      if (!token) throw new Error('Unauthorized');
 
-      const response = await fetch(`${API_BASE_URL}/api/notifications/whatsapp/remove`, {
+      const response = await fetch(`${API_BASE_URL}/api/telegram/unlink`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
         credentials: 'include',
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to remove WhatsApp number');
-      }
-
-      console.log('WhatsApp notifications disabled');
+      if (!response.ok) throw new Error('Failed to unlink Telegram');
+      console.log('Telegram notifications disabled');
       return true;
     } catch (error) {
-      console.error('Error removing WhatsApp number:', error);
+      console.error('Error unlinking Telegram:', error);
       return false;
+    }
+  }
+
+  // Get bot status (bot username for linking)
+  async getTelegramBotStatus(): Promise<{ configured: boolean; botUsername: string | null }> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/telegram/status`);
+      if (!res.ok) return { configured: false, botUsername: null };
+      return res.json();
+    } catch {
+      return { configured: false, botUsername: null };
     }
   }
 
@@ -225,7 +224,7 @@ class NotificationServiceClass {
   // Update notification preferences
   async updatePreferences(preferences: {
     pushEnabled?: boolean;
-    whatsappEnabled?: boolean;
+    telegramEnabled?: boolean;
   }): Promise<void> {
     const token = localStorage.getItem('token');
     if (!token) {

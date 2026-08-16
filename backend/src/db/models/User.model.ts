@@ -17,8 +17,10 @@ export interface IUser extends Document {
   extra?: Record<string, any>;
   pushSubscription?: any;
   notificationsEnabled?: boolean;
-  whatsappNumber?: string;
+  whatsappNumber?: string;           // kept temporarily for migration — will be removed
   whatsappNotificationsEnabled?: boolean;
+  telegramChatId?: string;           // Telegram chat_id — set when user sends /start to the bot
+  telegramNotificationsEnabled?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -99,15 +101,19 @@ const UserSchema = new Schema<IUser>(
       type: Boolean,
       default: false,
     },
-    // WhatsApp notification settings
-    whatsappNumber: {
+    // WhatsApp (legacy — kept for existing users, will be cleaned up later)
+    whatsappNumber: { type: String, default: null },
+    whatsappNotificationsEnabled: { type: Boolean, default: false },
+    // Telegram notification settings
+    telegramChatId: {
       type: String,
       default: null,
     },
-    whatsappNotificationsEnabled: {
+    telegramNotificationsEnabled: {
       type: Boolean,
       default: false,
     },
+
   },
   {
     timestamps: true,

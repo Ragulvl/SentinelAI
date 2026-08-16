@@ -1,6 +1,6 @@
-import axios from 'axios';
 import webpush from 'web-push';
 import { User } from '../db/models/User.model.js';
+import { TelegramService } from './telegram.service.js';
 
 interface NotificationPayload {
   title: string;
@@ -11,23 +11,13 @@ interface NotificationPayload {
   url?: string;
 }
 
-interface WhatsAppMessage {
-  to: string;
-  message: string;
-}
-
 export class NotificationService {
   private static vapidPublicKey: string;
   private static vapidPrivateKey: string;
-  private static whatsappApiUrl: string;
-  private static whatsappApiKey: string;
 
   static initialize() {
-    // Initialize VAPID keys for web push
-    this.vapidPublicKey = process.env.VAPID_PUBLIC_KEY || '';
+    this.vapidPublicKey  = process.env.VAPID_PUBLIC_KEY  || '';
     this.vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || '';
-    this.whatsappApiUrl = process.env.WHATSAPP_API_URL || 'https://api.whatsapp.com/send';
-    this.whatsappApiKey = process.env.WHATSAPP_API_KEY || '';
 
     if (this.vapidPublicKey && this.vapidPrivateKey) {
       webpush.setVapidDetails(
@@ -39,6 +29,17 @@ export class NotificationService {
     } else {
       console.warn('⚠️  VAPID keys not configured. Push notifications disabled.');
     }
+
+    if (TelegramService.isConfigured()) {
+      console.log('✅ Telegram notifications initialized');
+      // Register webhook on startup
+      const backendUrl = process.env.BACKEND_URL || process.env.RENDER_EXTERNAL_URL;
+      if (backendUrl) {
+        TelegramService.setWebhook(`${backendUrl}/api/telegram/webhook`).catch(() => {});
+      }
+    } else {
+      console.warn('⚠️  Telegram bot token not configured. Telegram notifications disabled.');
+    }
   }
 
   // Generate VAPID keys (run once and save to .env)
@@ -49,17 +50,13 @@ export class NotificationService {
     return vapidKeys;
   }
 
-  // Save push subscription for a user
+  // ── Push notifications ─────────────────────────────────────────────────────
+
   static async savePushSubscription(userId: number, subscription: any) {
     try {
       await User.findOneAndUpdate(
         { githubId: userId },
-        { 
-          $set: { 
-            pushSubscription: subscription,
-            notificationsEnabled: true
-          } 
-        }
+        { $set: { pushSubscription: subscription, notificationsEnabled: true } }
       );
       console.log(`✅ Push subscription saved for user ${userId}`);
       return true;
@@ -69,209 +66,113 @@ export class NotificationService {
     }
   }
 
-  // Save WhatsApp number for a user
-  static async saveWhatsAppNumber(userId: number, phoneNumber: string) {
-    try {
-      await User.findOneAndUpdate(
-        { githubId: userId },
-        { 
-          $set: { 
-            whatsappNumber: phoneNumber,
-            whatsappNotificationsEnabled: true
-          } 
-        }
-      );
-      console.log(`✅ WhatsApp number saved for user ${userId}`);
-      return true;
-    } catch (error) {
-      console.error('Error saving WhatsApp number:', error);
-      return false;
-    }
+  static async removePushSubscription(userId: number) {
+    await User.findOneAndUpdate(
+      { githubId: userId },
+      { $unset: { pushSubscription: 1 }, $set: { notificationsEnabled: false } }
+    );
+    return true;
   }
 
-  // Send push notification to a user
   static async sendPushNotification(userId: number, payload: NotificationPayload) {
     try {
       const user = await User.findOne({ githubId: userId });
-      
-      if (!user || !user.pushSubscription || !user.notificationsEnabled) {
-        console.log(`No push subscription for user ${userId}`);
-        return false;
-      }
-
-      const notificationPayload = JSON.stringify({
-        title: payload.title,
-        body: payload.body,
-        icon: payload.icon || '/image.png',
-        badge: payload.badge || '/image.png',
-        data: payload.data || {},
-        url: payload.url || '/',
-      });
+      if (!user?.pushSubscription || !user.notificationsEnabled) return false;
 
       await webpush.sendNotification(
         user.pushSubscription,
-        notificationPayload
+        JSON.stringify({
+          title: payload.title,
+          body:  payload.body,
+          icon:  payload.icon  || '/image.png',
+          badge: payload.badge || '/image.png',
+          data:  payload.data  || {},
+          url:   payload.url   || '/',
+        })
       );
-
       console.log(`✅ Push notification sent to user ${userId}`);
       return true;
     } catch (error: any) {
       console.error('Error sending push notification:', error);
-      
-      // If subscription is invalid, remove it
       if (error.statusCode === 410) {
-        await User.findOneAndUpdate(
-          { githubId: userId },
-          { $unset: { pushSubscription: 1 } }
-        );
+        // Subscription expired — clean it up
+        await User.findOneAndUpdate({ githubId: userId }, { $unset: { pushSubscription: 1 } });
       }
-      
       return false;
     }
   }
 
-  // Send WhatsApp notification
-  static async sendWhatsAppNotification(userId: number, message: string, contentVariables?: Record<string, string>) {
+  // ── Telegram notifications ─────────────────────────────────────────────────
+
+  static async sendTelegramNotification(userId: number, message: string): Promise<boolean> {
     try {
       const user = await User.findOne({ githubId: userId });
-      
-      if (!user || !user.whatsappNumber || !user.whatsappNotificationsEnabled) {
-        console.log(`No WhatsApp number for user ${userId}`);
+      if (!user?.telegramChatId || !user.telegramNotificationsEnabled) {
+        console.log(`No Telegram chat_id for user ${userId}`);
         return false;
       }
-
-      // Using Twilio WhatsApp API
-      if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
-        const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_ACCOUNT_SID}/Messages.json`;
-        
-        // Prepare message data
-        const messageData: any = {
-          From: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
-          To: `whatsapp:${user.whatsappNumber}`,
-        };
-
-        // Use content template if available, otherwise use plain text
-        if (process.env.TWILIO_CONTENT_SID && contentVariables) {
-          messageData.ContentSid = process.env.TWILIO_CONTENT_SID;
-          messageData.ContentVariables = JSON.stringify(contentVariables);
-        } else {
-          messageData.Body = message;
-        }
-
-        const response = await axios.post(
-          twilioUrl,
-          new URLSearchParams(messageData),
-          {
-            auth: {
-              username: process.env.TWILIO_ACCOUNT_SID,
-              password: process.env.TWILIO_AUTH_TOKEN,
-            },
-          }
-        );
-
-        console.log(`✅ WhatsApp notification sent to user ${userId}`);
-        return true;
-      }
-
-      // Fallback to generic WhatsApp API
-      if (this.whatsappApiKey) {
-        await axios.post(
-          this.whatsappApiUrl,
-          {
-            phone: user.whatsappNumber,
-            message: message,
-          },
-          {
-            headers: {
-              'Authorization': `Bearer ${this.whatsappApiKey}`,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
-
-        console.log(`✅ WhatsApp notification sent to user ${userId}`);
-        return true;
-      }
-
-      console.warn('⚠️  WhatsApp API not configured');
-      return false;
-    } catch (error) {
-      console.error('Error sending WhatsApp notification:', error);
+      return await TelegramService.sendMessage(user.telegramChatId, message);
+    } catch (error: any) {
+      console.error('Error sending Telegram notification:', error.message);
       return false;
     }
   }
 
-  // Send notification through all enabled channels
+  // ── Combined send ──────────────────────────────────────────────────────────
+
   static async sendNotification(userId: number, payload: NotificationPayload, message?: string) {
-    const results = await Promise.allSettled([
+    const text = message || `${payload.title}\n\n${payload.body}`;
+    const [pushResult, telegramResult] = await Promise.allSettled([
       this.sendPushNotification(userId, payload),
-      this.sendWhatsAppNotification(userId, message || payload.body),
+      this.sendTelegramNotification(userId, text),
     ]);
 
-    const pushResult = results[0].status === 'fulfilled' && results[0].value;
-    const whatsappResult = results[1].status === 'fulfilled' && results[1].value;
+    const push     = pushResult.status     === 'fulfilled' && pushResult.value;
+    const telegram = telegramResult.status === 'fulfilled' && telegramResult.value;
 
-    return {
-      push: pushResult,
-      whatsapp: whatsappResult,
-      success: pushResult || whatsappResult,
-    };
+    return { push, telegram, success: push || telegram };
   }
 
-  // Get user notification preferences
+  // ── Preferences ────────────────────────────────────────────────────────────
+
   static async getNotificationPreferences(userId: number) {
     const user = await User.findOne({ githubId: userId });
-    
     return {
-      pushEnabled: user?.notificationsEnabled || false,
-      whatsappEnabled: user?.whatsappNotificationsEnabled || false,
+      pushEnabled:       user?.notificationsEnabled           || false,
+      telegramEnabled:   user?.telegramNotificationsEnabled   || false,
       hasPushSubscription: !!user?.pushSubscription,
-      hasWhatsAppNumber: !!user?.whatsappNumber,
-      whatsappNumber: user?.whatsappNumber || null,
+      hasTelegramChatId:   !!user?.telegramChatId,
+      telegramChatId:      user?.telegramChatId || null,
     };
   }
 
-  // Update notification preferences
   static async updateNotificationPreferences(
     userId: number,
-    preferences: {
-      pushEnabled?: boolean;
-      whatsappEnabled?: boolean;
-    }
+    preferences: { pushEnabled?: boolean; telegramEnabled?: boolean }
   ) {
-    const updateData: any = {};
-    
-    if (preferences.pushEnabled !== undefined) {
-      updateData.notificationsEnabled = preferences.pushEnabled;
-    }
-    
-    if (preferences.whatsappEnabled !== undefined) {
-      updateData.whatsappNotificationsEnabled = preferences.whatsappEnabled;
-    }
-
-    await User.findOneAndUpdate(
-      { githubId: userId },
-      { $set: updateData }
-    );
-
+    const update: any = {};
+    if (preferences.pushEnabled     !== undefined) update.notificationsEnabled         = preferences.pushEnabled;
+    if (preferences.telegramEnabled !== undefined) update.telegramNotificationsEnabled = preferences.telegramEnabled;
+    await User.findOneAndUpdate({ githubId: userId }, { $set: update });
     return true;
   }
 
-  // Remove push subscription
-  static async removePushSubscription(userId: number) {
-    await User.findOneAndUpdate(
-      { githubId: userId },
-      { $unset: { pushSubscription: 1 } }
-    );
-    return true;
+  // ── Legacy WhatsApp shim (kept for backward compat, routes to Telegram) ────
+
+  /** @deprecated Use sendTelegramNotification instead */
+  static async sendWhatsAppNotification(userId: number, message: string): Promise<boolean> {
+    return this.sendTelegramNotification(userId, message);
   }
 
-  // Remove WhatsApp number
+  /** @deprecated */
+  static async saveWhatsAppNumber(userId: number, phoneNumber: string) {
+    console.warn('saveWhatsAppNumber is deprecated — use Telegram linking instead');
+    return false;
+  }
+
+  /** @deprecated */
   static async removeWhatsAppNumber(userId: number) {
-    await User.findOneAndUpdate(
-      { githubId: userId },
-      { $unset: { whatsappNumber: 1 } }
-    );
-    return true;
+    console.warn('removeWhatsAppNumber is deprecated — use Telegram unlinking instead');
+    return false;
   }
 }

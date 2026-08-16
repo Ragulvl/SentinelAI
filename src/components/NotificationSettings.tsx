@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Bell, BellOff, MessageSquare, Send, Check, X } from "lucide-react";
+import { Bell, BellOff, Send, Check, X, ExternalLink } from "lucide-react";
 import { notificationService, NotificationPreferences } from "@/services/notification.service";
 import { toast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
@@ -7,61 +7,37 @@ import { motion, AnimatePresence } from "framer-motion";
 export const NotificationSettings = () => {
   const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [whatsappNumber, setWhatsappNumber] = useState("");
-  const [countryCode, setCountryCode] = useState("+1");
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [isEditingWhatsApp, setIsEditingWhatsApp] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [chatId, setChatId] = useState("");
+  const [isLinking, setIsLinking] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [botUsername, setBotUsername] = useState<string | null>(null);
 
   useEffect(() => {
     loadPreferences();
+    loadBotStatus();
   }, []);
+
+  const loadBotStatus = async () => {
+    const status = await notificationService.getTelegramBotStatus();
+    setBotUsername(status.botUsername);
+  };
 
   const loadPreferences = async () => {
     try {
       setIsLoading(true);
-      
-      // Check if token exists
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem("token");
       if (!token) {
-        console.log('No token found in localStorage');
         setPreferences(null);
-        toast({
-          title: "Login Required",
-          description: "Please login again to configure notifications",
-          variant: "destructive",
-        });
+        toast({ title: "Login Required", description: "Please login again to configure notifications", variant: "destructive" });
         return;
       }
-
       const prefs = await notificationService.getPreferences();
       setPreferences(prefs);
-      if (prefs.whatsappNumber) {
-        setWhatsappNumber(prefs.whatsappNumber);
-        // Parse existing number to extract country code and phone number
-        const match = prefs.whatsappNumber.match(/^(\+\d{1,4})(\d+)$/);
-        if (match) {
-          setCountryCode(match[1]);
-          setPhoneNumber(match[2]);
-        }
-      }
     } catch (error: any) {
-      console.error('Error loading preferences:', error);
-      
-      // If unauthorized, user needs to login
-      if (error.message.includes('Unauthorized') || error.message.includes('401')) {
-        toast({
-          title: "Session Expired",
-          description: "Please login again to configure notifications",
-          variant: "destructive",
-        });
+      console.error("Error loading preferences:", error);
+      if (error.message.includes("Unauthorized") || error.message.includes("401")) {
+        toast({ title: "Session Expired", description: "Please login again", variant: "destructive" });
         setPreferences(null);
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to load notification preferences",
-          variant: "destructive",
-        });
       }
     } finally {
       setIsLoading(false);
@@ -70,115 +46,65 @@ export const NotificationSettings = () => {
 
   const handleTogglePush = async () => {
     if (!preferences) return;
-
     try {
       if (preferences.pushEnabled) {
-        // Disable push
         await notificationService.unsubscribeFromPush();
         await notificationService.updatePreferences({ pushEnabled: false });
-        toast({
-          title: "Push Notifications Disabled",
-          description: "You will no longer receive push notifications",
-        });
+        toast({ title: "Push Notifications Disabled" });
       } else {
-        // Enable push
         const success = await notificationService.subscribeToPush();
         if (success) {
           await notificationService.updatePreferences({ pushEnabled: true });
-          toast({
-            title: "Push Notifications Enabled",
-            description: "You will now receive push notifications for site issues",
-          });
+          toast({ title: "Push Notifications Enabled", description: "You'll receive browser alerts for site issues" });
         } else {
-          toast({
-            title: "Failed to Enable",
-            description: "Could not enable push notifications. Please check your browser settings.",
-            variant: "destructive",
-          });
+          toast({ title: "Failed to Enable", description: "Check your browser notification settings", variant: "destructive" });
           return;
         }
       }
       await loadPreferences();
     } catch (error) {
-      console.error('Error toggling push:', error);
-      toast({
-        title: "Error",
-        description: "Failed to update push notification settings",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to update push settings", variant: "destructive" });
     }
   };
 
-  const handleSaveWhatsApp = async () => {
-    if (!phoneNumber.trim() || !/^\d+$/.test(phoneNumber)) {
-      toast({
-        title: "Invalid Number",
-        description: "Please enter a valid phone number (digits only)",
-        variant: "destructive",
-      });
+  const handleLinkTelegram = async () => {
+    if (!chatId.trim() || !/^\d+$/.test(chatId.trim())) {
+      toast({ title: "Invalid Chat ID", description: "Chat ID must be a number (e.g. 123456789)", variant: "destructive" });
       return;
     }
-
-    const fullNumber = `${countryCode}${phoneNumber}`;
-
     try {
-      setIsSaving(true);
-      await notificationService.saveWhatsAppNumber(fullNumber);
-      await notificationService.updatePreferences({ whatsappEnabled: true });
+      setIsLinking(true);
+      await notificationService.linkTelegram(chatId.trim());
       toast({
-        title: "WhatsApp Enabled",
-        description: "You will now receive WhatsApp notifications",
+        title: "✅ Telegram Linked!",
+        description: "Check Telegram — you should have received a confirmation message",
       });
-      setIsEditingWhatsApp(false);
+      setIsEditing(false);
+      setChatId("");
       await loadPreferences();
     } catch (error: any) {
-      console.error('Error saving WhatsApp:', error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to save WhatsApp number",
-        variant: "destructive",
-      });
+      toast({ title: "Failed to Link", description: error.message || "Make sure you sent /start to the bot first", variant: "destructive" });
     } finally {
-      setIsSaving(false);
+      setIsLinking(false);
     }
   };
 
-  const handleRemoveWhatsApp = async () => {
+  const handleUnlinkTelegram = async () => {
     try {
-      await notificationService.removeWhatsAppNumber();
-      await notificationService.updatePreferences({ whatsappEnabled: false });
-      setWhatsappNumber("");
-      setPhoneNumber("");
-      setCountryCode("+1");
-      toast({
-        title: "WhatsApp Disabled",
-        description: "WhatsApp notifications have been disabled",
-      });
+      await notificationService.unlinkTelegram();
+      toast({ title: "Telegram Unlinked", description: "Telegram notifications have been disabled" });
       await loadPreferences();
     } catch (error) {
-      console.error('Error removing WhatsApp:', error);
-      toast({
-        title: "Error",
-        description: "Failed to remove WhatsApp number",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to unlink Telegram", variant: "destructive" });
     }
   };
 
   const handleSendTest = async () => {
     try {
       await notificationService.sendTestNotification();
-      toast({
-        title: "Test Sent",
-        description: "Check your notifications!",
-      });
+      toast({ title: "Test Sent!", description: "Check your Telegram and browser notifications" });
     } catch (error) {
-      console.error('Error sending test:', error);
-      toast({
-        title: "Error",
-        description: "Failed to send test notification",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to send test notification", variant: "destructive" });
     }
   };
 
@@ -199,12 +125,12 @@ export const NotificationSettings = () => {
       <div className="bg-card border border-border rounded-lg p-6 text-center">
         <Bell className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
         <h3 className="text-sm font-medium text-foreground mb-2">Login Required</h3>
-        <p className="text-xs text-muted-foreground">
-          Please login to configure notification settings
-        </p>
+        <p className="text-xs text-muted-foreground">Please login to configure notification settings</p>
       </div>
     );
   }
+
+  const telegramBotLink = botUsername ? `https://t.me/${botUsername}` : "https://t.me/";
 
   return (
     <div className="bg-card border border-border rounded-lg p-6 space-y-6">
@@ -229,7 +155,7 @@ export const NotificationSettings = () => {
               <BellOff className="w-5 h-5 text-muted-foreground" />
             )}
             <div>
-              <div className="text-sm font-medium text-foreground">Push Notifications</div>
+              <div className="text-sm font-medium text-foreground">Browser Push Notifications</div>
               <div className="text-xs text-muted-foreground">
                 {preferences.pushEnabled ? "Enabled" : "Disabled"}
               </div>
@@ -248,138 +174,114 @@ export const NotificationSettings = () => {
             />
           </button>
         </div>
-        {!preferences.hasPushSubscription && !preferences.pushEnabled && (
-          <p className="text-xs text-muted-foreground pl-8">
-            Enable to receive browser notifications when your sites go down
-          </p>
-        )}
       </div>
 
-      {/* WhatsApp Notifications */}
+      {/* Telegram Notifications */}
       <div className="space-y-3 pt-3 border-t border-border">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <MessageSquare className={`w-5 h-5 ${preferences.whatsappEnabled ? "text-green-500" : "text-muted-foreground"}`} />
+            {/* Telegram logo icon */}
+            <svg
+              className={`w-5 h-5 ${preferences.telegramEnabled ? "text-[#2AABEE]" : "text-muted-foreground"}`}
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            >
+              <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.248-1.97 9.289c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L7.48 13.801l-2.95-.924c-.642-.2-.654-.642.136-.953l11.527-4.444c.537-.194 1.006.131.37.768z" />
+            </svg>
             <div>
-              <div className="text-sm font-medium text-foreground">WhatsApp Notifications</div>
+              <div className="text-sm font-medium text-foreground">Telegram Notifications</div>
               <div className="text-xs text-muted-foreground">
-                {preferences.hasWhatsAppNumber ? preferences.whatsappNumber : "Not configured"}
+                {preferences.hasTelegramChatId
+                  ? `Connected • Chat ID: ${preferences.telegramChatId}`
+                  : "Not connected"}
               </div>
             </div>
           </div>
-          {preferences.hasWhatsAppNumber && !isEditingWhatsApp && (
+          {preferences.hasTelegramChatId && !isEditing && (
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setIsEditingWhatsApp(true)}
-                className="text-xs text-primary hover:underline"
-              >
-                Edit
+              <button onClick={() => setIsEditing(true)} className="text-xs text-primary hover:underline">
+                Change
               </button>
-              <button
-                onClick={handleRemoveWhatsApp}
-                className="text-xs text-destructive hover:underline"
-              >
-                Remove
+              <button onClick={handleUnlinkTelegram} className="text-xs text-destructive hover:underline">
+                Unlink
               </button>
             </div>
           )}
         </div>
 
         <AnimatePresence>
-          {(!preferences.hasWhatsAppNumber || isEditingWhatsApp) && (
+          {(!preferences.hasTelegramChatId || isEditing) && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              className="pl-8 space-y-2"
+              className="pl-8 space-y-3"
             >
+              {/* Step-by-step instructions */}
+              <div className="rounded-md bg-secondary/50 border border-border p-3 space-y-2 text-xs text-muted-foreground">
+                <p className="font-medium text-foreground">How to connect Telegram:</p>
+                <ol className="space-y-1 list-decimal pl-4">
+                  <li>
+                    Open{" "}
+                    <a
+                      href={telegramBotLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#2AABEE] hover:underline inline-flex items-center gap-1"
+                    >
+                      {botUsername ? `@${botUsername}` : "the SentinelAI bot"}
+                      <ExternalLink className="w-3 h-3" />
+                    </a>{" "}
+                    on Telegram
+                  </li>
+                  <li>Send <code className="bg-secondary px-1 rounded">/start</code> to the bot</li>
+                  <li>The bot will reply with your <strong>Chat ID</strong></li>
+                  <li>Paste it below and click ✓</li>
+                </ol>
+              </div>
+
               <div className="flex gap-2">
-                <select
-                  value={countryCode}
-                  onChange={(e) => setCountryCode(e.target.value)}
-                  className="px-3 py-2 rounded-md bg-secondary border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 text-sm font-mono"
-                >
-                  <option value="+1">🇺🇸 +1</option>
-                  <option value="+44">🇬🇧 +44</option>
-                  <option value="+91">🇮🇳 +91</option>
-                  <option value="+86">🇨🇳 +86</option>
-                  <option value="+81">🇯🇵 +81</option>
-                  <option value="+49">🇩🇪 +49</option>
-                  <option value="+33">🇫🇷 +33</option>
-                  <option value="+39">🇮🇹 +39</option>
-                  <option value="+34">🇪🇸 +34</option>
-                  <option value="+7">🇷🇺 +7</option>
-                  <option value="+55">🇧🇷 +55</option>
-                  <option value="+52">🇲🇽 +52</option>
-                  <option value="+61">🇦🇺 +61</option>
-                  <option value="+82">🇰🇷 +82</option>
-                  <option value="+62">🇮🇩 +62</option>
-                  <option value="+63">🇵🇭 +63</option>
-                  <option value="+66">🇹🇭 +66</option>
-                  <option value="+84">🇻🇳 +84</option>
-                  <option value="+60">🇲🇾 +60</option>
-                  <option value="+65">🇸🇬 +65</option>
-                  <option value="+971">🇦🇪 +971</option>
-                  <option value="+966">🇸🇦 +966</option>
-                  <option value="+27">🇿🇦 +27</option>
-                  <option value="+234">🇳🇬 +234</option>
-                  <option value="+20">🇪🇬 +20</option>
-                  <option value="+92">🇵🇰 +92</option>
-                  <option value="+880">🇧🇩 +880</option>
-                  <option value="+90">🇹🇷 +90</option>
-                  <option value="+98">🇮🇷 +98</option>
-                  <option value="+64">🇳🇿 +64</option>
-                </select>
                 <input
-                  type="tel"
-                  value={phoneNumber}
-                  onChange={(e) => {
-                    const value = e.target.value.replace(/\D/g, '');
-                    setPhoneNumber(value);
-                  }}
-                  placeholder="1234567890"
-                  className="flex-1 px-3 py-2 rounded-md bg-secondary border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 text-sm font-mono"
+                  type="text"
+                  value={chatId}
+                  onChange={(e) => setChatId(e.target.value.replace(/\D/g, ""))}
+                  placeholder="Your Telegram Chat ID (e.g. 123456789)"
+                  className="flex-1 px-3 py-2 rounded-md bg-secondary border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#2AABEE]/50 text-sm font-mono"
                 />
                 <button
-                  onClick={handleSaveWhatsApp}
-                  disabled={isSaving}
-                  className="px-3 py-2 rounded-md bg-primary text-black hover:opacity-90 transition-opacity disabled:opacity-50"
+                  onClick={handleLinkTelegram}
+                  disabled={isLinking || !chatId.trim()}
+                  className="px-3 py-2 rounded-md bg-[#2AABEE] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
                 >
-                  <Check className="w-4 h-4" />
+                  {isLinking ? (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4" />
+                  )}
                 </button>
-                {isEditingWhatsApp && (
+                {isEditing && (
                   <button
-                    onClick={() => {
-                      setIsEditingWhatsApp(false);
-                      const match = preferences.whatsappNumber?.match(/^(\+\d{1,4})(\d+)$/);
-                      if (match) {
-                        setCountryCode(match[1]);
-                        setPhoneNumber(match[2]);
-                      }
-                    }}
+                    onClick={() => { setIsEditing(false); setChatId(""); }}
                     className="px-3 py-2 rounded-md border border-border text-foreground hover:bg-secondary transition-colors"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">
-                Select your country code and enter your phone number (digits only)
-              </p>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
+      {/* What triggers notifications */}
       <div className="pt-3 border-t border-border">
-        <p className="text-xs text-muted-foreground">
-          You'll receive notifications when:
-        </p>
+        <p className="text-xs text-muted-foreground">You'll receive alerts when:</p>
         <ul className="text-xs text-muted-foreground space-y-1 mt-2 pl-4">
-          <li>• A monitored site goes down</li>
-          <li>• A site becomes degraded (slow response)</li>
-          <li>• A site recovers from downtime</li>
-          <li>• SSL certificate is expiring soon</li>
+          <li>• 🚨 Security vulnerabilities found in a scan</li>
+          <li>• ⬇️ A monitored site goes down</li>
+          <li>• ⚠️ A site becomes degraded (slow response)</li>
+          <li>• ✅ A site recovers from downtime</li>
+          <li>• 🔒 SSL certificate is expiring soon</li>
         </ul>
       </div>
     </div>

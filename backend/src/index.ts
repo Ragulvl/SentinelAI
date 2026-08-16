@@ -19,9 +19,8 @@ import websiteScanRoutes from './routes/websiteScan.routes.js';
 import sandboxScanRoutes from './routes/sandboxScan.routes.js';
 import historyRoutes from './routes/history.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
-import whatsappRoutes from './routes/whatsapp.routes.js';
+import telegramRoutes from './routes/telegram.routes.js';
 import { MonitoringWorker } from './workers/monitoring.worker.js';
-import { WhatsAppWorker } from './workers/whatsapp.worker.js';
 import { NotificationService } from './services/notification.service.js';
 
 const app = express();
@@ -124,7 +123,7 @@ app.use('/api/website-scan', apiLimiter,  websiteScanRoutes);
 app.use('/api/sandbox',      apiLimiter,  sandboxScanRoutes);
 app.use('/api/history',      apiLimiter,  historyRoutes);
 app.use('/api/notifications', apiLimiter, notificationRoutes);
-app.use('/api/whatsapp',     apiLimiter,  whatsappRoutes);
+app.use('/api/telegram',      apiLimiter, telegramRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -177,12 +176,13 @@ const startServer = async () => {
       // Start monitoring worker only if DB is connected
       if (mongoose.connection.readyState === 1) {
         MonitoringWorker.start();
-        
-        // Start WhatsApp worker if Twilio is configured
-        if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
-          WhatsAppWorker.start();
+
+        // Telegram bot starts automatically when TELEGRAM_BOT_TOKEN is set
+        // (webhook is registered inside NotificationService.initialize())
+        if (process.env.TELEGRAM_BOT_TOKEN) {
+          logger.info('✅ Telegram bot active');
         } else {
-          logger.warn('WhatsApp worker not started — Twilio not configured');
+          logger.warn('Telegram bot not started — TELEGRAM_BOT_TOKEN not configured');
         }
       } else {
         logger.warn('Monitoring worker not started — no database connection');
@@ -198,14 +198,12 @@ const startServer = async () => {
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received — shutting down gracefully');
   MonitoringWorker.stop();
-  WhatsAppWorker.stop();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
   logger.info('SIGINT received — shutting down gracefully');
   MonitoringWorker.stop();
-  WhatsAppWorker.stop();
   process.exit(0);
 });
 
