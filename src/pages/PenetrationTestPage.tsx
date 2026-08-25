@@ -209,7 +209,6 @@ export default function PenetrationTestPage() {
 
       const TEST_NAMES = Object.keys(TEST_SCRIPTS);
       const msPerTest = Math.floor(140000 / TEST_NAMES.length);
-      let animDone = false;
 
       const animateTests = async () => {
         await new Promise(r => setTimeout(r, 800));
@@ -221,7 +220,7 @@ export default function PenetrationTestPage() {
         setLivePhase('Running 44 security tests + AI analysis...');
         addLine('', 'hsl(0 0% 30%)');
 
-        for (let i = 0; i < TEST_NAMES.length && !animDone; i++) {
+        for (let i = 0; i < TEST_NAMES.length; i++) {
           const name = TEST_NAMES[i];
           const isAI = name.startsWith('[AI]');
           const num = `[${String(i + 1).padStart(2, '0')}/${TEST_NAMES.length}]`;
@@ -230,7 +229,6 @@ export default function PenetrationTestPage() {
           const lines = TEST_SCRIPTS[name]?.(baseUrl) || [];
           const lineDelay = Math.max(120, Math.floor(msPerTest / (lines.length + 2)));
           for (const [text, color] of lines) {
-            if (animDone) break;
             await new Promise(r => setTimeout(r, lineDelay));
             addLine(text as string, color as string, true);
             scrollTerm();
@@ -243,10 +241,11 @@ export default function PenetrationTestPage() {
         }
       };
 
-      animateTests();
-
-      const result = await realTestPromise;
-      animDone = true;
+      // Run animation and real test in parallel, wait for BOTH
+      const [, result] = await Promise.all([
+        animateTests(),
+        realTestPromise,
+      ]);
 
       // Rebuild terminal with real results
       setLivePhase('Complete ✓');
