@@ -4,7 +4,11 @@ import { authMiddleware } from '../middleware/auth.middleware.js';
 
 const router = Router();
 
-// All routes require authentication
+// SSE streaming pentest — must be BEFORE authMiddleware because
+// EventSource cannot send Authorization headers; auth is done via ?token= query param
+router.get('/pentest/stream', WebsiteScanController.penetrationTestStream);
+
+// All routes below require authentication via Authorization header
 router.use(authMiddleware);
 
 // CWE-20: Domain presence validation middleware
@@ -31,9 +35,6 @@ router.post('/scan', WebsiteScanController.scanWebsite);
 
 // Penetration testing (requires verified domain) - ACTIVE ATTACK MODE
 router.post('/pentest', WebsiteScanController.penetrationTest);
-
-// SSE streaming pentest — real-time results as each test completes
-router.get('/pentest/stream', WebsiteScanController.penetrationTestStream);
 
 // Load testing (requires verified domain) - STRESS TESTING
 router.post('/loadtest', WebsiteScanController.loadTest);
