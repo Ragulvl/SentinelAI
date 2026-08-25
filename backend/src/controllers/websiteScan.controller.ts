@@ -1,9 +1,11 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { WebsiteScannerService } from '../services/websiteScanner.service.js';
 import { PenetrationTestingService } from '../services/penetrationTesting.service.js';
+import type { PentestProgressEvent } from '../services/penetrationTesting.service.js';
 import { WebsiteScan } from '../db/models/WebsiteScan.model.js';
 import { DomainVerificationService } from '../services/domainVerification.service.js';
 import '../types/auth.js';
+import jwt from 'jsonwebtoken';
 
 export class WebsiteScanController {
   static async scanWebsite(req: Request, res: Response) {
@@ -135,6 +137,96 @@ export class WebsiteScanController {
         error: error.message || 'Failed to perform penetration test',
         details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
+    }
+  }
+
+  // SSE streaming pentest — sends events as each test completes
+  static async penetrationTestStream(req: Request, res: Response) {
+    // Auth via ?token= query param (EventSource can't set Authorization header)
+    const tokenParam = req.query.token as string | undefined;
+    if (!tokenParam) return res.status(401).end();
+
+    let userId: string;
+    try {
+      const secret = process.env.JWT_SECRET || 'fallback-secret';
+      const payload = jwt.verify(tokenParam, secret) as any;
+      userId = payload.userId;
+    } catch {
+      return res.status(401).end();
+    }
+
+    const url = req.query.url as string | undefined;
+    const credentialsRaw = req.query.credentials as string | undefined;
+    if (!url) return res.status(400).json({ error: 'URL required' });
+
+    // Domain verification
+    const isVerified = await DomainVerificationService.isDomainVerified(userId as any, url);
+    if (!isVerified) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.write(`event: error\ndata: ${JSON.stringify({ message: 'Domain not verified' })}\n\n`);
+      return res.end();
+    }
+
+    // Set SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // disable nginx buffering
+    res.flushHeaders();
+
+    const send = (event: string, data: any) => {
+      try {
+        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+        if ((res as any).flush) (res as any).flush(); // express-compression compat
+      } catch { /* client disconnected */ }
+    };
+
+    send('connected', { message: 'Stream connected' });
+
+    let credentials: any;
+    try { credentials = credentialsRaw ? JSON.parse(decodeURIComponent(credentialsRaw)) : undefined; } catch { /* ignore */ }
+
+    let finalReport: any;
+    const onProgress = (event: PentestProgressEvent) => {
+      if (event.type === 'phase') send('phase', event);
+      else if (event.type === 'test_start') send('test_start', event);
+      else if (event.type === 'test_result') send('test_result', event);
+      else if (event.type === 'ai_finding') send('ai_finding', event);
+      else if (event.type === 'done') { finalReport = event.report; send('done', event); }
+    };
+
+    try {
+      const testResult = await PenetrationTestingService.performPenetrationTest(url, credentials, onProgress);
+      send('done', { report: testResult });
+
+      // Save to DB
+      try {
+        const { PenetrationTest } = await import('../db/models/PenetrationTest.model.js');
+        const savedTest = await (PenetrationTest as any).create({
+          userId, url: testResult.url, testDate: testResult.testDate,
+          results: testResult.results.map((r: any) => ({
+            testName: r.testName, category: r.category, passed: !r.vulnerable,
+            severity: r.severity, description: r.description,
+            evidence: r.evidence, payload: r.payload, recommendation: r.recommendation,
+          })),
+          summary: {
+            totalTests: testResult.testsPerformed,
+            passed: testResult.testsPerformed - testResult.vulnerabilitiesFound,
+            failed: testResult.vulnerabilitiesFound,
+            critical: testResult.results.filter((r: any) => r.vulnerable && r.severity === 'critical').length,
+            high: testResult.results.filter((r: any) => r.vulnerable && r.severity === 'high').length,
+            medium: testResult.results.filter((r: any) => r.vulnerable && r.severity === 'medium').length,
+            low: testResult.results.filter((r: any) => r.vulnerable && r.severity === 'low').length,
+          },
+        });
+        send('saved', { id: (savedTest as any)._id.toString() });
+      } catch (dbErr: any) {
+        console.warn('SSE pentest DB save failed:', dbErr.message);
+      }
+    } catch (err: any) {
+      send('error', { message: err.message || 'Penetration test failed' });
+    } finally {
+      res.end();
     }
   }
 

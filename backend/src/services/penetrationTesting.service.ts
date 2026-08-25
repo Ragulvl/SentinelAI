@@ -28,6 +28,13 @@ export interface AttackChain {
   impact: string;
 }
 
+export type PentestProgressEvent =
+  | { type: 'phase'; phase: number; message: string }
+  | { type: 'test_start'; name: string }
+  | { type: 'test_result'; results: PenetrationTestResult[] }
+  | { type: 'ai_finding'; result: PenetrationTestResult }
+  | { type: 'done'; report: PenetrationTestReport };
+
 export interface PenetrationTestReport {
   url: string;
   testDate: Date;
@@ -516,7 +523,8 @@ export class PenetrationTestingService {
 
   static async performPenetrationTest(
     url: string,
-    credentials?: ScanCredentials
+    credentials?: ScanCredentials,
+    onProgress?: (event: PentestProgressEvent) => void
   ): Promise<PenetrationTestReport> {
     const normalizedUrl = url.startsWith('http') ? url : `https://${url}`;
     const results: PenetrationTestResult[] = [];
@@ -539,17 +547,20 @@ export class PenetrationTestingService {
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 
     // Step 1: Crawl to build real attack surface
+    onProgress?.({ type: 'phase', phase: 1, message: 'Crawling attack surface...' });
     console.log(`[Pentest] Phase 1: Crawling attack surface...`);
     let surface: AttackSurface;
     try {
       surface = await this.crawlTarget(normalizedUrl, probeLog, ctx);
+      onProgress?.({ type: 'phase', phase: 1, message: `Crawl complete — ${surface.pages.length} page(s), ${surface.forms.length} form(s), ${surface.apiEndpoints.length} endpoint(s) found` });
     } catch (err: any) {
       console.error(`[Pentest] Crawl failed: ${err.message}`);
       surface = { pages: [normalizedUrl], forms: [], apiEndpoints: [], queryParams: [] };
     }
 
     // Step 2: Run all tests with the discovered surface
-    console.log(`[Pentest] Phase 2: Running ${43} attack tests...`);
+    onProgress?.({ type: 'phase', phase: 2, message: `Running attack tests...` });
+    console.log(`[Pentest] Phase 2: Running attack tests...`);
 
     const tests = [
       // Injection tests
@@ -616,13 +627,15 @@ export class PenetrationTestingService {
       const batchResults = await Promise.allSettled(
         batch.map(async (test) => {
           try {
+            onProgress?.({ type: 'test_start', name: test.name });
             console.log(`  - ${test.name}`);
             const r = await test.fn();
-            console.log(`  âœ“ ${test.name}`);
+            console.log(`  \u2713 ${test.name}`);
+            onProgress?.({ type: 'test_result', results: r });
             return r;
           } catch (error: any) {
-            console.error(`  âœ— ${test.name}: ${error.message}`);
-            return [{
+            console.error(`  \u2717 ${test.name}: ${error.message}`);
+            const errResult = [{
               testName: test.name,
               category: 'Error',
               severity: 'info' as const,
@@ -630,6 +643,8 @@ export class PenetrationTestingService {
               description: `Test could not complete: ${error.message}`,
               recommendation: 'Manual testing recommended.',
             }];
+            onProgress?.({ type: 'test_result', results: errResult });
+            return errResult;
           }
         })
       );

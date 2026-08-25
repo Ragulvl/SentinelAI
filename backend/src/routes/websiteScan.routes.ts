@@ -32,6 +32,9 @@ router.post('/scan', WebsiteScanController.scanWebsite);
 // Penetration testing (requires verified domain) - ACTIVE ATTACK MODE
 router.post('/pentest', WebsiteScanController.penetrationTest);
 
+// SSE streaming pentest — real-time results as each test completes
+router.get('/pentest/stream', WebsiteScanController.penetrationTestStream);
+
 // Load testing (requires verified domain) - STRESS TESTING
 router.post('/loadtest', WebsiteScanController.loadTest);
 

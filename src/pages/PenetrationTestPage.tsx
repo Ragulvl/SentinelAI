@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -54,6 +54,13 @@ export default function PenetrationTestPage() {
   const [verifiedDomainsList, setVerifiedDomainsList] = useState<string[]>([]);
   const [expandedFixes, setExpandedFixes] = useState<Set<number>>(new Set());
   const toggleFix = (i: number) => setExpandedFixes(prev => { const s = new Set(prev); s.has(i) ? s.delete(i) : s.add(i); return s; });
+
+  // Live terminal state
+  type LiveRow = { name: string; status: 'running' | 'done' | 'pending'; results?: any[]; time?: number; startedAt?: number };
+  const [liveRows, setLiveRows] = useState<LiveRow[]>([]);
+  const [livePhase, setLivePhase] = useState('');
+  const [liveStats, setLiveStats] = useState({ vulns: 0, passed: 0, total: 0 });
+  const terminalRef = useRef<HTMLDivElement>(null);
 
   // Authenticated scan state
   const [authEnabled, setAuthEnabled] = useState(false);
@@ -137,29 +144,80 @@ export default function PenetrationTestPage() {
     try {
       setTesting(true);
       setReport(null);
+      setLiveRows([]);
+      setLivePhase('Initializing...');
+      setLiveStats({ vulns: 0, passed: 0, total: 0 });
 
-      // Build credentials object if auth toggle is on
       const credentials = authEnabled
         ? authMode === "token"
           ? { token: authToken.trim() || undefined }
-          : {
-              username: authUsername.trim() || undefined,
-              password: authPassword || undefined,
-              loginUrl: authLoginUrl.trim() || undefined,
-            }
+          : { username: authUsername.trim() || undefined, password: authPassword || undefined, loginUrl: authLoginUrl.trim() || undefined }
         : undefined;
 
-      const result = await websiteScanService.performPenetrationTest(url, credentials);
-      setReport(result);
-      toast({ title: "Penetration Test Complete", description: `Found ${result.vulnerabilitiesFound} vulnerabilities` });
+      const token = AuthService.getToken();
+      const baseUrl = API_ENDPOINTS.webscan.pentest.replace('/pentest', '');
+      const streamUrl = `${baseUrl}/pentest/stream?token=${encodeURIComponent(token || '')}&url=${encodeURIComponent(url)}${credentials ? `&credentials=${encodeURIComponent(JSON.stringify(credentials))}` : ''}`;
+
+      const es = new EventSource(streamUrl);
+
+      es.addEventListener('phase', (e: any) => {
+        const d = JSON.parse(e.data);
+        setLivePhase(d.message);
+      });
+
+      es.addEventListener('test_start', (e: any) => {
+        const d = JSON.parse(e.data);
+        setLiveRows(prev => {
+          if (prev.some(r => r.name === d.name)) return prev;
+          return [...prev, { name: d.name, status: 'running', startedAt: Date.now() }];
+        });
+        // Auto scroll
+        setTimeout(() => terminalRef.current?.scrollTo({ top: 99999, behavior: 'smooth' }), 50);
+      });
+
+      es.addEventListener('test_result', (e: any) => {
+        const d = JSON.parse(e.data);
+        const newResults: any[] = d.results || [];
+        const firstName = newResults[0]?.testName || '';
+        const elapsed = Date.now();
+        setLiveRows(prev => prev.map(r =>
+          r.name === firstName.replace('[AI] ', '') ? { ...r, status: 'done', results: newResults, time: Date.now() - (r.startedAt || elapsed) } : r
+        ));
+        setLiveStats(prev => ({
+          vulns: prev.vulns + newResults.filter((r: any) => r.vulnerable).length,
+          passed: prev.passed + newResults.filter((r: any) => !r.vulnerable).length,
+          total: prev.total + newResults.length,
+        }));
+      });
+
+      es.addEventListener('ai_finding', (e: any) => {
+        const d = JSON.parse(e.data);
+        setLiveRows(prev => [...prev, { name: `[AI] ${d.result.testName}`, status: 'done', results: [d.result] }]);
+      });
+
+      es.addEventListener('done', (e: any) => {
+        const d = JSON.parse(e.data);
+        if (d.report) setReport(d.report);
+        setLivePhase('Complete');
+        es.close();
+        setTesting(false);
+        toast({ title: "Penetration Test Complete", description: `Found ${d.report?.vulnerabilitiesFound ?? 0} vulnerabilities` });
+      });
+
+      es.addEventListener('error', (e: any) => {
+        try {
+          const d = JSON.parse((e as any).data || '{}');
+          toast({ title: "Test Failed", description: d.message || "Connection error", variant: "destructive" });
+        } catch {
+          if (es.readyState === EventSource.CLOSED) {
+            toast({ title: "Test Failed", description: "Connection lost", variant: "destructive" });
+          }
+        }
+        es.close();
+        setTesting(false);
+      });
     } catch (error: any) {
-      if (error.response?.data?.requiresVerification) {
-        setDomainVerified(false);
-        toast({ title: "Domain Not Verified", description: error.response.data.message, variant: "destructive" });
-      } else {
-        toast({ title: "Test Failed", description: error.response?.data?.error || error.message || "Failed to perform penetration test", variant: "destructive" });
-      }
-    } finally {
+      toast({ title: "Test Failed", description: error.message || "Failed to start penetration test", variant: "destructive" });
       setTesting(false);
     }
   };
@@ -399,21 +457,75 @@ export default function PenetrationTestPage() {
                     </button>
                   </div>
 
-                  {testing && (
+                  {testing && liveRows.length > 0 && (
+                    <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+                      className="rounded-xl overflow-hidden"
+                      style={{ border: "1px solid hsl(0 84% 60% / 0.25)" }}>
+                      {/* Terminal header */}
+                      <div className="flex items-center gap-2 px-3 py-2" style={{ background: "hsl(0 0% 8%)" }}>
+                        <div className="flex gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-red-500"/><div className="w-2.5 h-2.5 rounded-full bg-yellow-500"/><div className="w-2.5 h-2.5 rounded-full bg-green-500"/></div>
+                        <span className="text-[10px] font-mono text-gray-400 ml-1">sentinel-pentest — {url}</span>
+                        <div className="ml-auto flex items-center gap-1.5">
+                          <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"/>
+                          <span className="text-[10px] font-mono text-gray-400">LIVE</span>
+                        </div>
+                      </div>
+                      {/* Phase indicator */}
+                      <div className="px-3 py-1.5 font-mono text-[10px]" style={{ background: "hsl(0 0% 6%)", color: "hsl(145 60% 55%)" }}>
+                        $ {livePhase}
+                      </div>
+                      {/* Test rows */}
+                      <div ref={terminalRef} className="overflow-y-auto font-mono text-[11px]" style={{ background: "hsl(0 0% 7%)", maxHeight: "260px" }}>
+                        {liveRows.map((row, i) => {
+                          const isVuln = row.results?.some((r: any) => r.vulnerable);
+                          const isAI = row.name.startsWith('[AI]');
+                          return (
+                            <motion.div key={i} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }}
+                              className="flex items-center gap-3 px-3 py-1 border-b"
+                              style={{ borderColor: "hsl(0 0% 12%)" }}>
+                              {/* Status icon */}
+                              <span className="w-4 shrink-0 text-center">
+                                {row.status === 'running' ? <Loader2 className="w-3 h-3 animate-spin inline" style={{ color: "hsl(210 80% 65%)" }}/> :
+                                 isVuln ? <span style={{ color: "#ef4444" }}>✗</span> :
+                                 <span style={{ color: "hsl(145 60% 55%)" }}>✓</span>}
+                              </span>
+                              {/* Test name */}
+                              <span style={{ color: row.status === 'running' ? "hsl(210 80% 75%)" : isVuln ? "#ef4444" : "hsl(0 0% 75%)", minWidth: 0 }} className="truncate flex-1">
+                                {row.name.replace('[AI] ', '')}
+                                {isAI && <span className="ml-1.5 text-[9px] px-1 py-0.5 rounded" style={{ background: "hsl(280 84% 60% / 0.2)", color: "hsl(280 84% 70%)" }}>AI</span>}
+                              </span>
+                              {/* Severity badge */}
+                              {row.status === 'done' && isVuln && (
+                                <span className="text-[9px] shrink-0 px-1.5 py-0.5 rounded font-bold"
+                                  style={{ background: "hsl(0 84% 60% / 0.2)", color: "#ef4444" }}>
+                                  {row.results?.find((r: any) => r.vulnerable)?.severity?.toUpperCase()}
+                                </span>
+                              )}
+                              {/* Time */}
+                              {row.time !== undefined && (
+                                <span className="text-[9px] shrink-0" style={{ color: "hsl(0 0% 35%)" }}>{row.time}ms</span>
+                              )}
+                              {row.status === 'running' && (
+                                <span className="text-[9px] shrink-0" style={{ color: "hsl(210 80% 55%)" }}>testing...</span>
+                              )}
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                      {/* Stats bar */}
+                      <div className="flex items-center gap-4 px-3 py-2 text-[10px] font-mono" style={{ background: "hsl(0 0% 8%)" }}>
+                        <span style={{ color: "hsl(145 60% 55%)" }}>✓ {liveStats.passed} passed</span>
+                        <span style={{ color: "#ef4444" }}>✗ {liveStats.vulns} vuln{liveStats.vulns !== 1 ? 's' : ''}</span>
+                        <span style={{ color: "hsl(0 0% 45%)" }}>{liveStats.total} / ~44 tests</span>
+                      </div>
+                    </motion.div>
+                  )}
+                  {testing && liveRows.length === 0 && (
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                      className="p-4 rounded-xl space-y-2"
-                      style={{ background: "hsl(0 84% 60% / 0.05)", border: "1px solid hsl(0 84% 60% / 0.15)" }}>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
-                        <span className="text-xs font-medium text-foreground">Running AI-powered penetration tests...</span>
-                      </div>
-                      <p className="text-[11px] text-muted-foreground">Running 42 security tests + AI bundle analysis, endpoint discovery, and vulnerability chaining. This may take 2-4 minutes.</p>
-                      <div className="h-1 rounded-full overflow-hidden mt-2" style={{ background: "hsl(var(--muted))" }}>
-                        <motion.div className="h-full rounded-full"
-                          style={{ background: "hsl(0 84% 60%)" }}
-                          animate={{ width: ["10%", "85%"] }}
-                          transition={{ duration: 220, ease: "linear" }} />
-                      </div>
+                      className="p-3 rounded-xl font-mono text-[11px] flex items-center gap-2"
+                      style={{ background: "hsl(0 0% 7%)", border: "1px solid hsl(0 84% 60% / 0.15)", color: "hsl(145 60% 55%)" }}>
+                      <Loader2 className="w-3 h-3 animate-spin shrink-0"/>
+                      <span>Connecting to scan engine...</span>
                     </motion.div>
                   )}
                 </div>
