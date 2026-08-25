@@ -15,6 +15,33 @@ export interface AIAnalysisResult {
   }>;
 }
 
+/** One HTTP request/response pair collected during penetration testing, sent to the LLM for analysis. */
+export interface PentestProbe {
+  targetUrl: string;
+  method: 'GET' | 'POST';
+  source: string;              // e.g. 'form field "email"', 'URL param "id"', 'API endpoint'
+  parameter?: string;          // the specific parameter injected
+  payload?: string;            // the payload that was injected
+  baselineStatus?: number;
+  baselineBodyLen?: number;
+  baselineTimeMs?: number;
+  responseStatus: number;
+  responseTimeMs: number;
+  responseHeaders: Record<string, string>;
+  responseBodySnippet: string; // first 1500 chars of response body
+}
+
+/** A finding returned by the LLM pentest analysis. */
+export interface PentestLLMFinding {
+  testName: string;
+  category: string;
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
+  vulnerable: boolean;
+  description: string;
+  evidence?: string;
+  recommendation: string;
+}
+
 interface APIKeyRotator {
   keys: string[];
   currentIndex: number;
@@ -36,6 +63,7 @@ export class AIService {
     lastUsed: new Map(),
     failureCount: new Map(),
   };
+
 
   private static readonly MAX_FAILURES_BEFORE_SKIP = 3;
   private static readonly FAILURE_RESET_TIME = 5 * 60 * 1000; // 5 minutes
@@ -92,10 +120,6 @@ export class AIService {
 
   static async analyzeCode(files: Array<{ path: string; content: string }>): Promise<AIAnalysisResult> {
     const errors: string[] = [];
-    const providers = [
-      { name: 'Groq', rotator: this.groqRotator, method: this.analyzeWithGroq.bind(this) },
-      { name: 'Gemini', rotator: this.geminiRotator, method: this.analyzeWithGemini.bind(this) },
-    ];
 
     logger.info('AI analysis started', {
       groqKeys: this.groqRotator.keys.length,
@@ -103,7 +127,12 @@ export class AIService {
       files: files.length,
     });
 
-    // Try all providers with rotation
+    // ── 1. Groq first (5 keys, free, fast, working) ──────────────────────
+    const providers = [
+      { name: 'Groq',   rotator: this.groqRotator,   method: this.analyzeWithGroq.bind(this) },
+      { name: 'Gemini', rotator: this.geminiRotator, method: this.analyzeWithGemini.bind(this) },
+    ];
+
     for (const provider of providers) {
       if (provider.rotator.keys.length === 0) {
         logger.warn('No API keys configured for provider', { provider: provider.name });
@@ -157,6 +186,7 @@ export class AIService {
   private static sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
+
 
   private static async analyzeWithGemini(
     files: Array<{ path: string; content: string }>,
@@ -587,6 +617,220 @@ If you cannot describe exactly how an attacker would exploit it step-by-step, DO
     }
 
     return this.analyzeCode(files);
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PENETRATION TEST LLM ANALYSIS
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Probe type passed to the LLM for analysis.
+   * Each probe represents one HTTP request/response pair from the pentest engine.
+   */
+  static async analyzePentestWithLLM(probes: PentestProbe[]): Promise<PentestLLMFinding[]> {
+    if (probes.length === 0) return [];
+
+    const prompt = this.buildPentestPrompt(probes);
+    const systemPrompt = this.getPentestSystemPrompt();
+
+    const errors: string[] = [];
+
+    // ── 1. Groq first (5 free keys, fast, working NOW) ────────────────────
+    // ── 2. Gemini fallback ────────────────────────────────────────────────
+    const providers = [
+      { name: 'Groq',   rotator: this.groqRotator,   call: (key: string) => this.callGroqRaw(systemPrompt, prompt, key) },
+      { name: 'Gemini', rotator: this.geminiRotator, call: (key: string) => this.callGeminiRaw(systemPrompt, prompt, key) },
+    ];
+
+    for (const provider of providers) {
+      if (provider.rotator.keys.length === 0) { errors.push(`No ${provider.name} keys`); continue; }
+      const maxAttempts = Math.min(provider.rotator.keys.length * 2, 4);
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const apiKey = this.getNextKey(provider.rotator);
+        if (!apiKey) break;
+        try {
+          logger.info('Pentest LLM analysis', { provider: provider.name, attempt: attempt + 1, probes: probes.length });
+          const raw = await provider.call(apiKey);
+          this.markKeyAsSuccess(provider.rotator, apiKey);
+          return this.parsePentestLLMResponse(raw);
+        } catch (err: any) {
+          errors.push(`${provider.name} attempt ${attempt + 1}: ${err.message}`);
+          this.markKeyAsFailed(provider.rotator, apiKey);
+          if (err.response?.status === 429) continue;
+          await this.sleep(1000);
+        }
+      }
+    }
+
+    // If LLM fails, return empty — the condition-based results are still preserved
+    logger.warn('Pentest LLM analysis failed — condition-based results will be used alone', { errors });
+    return [];
+  }
+
+
+  private static getPentestSystemPrompt(): string {
+    return `You are a senior web application penetration tester with deep expertise in OWASP Top 10, WASC, and CVE research.
+You are given a series of HTTP probe results from an automated security scanner.
+Each probe shows: the URL tested, the HTTP method, the payload injected, the response status code, response headers, and a snippet of the response body.
+
+Your task is to identify REAL vulnerabilities from the evidence provided. 
+Be a real security researcher — look for subtle signs that conditions would miss:
+- Unusual error messages that hint at backend tech or query structure
+- Partial data leakage (fields, IDs, usernames in error responses)
+- Inconsistent response sizes or status codes between baseline and payload
+- Headers that reveal version information or internal infrastructure
+- Redirect targets that suggest open redirect
+- Response body differences that suggest Boolean-based blind injection
+- Cookie attributes that are missing on sensitive cookies
+- CORS/CSP headers that are too permissive
+- Any information disclosure, even indirect
+
+Return ONLY a valid JSON array. If no issues found, return [].
+Format:
+[
+  {
+    "testName": "short name of what was found",
+    "category": "Injection | XSS | Auth | CSRF | CORS | Info Disclosure | Access Control | Misconfiguration | other",
+    "severity": "critical | high | medium | low | info",
+    "vulnerable": true,
+    "description": "Precise description: what was found, which probe triggered it, and exactly how an attacker would exploit it.",
+    "evidence": "The exact response snippet or header value that proves the finding",
+    "recommendation": "Specific remediation step"
+  }
+]
+
+STRICT RULES:
+- Only return findings where you can point to SPECIFIC evidence from the probe data.
+- Do NOT guess. If the response doesn't clearly indicate a vulnerability, return [].
+- Do NOT return info-severity duplicates of condition-based findings (missing headers, no CSRF token) — those are already caught.
+- Focus on things conditions CANNOT catch: subtle leakage, indirect evidence, nuanced response analysis.
+- Maximum 10 findings.`;
+  }
+
+  private static buildPentestPrompt(probes: PentestProbe[]): string {
+    let prompt = `Analyze the following ${probes.length} HTTP probe result(s) from a penetration test against: ${probes[0]?.targetUrl || 'unknown target'}\n\n`;
+    prompt += `Attack surface discovered:\n`;
+    prompt += `- ${probes.filter(p => p.source.startsWith('form')).length} form field(s) tested\n`;
+    prompt += `- ${probes.filter(p => p.source.startsWith('URL')).length} URL parameter(s) tested\n`;
+    prompt += `- ${probes.filter(p => p.source.startsWith('API')).length} API endpoint(s) tested\n\n`;
+
+    probes.forEach((probe, i) => {
+      prompt += `=== PROBE ${i + 1} ===\n`;
+      prompt += `Target URL: ${probe.targetUrl}\n`;
+      prompt += `Method: ${probe.method}\n`;
+      prompt += `Source: ${probe.source}\n`;
+      if (probe.parameter) prompt += `Injected Parameter: ${probe.parameter}\n`;
+      if (probe.payload) prompt += `Payload: ${probe.payload}\n`;
+      prompt += `Baseline Status: ${probe.baselineStatus ?? 'N/A'} | Baseline Body Length: ${probe.baselineBodyLen ?? 'N/A'}\n`;
+      prompt += `Response Status: ${probe.responseStatus}\n`;
+      prompt += `Response Time: ${probe.responseTimeMs}ms${probe.baselineTimeMs ? ` (baseline: ${probe.baselineTimeMs}ms, delta: ${probe.responseTimeMs - probe.baselineTimeMs}ms)` : ''}\n`;
+      if (probe.responseHeaders && Object.keys(probe.responseHeaders).length > 0) {
+        const interestingHeaders = ['server', 'x-powered-by', 'content-type', 'set-cookie', 'access-control-allow-origin',
+          'x-frame-options', 'content-security-policy', 'location', 'www-authenticate', 'x-aspnet-version'];
+        const filtered = Object.entries(probe.responseHeaders)
+          .filter(([k]) => interestingHeaders.includes(k.toLowerCase()))
+          .map(([k, v]) => `  ${k}: ${String(v).substring(0, 200)}`).join('\n');
+        if (filtered) prompt += `Interesting Headers:\n${filtered}\n`;
+      }
+      if (probe.responseBodySnippet) {
+        // Trim to 800 chars to stay within token budget across many probes
+        prompt += `Response Body (first 800 chars):\n${probe.responseBodySnippet.substring(0, 800)}\n`;
+      }
+      prompt += '\n';
+    });
+
+    prompt += `\nNow identify any real vulnerabilities from the evidence above. Return only a JSON array of findings, or [] if nothing found.`;
+    return prompt;
+  }
+
+  private static async callGeminiRaw(system: string, prompt: string, apiKey: string): Promise<string> {
+    const response = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      {
+        contents: [{ parts: [{ text: `${system}\n\n${prompt}` }] }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 4000 },
+      },
+      { headers: { 'Content-Type': 'application/json' }, timeout: 60000 }
+    );
+    const content = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!content) throw new Error('Empty Gemini response');
+    return content;
+  }
+
+  private static async callGroqRaw(system: string, prompt: string, apiKey: string): Promise<string> {
+    const response = await axios.post(
+      `${config.groq.apiUrl}/chat/completions`,
+      {
+        model: 'openai/gpt-oss-120b',
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.2,
+        max_tokens: 4000,
+        response_format: { type: 'json_object' },
+      },
+      {
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        timeout: 60000,
+      }
+    );
+    const content = response.data.choices?.[0]?.message?.content;
+    if (!content) throw new Error('Empty Groq response');
+    return content;
+  }
+
+  private static parsePentestLLMResponse(raw: string): PentestLLMFinding[] {
+    // Strip markdown code fences
+    let cleaned = raw.replace(/```(?:json)?\s*/gi, '').replace(/```\s*/g, '').trim();
+
+    // Handle both array and object wrapping (some models wrap in {"findings": [...]})
+    const arrStart = cleaned.indexOf('[');
+    const objStart = cleaned.indexOf('{');
+
+    let jsonStr: string | null = null;
+
+    if (arrStart !== -1 && (objStart === -1 || arrStart < objStart)) {
+      // Starts with array
+      let depth = 0; let endIdx = -1;
+      for (let i = arrStart; i < cleaned.length; i++) {
+        if (cleaned[i] === '[') depth++;
+        else if (cleaned[i] === ']') { depth--; if (depth === 0) { endIdx = i; break; } }
+      }
+      if (endIdx !== -1) jsonStr = cleaned.slice(arrStart, endIdx + 1);
+    } else if (objStart !== -1) {
+      // Wrapped in object — extract the array from it
+      let depth = 0; let endIdx = -1;
+      for (let i = objStart; i < cleaned.length; i++) {
+        if (cleaned[i] === '{') depth++;
+        else if (cleaned[i] === '}') { depth--; if (depth === 0) { endIdx = i; break; } }
+      }
+      if (endIdx !== -1) {
+        try {
+          const obj = JSON.parse(cleaned.slice(objStart, endIdx + 1));
+          const arr = obj.findings || obj.vulnerabilities || obj.results || obj;
+          return Array.isArray(arr) ? arr.filter(this.isValidLLMFinding) : [];
+        } catch { return []; }
+      }
+    }
+
+    if (!jsonStr) return [];
+
+    try {
+      const arr = JSON.parse(jsonStr);
+      return Array.isArray(arr) ? arr.filter(this.isValidLLMFinding) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private static isValidLLMFinding(f: any): boolean {
+    return (
+      f && typeof f === 'object' &&
+      typeof f.testName === 'string' && f.testName.length > 0 &&
+      typeof f.description === 'string' && f.description.length > 0 &&
+      ['critical', 'high', 'medium', 'low', 'info'].includes(f.severity)
+    );
   }
 
   /**
