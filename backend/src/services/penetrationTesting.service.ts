@@ -1,4 +1,4 @@
-import axios, { AxiosResponse } from 'axios';
+﻿import axios, { AxiosResponse } from 'axios';
 import * as cheerio from 'cheerio';
 import https from 'https';
 import crypto from 'crypto';
@@ -17,6 +17,15 @@ export interface PenetrationTestResult {
   evidence?: string;
   payload?: string;
   recommendation: string;
+  fix?: string;          // AI-generated patched code snippet
+  aiEnhanced?: boolean;  // true when AI discovered or enriched this finding
+}
+
+export interface AttackChain {
+  title: string;
+  severity: 'critical' | 'high' | 'medium';
+  steps: string[];
+  impact: string;
 }
 
 export interface PenetrationTestReport {
@@ -26,7 +35,11 @@ export interface PenetrationTestReport {
   vulnerabilitiesFound: number;
   results: PenetrationTestResult[];
   riskScore: number;
+  attackChains?: AttackChain[];       // AI-chained multi-step exploits
+  jsBundleFindings?: string[];        // Secrets/keys found in JS bundles
+  discoveredEndpoints?: string[];     // Hidden endpoints found in JS bundles
 }
+
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Internal crawler types
@@ -630,41 +643,134 @@ export class PenetrationTestingService {
     const riskScore = this.calculateRiskScore(results);
     console.log(`[Pentest] Done. Vulnerabilities: ${vulnerabilitiesFound}, Risk: ${riskScore}`);
 
-    // â”€â”€ Phase 3: LLM-Powered Analysis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // Send the collected probe log to the LLM for nuanced analysis.
-    // This catches things conditions cannot: subtle info leakage, indirect evidence,
-    // unusual error messages, boolean-based differences, etc.
+    // Capture homepage HTML for tech-stack detection + fix generation
+    let pageHtml = '';
+    try {
+      const homeResp = await axios.get(normalizedUrl, {
+        timeout: 8000, validateStatus: () => true, httpsAgent: this.getHttpsAgent(),
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SecurityScanner/1.0)' },
+      });
+      if (typeof homeResp.data === 'string') pageHtml = homeResp.data;
+    } catch { /* non-fatal */ }
+
+    // -- Phase 3: LLM Probe Analysis --
     if (probeLog.length > 0) {
-      console.log(`[Pentest] Phase 3: LLM analysis on ${probeLog.length} HTTP probe(s)...`);
+      console.log(`[Pentest] Phase 3: LLM probe analysis on ${probeLog.length} probe(s)...`);
       try {
-        // Cap to 60 most interesting probes to stay within token limits
         const probesForLLM = probeLog
           .filter(p => p.responseStatus !== 404 && p.responseBodySnippet.length > 10)
           .slice(0, 60);
-
         if (probesForLLM.length > 0) {
           const llmFindings = await AIService.analyzePentestWithLLM(probesForLLM);
           console.log(`[Pentest] LLM returned ${llmFindings.length} finding(s)`);
-
-          // Merge LLM findings â€” deduplicate against condition-based findings by testName
           const existingNames = new Set(results.map(r => r.testName.toLowerCase()));
           for (const llmF of llmFindings) {
             if (existingNames.has(llmF.testName.toLowerCase())) continue;
-            results.push({
-              testName: `[AI] ${llmF.testName}`,
-              category: llmF.category,
-              severity: llmF.severity,
-              vulnerable: llmF.vulnerable ?? true,
-              description: llmF.description,
-              evidence: llmF.evidence,
-              recommendation: llmF.recommendation,
-            });
+            results.push({ testName: `[AI] ${llmF.testName}`, category: llmF.category,
+              severity: llmF.severity, vulnerable: llmF.vulnerable ?? true,
+              description: llmF.description, evidence: llmF.evidence,
+              recommendation: llmF.recommendation, aiEnhanced: true });
           }
         }
-      } catch (llmErr: any) {
-        console.warn(`[Pentest] LLM analysis failed (condition-based results preserved): ${llmErr.message}`);
-      }
+      } catch (e: any) { console.warn(`[Pentest] Phase 3 failed: ${e.message}`); }
     }
+
+    // -- Phase 4: JS Bundle Analysis + Endpoint Discovery --
+    let jsBundleFindings: string[] = [];
+    let discoveredEndpoints: string[] = [];
+    try {
+      console.log(`[Pentest] Phase 4: JS bundle analysis...`);
+      const $page = cheerio.load(pageHtml);
+      const scriptUrls: string[] = [];
+      const origin4 = new URL(normalizedUrl).origin;
+      $page('script[src]').each((_: any, el: any) => {
+        const src = $page(el).attr('src') || '';
+        try { const resolved = new URL(src, normalizedUrl).toString();
+          if (resolved.startsWith(origin4)) scriptUrls.push(resolved); } catch { /* skip */ }
+      });
+      if (scriptUrls.length > 0) {
+        const bundles: Array<{ url: string; content: string }> = [];
+        for (const scriptUrl of scriptUrls.slice(0, 3)) {
+          try {
+            const resp = await axios.get(scriptUrl, { timeout: 10000, validateStatus: () => true,
+              httpsAgent: this.getHttpsAgent(), headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SecurityScanner/1.0)' } });
+            if (resp.status === 200 && typeof resp.data === 'string') bundles.push({ url: scriptUrl, content: resp.data });
+          } catch { /* skip */ }
+        }
+        if (bundles.length > 0) {
+          const bundleAnalysis = await AIService.analyzeJSBundles(bundles);
+          jsBundleFindings = bundleAnalysis.secrets;
+          discoveredEndpoints = bundleAnalysis.endpoints;
+          console.log(`[Pentest] Phase 4: ${bundleAnalysis.secrets.length} secret(s), ${bundleAnalysis.endpoints.length} endpoint(s)`);
+          for (const f of bundleAnalysis.findings) {
+            results.push({ testName: `[AI] ${f.testName}`, category: f.category || 'Secret Exposure',
+              severity: f.severity, vulnerable: true, description: f.description,
+              evidence: f.evidence, recommendation: f.recommendation, aiEnhanced: true });
+          }
+          if (discoveredEndpoints.length > 0) {
+            const epProbes: PentestProbe[] = [];
+            for (const ep of discoveredEndpoints.slice(0, 8)) {
+              try {
+                const epUrl = ep.startsWith('http') ? ep : `${origin4}${ep}`;
+                const t0 = Date.now();
+                const resp = await axios.get(epUrl, this.authCfg(ctx, { timeout: 5000, validateStatus: () => true, httpsAgent: this.getHttpsAgent() }));
+                epProbes.push({ targetUrl: epUrl, method: 'GET', source: 'AI-discovered endpoint from JS bundle',
+                  responseStatus: resp.status, responseTimeMs: Date.now() - t0,
+                  responseHeaders: resp.headers as Record<string, string>,
+                  responseBodySnippet: JSON.stringify(resp.data || '').substring(0, 1500) });
+              } catch { /* skip */ }
+            }
+            if (epProbes.length > 0) {
+              const epFindings = await AIService.analyzePentestWithLLM(epProbes);
+              const existingNames2 = new Set(results.map(r => r.testName.toLowerCase()));
+              for (const f of epFindings) {
+                if (existingNames2.has(f.testName.toLowerCase())) continue;
+                results.push({ testName: `[AI] ${f.testName}`, category: f.category,
+                  severity: f.severity, vulnerable: f.vulnerable ?? true,
+                  description: f.description, evidence: f.evidence,
+                  recommendation: f.recommendation, aiEnhanced: true });
+              }
+            }
+          }
+        }
+      }
+    } catch (e: any) { console.warn(`[Pentest] Phase 4 failed: ${e.message}`); }
+
+    // -- Phase 5: Vulnerability Chaining --
+    let attackChains: AttackChain[] = [];
+    try {
+      const vulnR = results.filter(r => r.vulnerable && r.severity !== 'info');
+      if (vulnR.length >= 2) {
+        console.log(`[Pentest] Phase 5: Chaining ${vulnR.length} vulnerabilities...`);
+        const asF = vulnR.map(r => ({ testName: r.testName, category: r.category, severity: r.severity as any,
+          vulnerable: true, description: r.description, evidence: r.evidence, recommendation: r.recommendation }));
+        const chains = await AIService.chainVulnerabilities(asF, normalizedUrl);
+        attackChains = chains as AttackChain[];
+        console.log(`[Pentest] Phase 5: ${attackChains.length} chain(s) found`);
+      }
+    } catch (e: any) { console.warn(`[Pentest] Phase 5 failed: ${e.message}`); }
+
+    // -- Phase 6: AI Fix Generation --
+    try {
+      const vulnR2 = results.filter(r => r.vulnerable && ['critical','high','medium'].includes(r.severity));
+      if (vulnR2.length > 0) {
+        console.log(`[Pentest] Phase 6: Generating fixes for ${vulnR2.length} vulns...`);
+        const techStack = pageHtml.toLowerCase().includes('next') ? 'Next.js' :
+          pageHtml.toLowerCase().includes('react') ? 'React + Express' :
+          pageHtml.toLowerCase().includes('laravel') ? 'Laravel/PHP' :
+          pageHtml.toLowerCase().includes('django') ? 'Django/Python' : 'Node.js/Express';
+        const asF2 = vulnR2.map(r => ({ testName: r.testName, category: r.category, severity: r.severity as any,
+          vulnerable: true, description: r.description, recommendation: r.recommendation }));
+        const fixes = await AIService.generateFixes(asF2, techStack, pageHtml);
+        for (const result of results) {
+          const fixKey = Object.keys(fixes).find(k =>
+            result.testName.toLowerCase().includes(k.toLowerCase()) ||
+            k.toLowerCase().includes(result.testName.replace('[AI] ', '').toLowerCase()));
+          if (fixKey) result.fix = fixes[fixKey];
+        }
+        console.log(`[Pentest] Phase 6: ${Object.keys(fixes).length} fix(es) generated`);
+      }
+    } catch (e: any) { console.warn(`[Pentest] Phase 6 failed: ${e.message}`); }
 
     const finalVulns = results.filter(r => r.vulnerable).length;
     const finalRisk = this.calculateRiskScore(results);
@@ -676,6 +782,9 @@ export class PenetrationTestingService {
       vulnerabilitiesFound: finalVulns,
       results,
       riskScore: finalRisk,
+      attackChains: attackChains.length > 0 ? attackChains : undefined,
+      jsBundleFindings: jsBundleFindings.length > 0 ? jsBundleFindings : undefined,
+      discoveredEndpoints: discoveredEndpoints.length > 0 ? discoveredEndpoints : undefined,
     };
   }
 

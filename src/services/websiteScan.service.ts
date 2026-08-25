@@ -55,6 +55,15 @@ export interface PenetrationTestResult {
   evidence?: string;
   payload?: string;
   recommendation: string;
+  fix?: string;         // AI-generated fix code
+  aiEnhanced?: boolean; // found/enriched by AI
+}
+
+export interface AttackChain {
+  title: string;
+  severity: 'critical' | 'high' | 'medium';
+  steps: string[];
+  impact: string;
 }
 
 export interface PenetrationTestReport {
@@ -64,6 +73,9 @@ export interface PenetrationTestReport {
   vulnerabilitiesFound: number;
   results: PenetrationTestResult[];
   riskScore: number;
+  attackChains?: AttackChain[];
+  jsBundleFindings?: string[];
+  discoveredEndpoints?: string[];
 }
 
 export const websiteScanService = {

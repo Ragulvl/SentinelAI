@@ -5,6 +5,7 @@ import {
   AlertTriangle, Loader2, Target, Zap, CheckCircle, XCircle,
   Info, ArrowLeft, Download, Share2, Globe, Shield, Lock,
   ChevronRight, Activity, Bug, Eye, Database, Cpu, KeyRound, User, EyeOff,
+  Sparkles, Link, Code2, Package, ChevronDown,
 } from "lucide-react";
 import { PageLayout } from "@/components/PageLayout";
 import { PageHeader } from "@/components/PageHeader";
@@ -51,6 +52,8 @@ export default function PenetrationTestPage() {
   const [domainVerified, setDomainVerified] = useState<boolean | null>(null);
   const [checkingDomain, setCheckingDomain] = useState(true);
   const [verifiedDomainsList, setVerifiedDomainsList] = useState<string[]>([]);
+  const [expandedFixes, setExpandedFixes] = useState<Set<number>>(new Set());
+  const toggleFix = (i: number) => setExpandedFixes(prev => { const s = new Set(prev); s.has(i) ? s.delete(i) : s.add(i); return s; });
 
   // Authenticated scan state
   const [authEnabled, setAuthEnabled] = useState(false);
@@ -402,14 +405,14 @@ export default function PenetrationTestPage() {
                       style={{ background: "hsl(0 84% 60% / 0.05)", border: "1px solid hsl(0 84% 60% / 0.15)" }}>
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
-                        <span className="text-xs font-medium text-foreground">Running active penetration tests...</span>
+                        <span className="text-xs font-medium text-foreground">Running AI-powered penetration tests...</span>
                       </div>
-                      <p className="text-[11px] text-muted-foreground">This may take 1-3 minutes. Do not close this tab.</p>
+                      <p className="text-[11px] text-muted-foreground">Running 42 security tests + AI bundle analysis, endpoint discovery, and vulnerability chaining. This may take 2-4 minutes.</p>
                       <div className="h-1 rounded-full overflow-hidden mt-2" style={{ background: "hsl(var(--muted))" }}>
                         <motion.div className="h-full rounded-full"
                           style={{ background: "hsl(0 84% 60%)" }}
                           animate={{ width: ["10%", "85%"] }}
-                          transition={{ duration: 150, ease: "linear" }} />
+                          transition={{ duration: 220, ease: "linear" }} />
                       </div>
                     </motion.div>
                   )}
@@ -513,6 +516,82 @@ export default function PenetrationTestPage() {
                 </div>
               )}
 
+              {/* AI Attack Chains */}
+              {report.attackChains && report.attackChains.length > 0 && (
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                  className="rounded-xl p-5 space-y-3"
+                  style={{ background: "hsl(280 84% 60% / 0.06)", border: "1px solid hsl(280 84% 60% / 0.25)" }}>
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4" style={{ color: "hsl(280 84% 70%)" }} />
+                    <h3 className="font-semibold text-sm" style={{ color: "hsl(280 84% 70%)" }}>AI Attack Chains</h3>
+                    <span className="text-xs text-muted-foreground">— vulnerabilities that can be chained together</span>
+                  </div>
+                  <div className="space-y-3">
+                    {report.attackChains.map((chain, ci) => (
+                      <div key={ci} className="rounded-lg p-3 space-y-2"
+                        style={{ background: "hsl(var(--background))", border: "1px solid hsl(280 84% 60% / 0.2)" }}>
+                        <div className="flex items-center gap-2">
+                          <span className={`badge text-[10px] ${
+                            chain.severity === 'critical' ? 'text-destructive severity-bg-critical' :
+                            chain.severity === 'high' ? 'severity-high severity-bg-high' : 'severity-medium severity-bg-medium'
+                          }`}>{chain.severity}</span>
+                          <span className="text-sm font-semibold text-foreground">{chain.title}</span>
+                        </div>
+                        <div className="space-y-1">
+                          {chain.steps.map((step, si) => (
+                            <p key={si} className="text-xs text-muted-foreground flex gap-2">
+                              <span className="shrink-0 w-4 h-4 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[9px] font-bold mt-0.5">{si + 1}</span>
+                              {step}
+                            </p>
+                          ))}
+                        </div>
+                        <p className="text-xs font-medium" style={{ color: "hsl(280 84% 70%)" }}>Impact: {chain.impact}</p>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+
+              {/* JS Bundle Findings */}
+              {((report.jsBundleFindings && report.jsBundleFindings.length > 0) || (report.discoveredEndpoints && report.discoveredEndpoints.length > 0)) && (
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                  className="rounded-xl p-5 space-y-3"
+                  style={{ background: "hsl(40 84% 60% / 0.06)", border: "1px solid hsl(40 84% 60% / 0.25)" }}>
+                  <div className="flex items-center gap-2">
+                    <Package className="w-4 h-4" style={{ color: "hsl(40 84% 70%)" }} />
+                    <h3 className="font-semibold text-sm" style={{ color: "hsl(40 84% 70%)" }}>JS Bundle Analysis</h3>
+                    <span className="text-xs text-muted-foreground">— AI-scanned your JavaScript bundles</span>
+                  </div>
+                  {report.jsBundleFindings && report.jsBundleFindings.length > 0 && (
+                    <div>
+                      <p className="section-label mb-2">Secrets / Credentials Found</p>
+                      <div className="space-y-1">
+                        {report.jsBundleFindings.map((s, si) => (
+                          <div key={si} className="flex items-start gap-2 text-xs">
+                            <AlertTriangle className="w-3.5 h-3.5 text-destructive shrink-0 mt-0.5" />
+                            <span className="text-foreground">{s}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {report.discoveredEndpoints && report.discoveredEndpoints.length > 0 && (
+                    <div>
+                      <p className="section-label mb-2">Hidden Endpoints Discovered</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {report.discoveredEndpoints.map((ep, ei) => (
+                          <div key={ei} className="flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-mono"
+                            style={{ background: "hsl(var(--muted))", border: "1px solid hsl(var(--border))" }}>
+                            <Link className="w-3 h-3 text-muted-foreground" />
+                            {ep}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+
               {/* Detailed results */}
               <div className="card-elevated p-5">
                 <div className="flex items-center gap-2 mb-5 flex-wrap">
@@ -525,7 +604,7 @@ export default function PenetrationTestPage() {
                   ))}
                 </div>
 
-                <div className="space-y-3">
+                  <div className="space-y-3">
                   {sortedResults.map((result, i) => {
                     const cfg = SEVERITY_CONFIG[result.severity as keyof typeof SEVERITY_CONFIG] || SEVERITY_CONFIG.info;
                     const Icon = result.vulnerable ? cfg.icon : CheckCircle;
@@ -537,11 +616,16 @@ export default function PenetrationTestPage() {
                           <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${result.vulnerable ? cfg.color : "text-success"}`} />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap mb-1.5">
-                              <h4 className="font-semibold text-foreground text-sm">{result.testName}</h4>
+                              <h4 className="font-semibold text-foreground text-sm">{result.testName.replace('[AI] ', '')}</h4>
                               <span className={`badge text-[10px] ${result.vulnerable ? `${cfg.color} ${cfg.bg}` : "badge-success"}`}>
                                 {result.vulnerable ? "VULNERABLE" : "SECURE"}
                               </span>
                               <span className="badge text-[10px] badge-muted">{result.severity}</span>
+                              {result.aiEnhanced && (
+                                <span className="flex items-center gap-1 badge text-[10px] px-1.5" style={{ background: "hsl(280 84% 60% / 0.12)", color: "hsl(280 84% 70%)", border: "1px solid hsl(280 84% 60% / 0.3)" }}>
+                                  <Sparkles className="w-2.5 h-2.5" /> AI
+                                </span>
+                              )}
                             </div>
                             <p className="text-xs text-muted-foreground leading-relaxed mb-2">{result.description}</p>
                             {result.evidence && (
@@ -560,6 +644,26 @@ export default function PenetrationTestPage() {
                               <p className="section-label mb-1">Recommendation</p>
                               <p className="text-xs text-muted-foreground leading-relaxed">{result.recommendation}</p>
                             </div>
+                            {result.fix && (
+                              <div className="mt-2">
+                                <button onClick={() => toggleFix(i)}
+                                  className="flex items-center gap-1.5 text-xs font-medium hover:opacity-80 transition-opacity"
+                                  style={{ color: "hsl(280 84% 70%)" }}>
+                                  <Code2 className="w-3.5 h-3.5" />
+                                  View AI-Generated Fix
+                                  <ChevronDown className={`w-3 h-3 transition-transform ${expandedFixes.has(i) ? 'rotate-180' : ''}`} />
+                                </button>
+                                <AnimatePresence>
+                                  {expandedFixes.has(i) && (
+                                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                                      className="overflow-hidden">
+                                      <pre className="mt-2 text-xs terminal-bg p-3 rounded-lg overflow-x-auto whitespace-pre-wrap break-words"
+                                        style={{ border: "1px solid hsl(280 84% 60% / 0.2)" }}>{result.fix}</pre>
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </motion.div>

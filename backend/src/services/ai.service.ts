@@ -867,4 +867,255 @@ STRICT RULES:
     this.geminiRotator.lastUsed.clear();
     logger.info('All API key failure counts reset');
   }
+
+  // ── AI-POWERED PENTEST EXTENSIONS ──────────────────────────────────────────
+
+  /**
+   * Phase: JS Bundle Analyzer + Endpoint Discoverer
+   * Downloads JS bundles, sends to AI to find hardcoded secrets, API keys,
+   * internal endpoints, and hidden routes.
+   */
+  static async analyzeJSBundles(bundles: Array<{ url: string; content: string }>): Promise<{
+    secrets: string[];
+    endpoints: string[];
+    findings: PentestLLMFinding[];
+  }> {
+    if (bundles.length === 0) return { secrets: [], endpoints: [], findings: [] };
+
+    const system = `You are a security researcher specializing in JavaScript analysis and secret detection.
+You will be given minified/bundled JavaScript code from a web application.
+
+Your tasks:
+1. Find HARDCODED SECRETS: API keys, tokens, passwords, private keys, AWS/GCP/Azure credentials, Stripe keys, Twilio SIDs, database URIs, JWT secrets
+2. Find INTERNAL ENDPOINTS: API routes, admin paths, debug endpoints, internal URLs not exposed in the UI
+3. Identify SECURITY MISCONFIGURATIONS: disabled SSL verification, insecure settings, debug flags left on
+
+Return ONLY valid JSON in this exact format:
+{
+  "secrets": ["description of secret found: partial value or type"],
+  "endpoints": ["/api/internal/path", "/admin/debug"],
+  "findings": [
+    {
+      "testName": "Hardcoded AWS Key",
+      "category": "Secret Exposure",
+      "severity": "critical",
+      "vulnerable": true,
+      "description": "AWS access key hardcoded in bundle",
+      "evidence": "AKIA... found at offset ~12500",
+      "recommendation": "Remove from code. Rotate immediately. Use environment variables."
+    }
+  ]
+}
+
+RULES:
+- Only report what you can CLEARLY see in the code
+- For secrets, show first 6 chars + "..." to prove it's real without exposing full value
+- Endpoints must be real paths starting with / or http
+- Maximum 5 secrets, 10 endpoints, 5 findings`;
+
+    // Concatenate bundle content (cap at 15k chars per bundle to fit token limits)
+    let prompt = `Analyze the following JavaScript bundle(s) from the target web application:\n\n`;
+    for (const b of bundles.slice(0, 3)) {
+      const snippet = b.content.substring(0, 15000);
+      prompt += `=== BUNDLE: ${b.url} ===\n${snippet}\n\n`;
+    }
+    prompt += `\nReturn the JSON analysis now.`;
+
+    try {
+      const raw = await this.callWithFallback(system, prompt);
+      const parsed = this.parseJsonResponse<{ secrets: string[]; endpoints: string[]; findings: PentestLLMFinding[] }>(raw);
+      return {
+        secrets: Array.isArray(parsed?.secrets) ? parsed.secrets : [],
+        endpoints: Array.isArray(parsed?.endpoints) ? parsed.endpoints : [],
+        findings: Array.isArray(parsed?.findings) ? parsed.findings.filter(this.isValidLLMFinding) : [],
+      };
+    } catch (err: any) {
+      logger.warn('JS bundle analysis failed', { error: err.message });
+      return { secrets: [], endpoints: [], findings: [] };
+    }
+  }
+
+  /**
+   * Phase: Vulnerability Chainer
+   * Takes all findings and asks AI to identify multi-step attack chains.
+   */
+  static async chainVulnerabilities(findings: PentestLLMFinding[], targetUrl: string): Promise<Array<{
+    title: string;
+    severity: 'critical' | 'high' | 'medium';
+    steps: string[];
+    impact: string;
+  }>> {
+    const vulnFindings = findings.filter(f => f.vulnerable && f.severity !== 'info');
+    if (vulnFindings.length < 2) return [];
+
+    const system = `You are an expert penetration tester who specializes in chaining vulnerabilities.
+Given a list of security findings, identify realistic multi-step attack chains where combining 2+ vulnerabilities 
+creates a more severe impact than each finding alone.
+
+Return ONLY valid JSON array:
+[
+  {
+    "title": "Account Takeover via CSRF + Weak Session",
+    "severity": "critical",
+    "steps": [
+      "1. Exploit missing CSRF token to force password change request",
+      "2. Session doesn't rotate after password change (session fixation)",
+      "3. Attacker's old session cookie still valid — full account access"
+    ],
+    "impact": "Complete account takeover without user interaction"
+  }
+]
+
+RULES:
+- Only create chains that are REALISTIC given the specific evidence
+- Each step must reference actual findings provided
+- Maximum 3 chains
+- If no realistic chains exist, return []`;
+
+    const findingsSummary = vulnFindings.map((f, i) =>
+      `${i + 1}. [${f.severity.toUpperCase()}] ${f.testName}: ${f.description}${f.evidence ? ` | Evidence: ${f.evidence}` : ''}`
+    ).join('\n');
+
+    const prompt = `Target: ${targetUrl}\n\nFindings:\n${findingsSummary}\n\nIdentify attack chains from these findings.`;
+
+    try {
+      const raw = await this.callWithFallback(system, prompt);
+      const chains = this.parseArrayResponse(raw);
+      return chains.filter((c: any) =>
+        c && typeof c.title === 'string' && Array.isArray(c.steps) &&
+        ['critical', 'high', 'medium'].includes(c.severity)
+      );
+    } catch (err: any) {
+      logger.warn('Vulnerability chaining failed', { error: err.message });
+      return [];
+    }
+  }
+
+  /**
+   * Phase: AI Fix Generator
+   * For each vulnerable finding, generates specific patched code in the target's tech stack.
+   */
+  static async generateFixes(
+    findings: PentestLLMFinding[],
+    techStack: string,
+    pageHtml: string
+  ): Promise<Record<string, string>> {
+    const vulns = findings.filter(f => f.vulnerable && ['critical', 'high', 'medium'].includes(f.severity));
+    if (vulns.length === 0) return {};
+
+    const system = `You are a senior security engineer. For each vulnerability, provide a SPECIFIC code fix.
+The fix must be:
+- Written in the detected tech stack (${techStack || 'Node.js/Express or generic'})
+- Copy-paste ready (not pseudocode)
+- Minimal — only the relevant changed lines
+- Clearly commented
+
+Return ONLY valid JSON object where keys are vulnerability names and values are code fix strings:
+{
+  "vulnerability name": "// Fixed code example\\napp.use(rateLimit({ windowMs: 60000, max: 5 }));",
+  ...
+}`;
+
+    const vulnList = vulns.slice(0, 6).map(v =>
+      `"${v.testName}": ${v.description}. Recommendation: ${v.recommendation}`
+    ).join('\n');
+
+    const htmlHint = pageHtml.substring(0, 500);
+    const prompt = `Tech stack hint from HTML: ${htmlHint}\n\nVulnerabilities to fix:\n${vulnList}\n\nGenerate specific code fixes for each.`;
+
+    try {
+      const raw = await this.callWithFallback(system, prompt);
+      const parsed = this.parseJsonResponse<Record<string, string>>(raw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed;
+      }
+      return {};
+    } catch (err: any) {
+      logger.warn('Fix generation failed', { error: err.message });
+      return {};
+    }
+  }
+
+  /**
+   * AI Payload Generator — generates context-aware attack payloads for a given test type
+   * based on the actual HTML/response from the target.
+   */
+  static async generateAttackPayloads(
+    htmlContext: string,
+    testType: 'xss' | 'sqli' | 'ssrf' | 'ssti',
+    endpoint: string
+  ): Promise<string[]> {
+    const system = `You are an offensive security researcher generating targeted attack payloads.
+Based on the actual HTML/response context provided, generate 8 highly targeted payloads for ${testType.toUpperCase()} testing.
+
+Rules:
+- Payloads must be context-aware (e.g., if inside attribute, use attr breakout)
+- Include at least 2 blind/out-of-band variants  
+- Return ONLY a JSON array of strings: ["payload1", "payload2", ...]
+- No explanations, just the array`;
+
+    const prompt = `Endpoint: ${endpoint}\nHTML Context (500 chars):\n${htmlContext.substring(0, 500)}\n\nGenerate ${testType.toUpperCase()} payloads:`;
+
+    try {
+      const raw = await this.callWithFallback(system, prompt);
+      const arr = this.parseArrayResponse(raw);
+      return arr.filter((p: any) => typeof p === 'string').slice(0, 10);
+    } catch {
+      return [];
+    }
+  }
+
+  // ── Private helpers ─────────────────────────────────────────────────────────
+
+  private static async callWithFallback(system: string, prompt: string): Promise<string> {
+    const providers = [
+      { name: 'Groq',   rotator: this.groqRotator,   call: (key: string) => this.callGroqRaw(system, prompt, key) },
+      { name: 'Gemini', rotator: this.geminiRotator, call: (key: string) => this.callGeminiRaw(system, prompt, key) },
+    ];
+    for (const provider of providers) {
+      if (provider.rotator.keys.length === 0) continue;
+      const maxAttempts = Math.min(provider.rotator.keys.length * 2, 3);
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const apiKey = this.getNextKey(provider.rotator);
+        if (!apiKey) break;
+        try {
+          const raw = await provider.call(apiKey);
+          this.markKeyAsSuccess(provider.rotator, apiKey);
+          return raw;
+        } catch (err: any) {
+          this.markKeyAsFailed(provider.rotator, apiKey);
+          if (err.response?.status !== 429) await this.sleep(500);
+        }
+      }
+    }
+    throw new Error('All AI providers failed');
+  }
+
+  private static parseJsonResponse<T>(raw: string): T | null {
+    let cleaned = raw.replace(/```(?:json)?\s*/gi, '').replace(/```\s*/g, '').trim();
+    const objStart = cleaned.indexOf('{');
+    const arrStart = cleaned.indexOf('[');
+    const start = (objStart === -1) ? arrStart : (arrStart === -1) ? objStart : Math.min(objStart, arrStart);
+    if (start === -1) return null;
+    const isArr = cleaned[start] === '[';
+    const open = isArr ? '[' : '{';
+    const close = isArr ? ']' : '}';
+    let depth = 0, end = -1;
+    for (let i = start; i < cleaned.length; i++) {
+      if (cleaned[i] === open) depth++;
+      else if (cleaned[i] === close) { depth--; if (depth === 0) { end = i; break; } }
+    }
+    if (end === -1) return null;
+    try { return JSON.parse(cleaned.slice(start, end + 1)); } catch { return null; }
+  }
+
+  private static parseArrayResponse(raw: string): any[] {
+    const result = this.parseJsonResponse<any[]>(raw);
+    if (Array.isArray(result)) return result;
+    if (result && typeof result === 'object') {
+      const arr = (result as any).findings || (result as any).chains || (result as any).payloads || (result as any).results;
+      if (Array.isArray(arr)) return arr;
+    }
+    return [];
+  }
 }
