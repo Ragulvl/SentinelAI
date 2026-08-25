@@ -113,12 +113,22 @@ export const websiteScanService = {
 
   // Penetration Testing
 
-  async performPenetrationTest(url: string): Promise<PenetrationTestReport> {
-    return ApiClient.post('/api/website-scan/pentest', { url });
+  async performPenetrationTest(url: string, credentials?: {
+    username?: string;
+    password?: string;
+    loginUrl?: string;
+    token?: string;
+  }): Promise<PenetrationTestReport> {
+    return ApiClient.post('/api/website-scan/pentest', { url, credentials });
   },
 
-  async penetrationTest(url: string) {
-    return ApiClient.post('/api/website-scan/pentest', { url });
+  async penetrationTest(url: string, credentials?: {
+    username?: string;
+    password?: string;
+    loginUrl?: string;
+    token?: string;
+  }) {
+    return ApiClient.post('/api/website-scan/pentest', { url, credentials });
   },
 
   async loadTest(url: string, config: { duration?: number; concurrentUsers?: number; requestsPerSecond?: number }) {

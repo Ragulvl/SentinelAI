@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+﻿import { Request, Response } from 'express';
 import { WebsiteScannerService } from '../services/websiteScanner.service.js';
 import { PenetrationTestingService } from '../services/penetrationTesting.service.js';
 import { WebsiteScan } from '../db/models/WebsiteScan.model.js';
@@ -8,7 +8,7 @@ import '../types/auth.js';
 export class WebsiteScanController {
   static async scanWebsite(req: Request, res: Response) {
     try {
-      const { url } = req.body;
+      const { url, credentials } = req.body;
       const userId = req.user?.userId;
 
       if (!userId) {
@@ -60,7 +60,7 @@ export class WebsiteScanController {
 
   static async penetrationTest(req: Request, res: Response) {
     try {
-      const { url } = req.body;
+      const { url, credentials } = req.body;
       const userId = req.user?.userId;
 
       if (!userId) {
@@ -89,7 +89,8 @@ export class WebsiteScanController {
       console.log(`User ID: ${userId}`);
 
       // Perform penetration testing with timeout protection
-      const testPromise = PenetrationTestingService.performPenetrationTest(url);
+      // credentials = { username, password, loginUrl? } â€” optional, for authenticated scans
+      const testPromise = PenetrationTestingService.performPenetrationTest(url, credentials);
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Penetration test timeout - operation took too long')), 120000) // 2 minute timeout
       );
@@ -212,7 +213,7 @@ export class WebsiteScanController {
 
   static async testResilience(req: Request, res: Response) {
     try {
-      const { url } = req.body;
+      const { url, credentials } = req.body;
       const userId = req.user?.userId;
 
       if (!userId) {
@@ -417,7 +418,7 @@ export class WebsiteScanController {
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
-      // Route param is already a bare hostname (e.g. "example.com") — normalize directly
+      // Route param is already a bare hostname (e.g. "example.com") â€” normalize directly
       const normalizedDomain = domain.replace(/^www\./, '').toLowerCase();
       const deleted = await DomainVerificationService.deleteDomain(userId, normalizedDomain);
 

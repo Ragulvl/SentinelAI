@@ -4,9 +4,9 @@ import https from 'https';
 import crypto from 'crypto';
 import { AIService, type PentestProbe } from './ai.service.js';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Public result types (unchanged — no schema migration needed)
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Public result types (unchanged â€” no schema migration needed)
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface PenetrationTestResult {
   testName: string;
@@ -28,9 +28,9 @@ export interface PenetrationTestReport {
   riskScore: number;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Internal crawler types
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface FormTarget {
   actionUrl: string;      // resolved absolute URL for the form action
@@ -61,9 +61,30 @@ interface BaselineResponse {
   contentType: string;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Scan context â€” carries auth session across all phases
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+export interface ScanCredentials {
+  loginUrl?:      string;   // override auto-detected login URL
+  usernameField?: string;   // input name, default: 'username' / 'email'
+  username?:      string;
+  passwordField?: string;   // input name, default: 'password'
+  password?:      string;
+  token?:         string;   // supply a bearer token directly instead
+  tokenHeader?:   string;   // header name for token, default: 'Authorization'
+}
+
+interface ScanContext {
+  cookieStr: string;                   // formatted Cookie header value
+  extraHeaders: Record<string,string>; // Authorization etc.
+}
+
+const EMPTY_CTX: ScanContext = { cookieStr: '', extraHeaders: {} };
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Main service
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export class PenetrationTestingService {
   private static readonly TIMEOUT = 8000;
@@ -76,16 +97,30 @@ export class PenetrationTestingService {
     return new https.Agent({ rejectUnauthorized, timeout: this.TIMEOUT });
   }
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // PHASE 1: CRAWLER — discovers real attack surface
-  // ──────────────────────────────────────────────────────────────────────────
+  /**
+   * Merges auth cookies/headers into an axios config object.
+   * Usage: axios.get(url, this.authCfg(ctx, { timeout: 5000, ... }))
+   */
+  private static authCfg(
+    ctx: ScanContext,
+    base: Record<string, any> = {}
+  ): Record<string, any> {
+    const merged: Record<string, string> = { ...(base.headers || {}) };
+    if (ctx.cookieStr) merged['Cookie'] = ctx.cookieStr;
+    Object.assign(merged, ctx.extraHeaders);
+    return { ...base, headers: merged };
+  }
+
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // PHASE 1: CRAWLER â€” discovers real attack surface
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /**
    * Crawl the target to discover real pages, forms, API endpoints.
    * Max depth 2, max 40 pages, same-origin only.
-   * probeLog is optional — when provided, crawl responses are added as probes for LLM analysis.
+   * probeLog is optional â€” when provided, crawl responses are added as probes for LLM analysis.
    */
-  static async crawlTarget(baseUrl: string, probeLog?: PentestProbe[]): Promise<AttackSurface> {
+  static async crawlTarget(baseUrl: string, probeLog?: PentestProbe[], ctx: ScanContext = EMPTY_CTX): Promise<AttackSurface> {
     const origin = new URL(baseUrl).origin;
     const visited = new Set<string>();
     const queue: Array<{ url: string; depth: number }> = [{ url: baseUrl, depth: 0 }];
@@ -115,13 +150,13 @@ export class PenetrationTestingService {
       visited.add(url);
 
       try {
-        const resp = await axios.get(url, {
+        const resp = await axios.get(url, this.authCfg(ctx, {
           timeout: this.CRAWL_TIMEOUT,
           validateStatus: () => true,
           httpsAgent: this.getHttpsAgent(),
           maxRedirects: this.MAX_REDIRECTS,
           headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SecurityScanner/1.0)' },
-        });
+        }));
 
         if (resp.status >= 400) continue;
         const ct = (resp.headers['content-type'] || '').toLowerCase();
@@ -137,7 +172,7 @@ export class PenetrationTestingService {
             method: 'GET',
             source: `crawled page (depth ${depth})`,
             responseStatus: resp.status,
-            responseTimeMs: 0, // crawl doesn't measure time — not critical for LLM
+            responseTimeMs: 0, // crawl doesn't measure time â€” not critical for LLM
             responseHeaders: resp.headers as Record<string, string>,
             responseBodySnippet: body.substring(0, 1500),
           });
@@ -236,11 +271,11 @@ export class PenetrationTestingService {
       const testUrl = `${origin}${path}`;
       if (surface.apiEndpoints.includes(testUrl)) continue;
       try {
-        const r = await axios.head(testUrl, {
+        const r = await axios.head(testUrl, this.authCfg(ctx, {
           timeout: 4000,
           validateStatus: () => true,
           httpsAgent: this.getHttpsAgent(),
-        });
+        }));
         const ct = (r.headers['content-type'] || '').toLowerCase();
         // 200/401/403 with JSON content-type = real API endpoint
         if ([200, 401, 403, 405].includes(r.status) || ct.includes('application/json')) {
@@ -248,7 +283,7 @@ export class PenetrationTestingService {
           if (!surface.loginEndpoint && (path.includes('login') || path.includes('auth'))) {
             surface.loginEndpoint = testUrl;
           }
-          // Log for LLM — API endpoints reveal auth requirements, headers, server tech
+          // Log for LLM â€” API endpoints reveal auth requirements, headers, server tech
           if (probeLog) {
             probeLog.push({
               targetUrl: testUrl,
@@ -268,33 +303,34 @@ export class PenetrationTestingService {
     return surface;
   }
 
-  // ──────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // PHASE 2: DIFFERENTIAL ANALYSIS HELPERS
-  // ──────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private static async getBaseline(
     url: string,
     method: 'GET' | 'POST',
-    params: Record<string, string>
+    params: Record<string, string>,
+    ctx: ScanContext = EMPTY_CTX
   ): Promise<BaselineResponse | null> {
     try {
       const start = Date.now();
       let resp: AxiosResponse;
       if (method === 'POST') {
-        resp = await axios.post(url, params, {
+        resp = await axios.post(url, params, this.authCfg(ctx, {
           timeout: this.TIMEOUT,
           validateStatus: () => true,
           httpsAgent: this.getHttpsAgent(),
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        });
+        }));
       } else {
         const u = new URL(url);
         Object.entries(params).forEach(([k, v]) => u.searchParams.set(k, v));
-        resp = await axios.get(u.toString(), {
+        resp = await axios.get(u.toString(), this.authCfg(ctx, {
           timeout: this.TIMEOUT,
           validateStatus: () => true,
           httpsAgent: this.getHttpsAgent(),
-        });
+        }));
       }
       const body = typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data || '');
       return {
@@ -312,7 +348,8 @@ export class PenetrationTestingService {
     method: 'GET' | 'POST',
     params: Record<string, string>,
     targetParam: string,
-    payload: string
+    payload: string,
+    ctx: ScanContext = EMPTY_CTX
   ): Promise<{
     status: number;
     body: string;
@@ -325,20 +362,20 @@ export class PenetrationTestingService {
       const start = Date.now();
       let resp: AxiosResponse;
       if (method === 'POST') {
-        resp = await axios.post(url, injectedParams, {
+        resp = await axios.post(url, injectedParams, this.authCfg(ctx, {
           timeout: this.TIMEOUT,
           validateStatus: () => true,
           httpsAgent: this.getHttpsAgent(),
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        });
+        }));
       } else {
         const u = new URL(url);
         Object.entries(injectedParams).forEach(([k, v]) => u.searchParams.set(k, v));
-        resp = await axios.get(u.toString(), {
+        resp = await axios.get(u.toString(), this.authCfg(ctx, {
           timeout: this.TIMEOUT,
           validateStatus: () => true,
           httpsAgent: this.getHttpsAgent(),
-        });
+        }));
       }
       const body = typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data || '');
       return {
@@ -351,6 +388,7 @@ export class PenetrationTestingService {
     } catch { return null; }
   }
 
+
   // Build a default params object for a form (uses empty strings as baseline values)
   private static buildDefaultParams(fields: string[]): Record<string, string> {
     const params: Record<string, string> = {};
@@ -358,15 +396,131 @@ export class PenetrationTestingService {
     return params;
   }
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // MAIN ENTRY POINT
-  // ──────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  static async performPenetrationTest(url: string): Promise<PenetrationTestReport> {
+  // --------------------------------------------------------------------------
+  // PHASE 0: AUTO-LOGIN
+  // --------------------------------------------------------------------------
+
+  private static async attemptLogin(baseUrl: string, creds: ScanCredentials): Promise<ScanContext> {
+    const origin = new URL(baseUrl).origin;
+
+    // 1. Direct bearer token supplied - no login needed
+    if (creds.token) {
+      const headerName = creds.tokenHeader || 'Authorization';
+      const headerValue = creds.token.startsWith('Bearer ') ? creds.token : `Bearer ${creds.token}`;
+      return { cookieStr: '', extraHeaders: { [headerName]: headerValue } };
+    }
+
+    if (!creds.username || !creds.password) {
+      throw new Error('No credentials provided (need username+password or token)');
+    }
+
+    // 2. Build list of login candidates
+    const loginCandidates: string[] = [];
+    if (creds.loginUrl) loginCandidates.push(creds.loginUrl);
+    loginCandidates.push(
+      `${origin}/api/auth/login`, `${origin}/api/login`, `${origin}/login`,
+      `${origin}/auth/login`, `${origin}/signin`, `${origin}/user/login`
+    );
+
+    // Also scan homepage for login form action
+    try {
+      const homeResp = await axios.get(baseUrl, {
+        timeout: 6000, validateStatus: () => true, httpsAgent: this.getHttpsAgent(),
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SecurityScanner/1.0)' },
+      });
+      if (homeResp.status < 400 && typeof homeResp.data === 'string') {
+        const $ = cheerio.load(homeResp.data);
+        $('form').each((_: any, formEl: any) => {
+          if ($(formEl).find('input[type="password"]').length === 0) return;
+          const rawAction = $(formEl).attr('action') || baseUrl;
+          try {
+            const actionUrl = new URL(rawAction, baseUrl).toString();
+            if (!loginCandidates.includes(actionUrl)) loginCandidates.unshift(actionUrl);
+          } catch { /* ignore */ }
+        });
+      }
+    } catch { /* proceed with candidate list */ }
+
+    // 3. Try each endpoint - JSON first, then form-encoded
+    for (const loginUrl of loginCandidates) {
+      try {
+        const userField = creds.usernameField || 'email';
+        const passField = creds.passwordField || 'password';
+
+        // Try JSON POST (REST API)
+        const jsonResp = await axios.post(loginUrl,
+          { [userField]: creds.username, [passField]: creds.password },
+          { timeout: 8000, validateStatus: () => true, httpsAgent: this.getHttpsAgent(),
+            headers: { 'Content-Type': 'application/json' }, maxRedirects: 5 }
+        );
+        const ctx1 = this.extractAuthFromResponse(jsonResp);
+        if (ctx1) { console.log(`[Pentest] Login OK via JSON POST -> ${loginUrl}`); return ctx1; }
+
+        // Try form POST
+        const formResp = await axios.post(loginUrl,
+          new URLSearchParams({ [userField]: creds.username!, [passField]: creds.password! }).toString(),
+          { timeout: 8000, validateStatus: () => true, httpsAgent: this.getHttpsAgent(),
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, maxRedirects: 5 }
+        );
+        const ctx2 = this.extractAuthFromResponse(formResp);
+        if (ctx2) { console.log(`[Pentest] Login OK via form POST -> ${loginUrl}`); return ctx2; }
+      } catch { /* try next candidate */ }
+    }
+
+    throw new Error(`Login failed - tried ${loginCandidates.length} endpoints with no session returned`);
+  }
+
+  private static extractAuthFromResponse(resp: AxiosResponse): ScanContext | null {
+    if (resp.status >= 400) return null;
+
+    // Extract Set-Cookie headers
+    const cookies: Record<string, string> = {};
+    const setCookieHeaders = resp.headers['set-cookie'] || [];
+    const cookieList = Array.isArray(setCookieHeaders) ? setCookieHeaders : [setCookieHeaders];
+    for (const raw of cookieList) {
+      if (typeof raw !== 'string') continue;
+      const [pair] = raw.split(';');
+      const [name, ...valueParts] = pair.split('=');
+      if (name && valueParts.length > 0) cookies[name.trim()] = valueParts.join('=').trim();
+    }
+
+    // Extract JWT from response body
+    const extraHeaders: Record<string, string> = {};
+    if (resp.data && typeof resp.data === 'object') {
+      const token = resp.data.token || resp.data.access_token || resp.data.accessToken
+                 || resp.data.jwt || resp.data.authToken;
+      if (token && typeof token === 'string') extraHeaders['Authorization'] = `Bearer ${token}`;
+    }
+
+    const cookieStr = Object.entries(cookies).map(([k, v]) => `${k}=${v}`).join('; ');
+    if (cookieStr || Object.keys(extraHeaders).length > 0) return { cookieStr, extraHeaders };
+    return null;
+  }
+  // MAIN ENTRY POINT
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  static async performPenetrationTest(
+    url: string,
+    credentials?: ScanCredentials
+  ): Promise<PenetrationTestReport> {
     const normalizedUrl = url.startsWith('http') ? url : `https://${url}`;
     const results: PenetrationTestResult[] = [];
-    // Probe log — every HTTP request/response pair collected for LLM analysis
+    // Probe log â€” every HTTP request/response pair collected for LLM analysis
     const probeLog: PentestProbe[] = [];
+
+    // â”€â”€ Phase 0: Authenticate (if credentials supplied) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    let ctx: ScanContext = EMPTY_CTX;
+    if (credentials) {
+      try {
+        console.log('[Pentest] Phase 0: Attempting authentication...');
+        ctx = await this.attemptLogin(normalizedUrl, credentials);
+        console.log('[Pentest] Phase 0: Auth OK â€”', ctx.cookieStr ? 'session cookie captured' : 'bearer token set');
+      } catch (err: any) {
+        console.warn('[Pentest] Phase 0: Auth failed â€”', err.message, 'â€” continuing as anonymous');
+      }
+    }
 
     console.log(`Starting penetration test for: ${normalizedUrl}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
@@ -375,74 +529,70 @@ export class PenetrationTestingService {
     console.log(`[Pentest] Phase 1: Crawling attack surface...`);
     let surface: AttackSurface;
     try {
-      surface = await this.crawlTarget(normalizedUrl, probeLog);
+      surface = await this.crawlTarget(normalizedUrl, probeLog, ctx);
     } catch (err: any) {
       console.error(`[Pentest] Crawl failed: ${err.message}`);
-      surface = {
-        pages: [normalizedUrl],
-        forms: [],
-        apiEndpoints: [],
-        queryParams: [],
-      };
+      surface = { pages: [normalizedUrl], forms: [], apiEndpoints: [], queryParams: [] };
     }
 
     // Step 2: Run all tests with the discovered surface
     console.log(`[Pentest] Phase 2: Running ${43} attack tests...`);
 
     const tests = [
-      // Injection tests — use crawled surface
-      { name: 'XSS',                      fn: () => this.testXSS(normalizedUrl, surface) },
-      { name: 'SQL Injection',             fn: () => this.testSQLInjection(normalizedUrl, surface) },
-      { name: 'Command Injection',         fn: () => this.testCommandInjection(normalizedUrl, surface) },
-      { name: 'Path Traversal',            fn: () => this.testPathTraversal(normalizedUrl, surface) },
-      { name: 'LDAP Injection',            fn: () => this.testLDAPInjection(normalizedUrl, surface) },
-      { name: 'NoSQL Injection',           fn: () => this.testNoSQLInjection(normalizedUrl, surface) },
-      { name: 'Template Injection',        fn: () => this.testTemplateInjection(normalizedUrl, surface) },
-      { name: 'XML Injection',             fn: () => this.testXMLInjection(normalizedUrl) },
-      { name: 'HTTP Header Injection',     fn: () => this.testHTTPHeaderInjection(normalizedUrl) },
-      { name: 'CRLF Injection',            fn: () => this.testCRLFInjection(normalizedUrl) },
-      { name: 'Remote Code Execution',     fn: () => this.testRemoteCodeExecution(normalizedUrl, surface) },
-      { name: 'Prototype Pollution',       fn: () => this.testPrototypePollution(normalizedUrl, surface) },
+      // Injection tests
+      { name: 'XSS',                       fn: () => this.testXSS(normalizedUrl, surface, ctx) },
+      { name: 'SQL Injection',              fn: () => this.testSQLInjection(normalizedUrl, surface, ctx) },
+      { name: 'Command Injection',          fn: () => this.testCommandInjection(normalizedUrl, surface, ctx) },
+      { name: 'Path Traversal',             fn: () => this.testPathTraversal(normalizedUrl, surface, ctx) },
+      { name: 'LDAP Injection',             fn: () => this.testLDAPInjection(normalizedUrl, surface, ctx) },
+      { name: 'NoSQL Injection',            fn: () => this.testNoSQLInjection(normalizedUrl, surface, ctx) },
+      { name: 'Template Injection',         fn: () => this.testTemplateInjection(normalizedUrl, surface, ctx) },
+      { name: 'XML Injection',              fn: () => this.testXMLInjection(normalizedUrl, ctx) },
+      { name: 'HTTP Header Injection',      fn: () => this.testHTTPHeaderInjection(normalizedUrl, ctx) },
+      { name: 'CRLF Injection',             fn: () => this.testCRLFInjection(normalizedUrl, ctx) },
+      { name: 'Remote Code Execution',      fn: () => this.testRemoteCodeExecution(normalizedUrl, surface, ctx) },
+      { name: 'Prototype Pollution',        fn: () => this.testPrototypePollution(normalizedUrl, surface, ctx) },
       // Auth / session
-      { name: 'CSRF',                      fn: () => this.testCSRF(normalizedUrl, surface) },
-      { name: 'Authentication Bypass',     fn: () => this.testAuthenticationBypass(normalizedUrl, surface) },
-      { name: 'Session Management',        fn: () => this.testSessionManagement(normalizedUrl) },
-      { name: 'JWT Security',              fn: () => this.testJWTSecurity(normalizedUrl) },
+      { name: 'CSRF',                       fn: () => this.testCSRF(normalizedUrl, surface, ctx) },
+      { name: 'Authentication Bypass',      fn: () => this.testAuthenticationBypass(normalizedUrl, surface, ctx) },
+      { name: 'Session Management',         fn: () => this.testSessionManagement(normalizedUrl, ctx) },
+      { name: 'JWT Security',               fn: () => this.testJWTSecurity(normalizedUrl, ctx) },
       // Access control
-      { name: 'IDOR / Broken Object Auth', fn: () => this.testIDOR(normalizedUrl, surface) },
-      { name: 'HTTP Method Override',      fn: () => this.testMethodOverride(normalizedUrl, surface) },
+      { name: 'IDOR / Broken Object Auth',  fn: () => this.testIDOR(normalizedUrl, surface, ctx) },
+      { name: 'HTTP Method Override',       fn: () => this.testMethodOverride(normalizedUrl, surface, ctx) },
       // SSRF / redirects
-      { name: 'SSRF',                      fn: () => this.testSSRF(normalizedUrl, surface) },
-      { name: 'Open Redirect',             fn: () => this.testOpenRedirect(normalizedUrl, surface) },
+      { name: 'SSRF',                       fn: () => this.testSSRF(normalizedUrl, surface, ctx) },
+      { name: 'Open Redirect',              fn: () => this.testOpenRedirect(normalizedUrl, surface, ctx) },
       // Misconfigurations
-      { name: 'Security Misconfigurations', fn: () => this.testSecurityMisconfigurations(normalizedUrl) },
-      { name: 'CORS Misconfiguration',     fn: () => this.testCORSMisconfiguration(normalizedUrl) },
-      { name: 'Clickjacking',              fn: () => this.testClickjacking(normalizedUrl) },
-      { name: 'Content Security Policy',   fn: () => this.testCSPAnalysis(normalizedUrl) },
-      { name: 'Server Info Disclosure',    fn: () => this.testServerInfoDisclosure(normalizedUrl) },
-      { name: 'Security Logging & Debug',  fn: () => this.testSecurityLogging(normalizedUrl) },
+      { name: 'Security Misconfigurations', fn: () => this.testSecurityMisconfigurations(normalizedUrl, ctx) },
+      { name: 'CORS Misconfiguration',      fn: () => this.testCORSMisconfiguration(normalizedUrl, ctx) },
+      { name: 'Clickjacking',               fn: () => this.testClickjacking(normalizedUrl, ctx) },
+      { name: 'Content Security Policy',    fn: () => this.testCSPAnalysis(normalizedUrl, ctx) },
+      { name: 'Server Info Disclosure',     fn: () => this.testServerInfoDisclosure(normalizedUrl, ctx) },
+      { name: 'Security Logging & Debug',   fn: () => this.testSecurityLogging(normalizedUrl, ctx) },
       // Features
-      { name: 'File Upload',               fn: () => this.testFileUpload(normalizedUrl, surface) },
-      { name: 'WebSocket Security',        fn: () => this.testWebSocketSecurity(normalizedUrl) },
-      { name: 'DOM-based Vulnerabilities', fn: () => this.testDOMBasedVulnerabilities(normalizedUrl) },
+      { name: 'File Upload',                fn: () => this.testFileUpload(normalizedUrl, surface, ctx) },
+      { name: 'WebSocket Security',         fn: () => this.testWebSocketSecurity(normalizedUrl, ctx) },
+      { name: 'DOM-based Vulnerabilities',  fn: () => this.testDOMBasedVulnerabilities(normalizedUrl, ctx) },
       // Race / business logic
-      { name: 'Race Conditions',           fn: () => this.testRaceConditions(normalizedUrl, surface) },
-      { name: 'Business Logic Flaws',      fn: () => this.testBusinessLogicFlaws(normalizedUrl, surface) },
-      { name: 'Rate Limiting',             fn: () => this.testRateLimiting(normalizedUrl, surface) },
+      { name: 'Race Conditions',            fn: () => this.testRaceConditions(normalizedUrl, surface, ctx) },
+      { name: 'Business Logic Flaws',       fn: () => this.testBusinessLogicFlaws(normalizedUrl, surface, ctx) },
+      { name: 'Rate Limiting',              fn: () => this.testRateLimiting(normalizedUrl, surface, ctx) },
       // API
-      { name: 'API Vulnerabilities',       fn: () => this.testAPIVulnerabilities(normalizedUrl, surface) },
+      { name: 'API Vulnerabilities',        fn: () => this.testAPIVulnerabilities(normalizedUrl, surface, ctx) },
       // Modern CVEs
-      { name: 'Log4Shell / JNDI',          fn: () => this.testLog4Shell(normalizedUrl) },
-      { name: 'XXE',                       fn: () => this.testXXE(normalizedUrl) },
-      { name: 'Deserialization',           fn: () => this.testDeserializationAttacks(normalizedUrl) },
-      { name: 'HTTP Request Smuggling',    fn: () => this.testRequestSmuggling(normalizedUrl) },
-      { name: 'Host Header Injection',     fn: () => this.testHostHeaderInjection(normalizedUrl) },
+      { name: 'Log4Shell / JNDI',           fn: () => this.testLog4Shell(normalizedUrl, ctx) },
+      { name: 'XXE',                        fn: () => this.testXXE(normalizedUrl, ctx) },
+      { name: 'Deserialization',            fn: () => this.testDeserializationAttacks(normalizedUrl, ctx) },
+      { name: 'HTTP Request Smuggling',     fn: () => this.testRequestSmuggling(normalizedUrl, ctx) },
+      { name: 'Host Header Injection',      fn: () => this.testHostHeaderInjection(normalizedUrl, ctx) },
       // 2025-2026
-      { name: 'OAuth 2.0 / PKCE',         fn: () => this.testOAuthPKCE(normalizedUrl) },
-      { name: 'AI Prompt Injection',       fn: () => this.testPromptInjection(normalizedUrl, surface) },
-      { name: 'Dependency Confusion',      fn: () => this.testDependencyConfusion(normalizedUrl) },
-      { name: 'Supply Chain',              fn: () => this.testSupplyChain(normalizedUrl) },
+      { name: 'OAuth 2.0 / PKCE',          fn: () => this.testOAuthPKCE(normalizedUrl, ctx) },
+      { name: 'AI Prompt Injection',        fn: () => this.testPromptInjection(normalizedUrl, surface, ctx) },
+      { name: 'Dependency Confusion',       fn: () => this.testDependencyConfusion(normalizedUrl, ctx) },
+      { name: 'Supply Chain',               fn: () => this.testSupplyChain(normalizedUrl, ctx) },
     ];
+
 
     // Run in batches of 5 to avoid resource exhaustion
     const batchSize = 5;
@@ -455,10 +605,10 @@ export class PenetrationTestingService {
           try {
             console.log(`  - ${test.name}`);
             const r = await test.fn();
-            console.log(`  ✓ ${test.name}`);
+            console.log(`  âœ“ ${test.name}`);
             return r;
           } catch (error: any) {
-            console.error(`  ✗ ${test.name}: ${error.message}`);
+            console.error(`  âœ— ${test.name}: ${error.message}`);
             return [{
               testName: test.name,
               category: 'Error',
@@ -480,7 +630,7 @@ export class PenetrationTestingService {
     const riskScore = this.calculateRiskScore(results);
     console.log(`[Pentest] Done. Vulnerabilities: ${vulnerabilitiesFound}, Risk: ${riskScore}`);
 
-    // ── Phase 3: LLM-Powered Analysis ──────────────────────────────────────
+    // â”€â”€ Phase 3: LLM-Powered Analysis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Send the collected probe log to the LLM for nuanced analysis.
     // This catches things conditions cannot: subtle info leakage, indirect evidence,
     // unusual error messages, boolean-based differences, etc.
@@ -496,7 +646,7 @@ export class PenetrationTestingService {
           const llmFindings = await AIService.analyzePentestWithLLM(probesForLLM);
           console.log(`[Pentest] LLM returned ${llmFindings.length} finding(s)`);
 
-          // Merge LLM findings — deduplicate against condition-based findings by testName
+          // Merge LLM findings â€” deduplicate against condition-based findings by testName
           const existingNames = new Set(results.map(r => r.testName.toLowerCase()));
           for (const llmF of llmFindings) {
             if (existingNames.has(llmF.testName.toLowerCase())) continue;
@@ -530,15 +680,15 @@ export class PenetrationTestingService {
   }
 
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // INJECTION TESTS — all now use crawled attack surface
-  // ──────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // INJECTION TESTS â€” all now use crawled attack surface
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /**
-   * XSS — inject into every discovered form field and URL query param.
+   * XSS â€” inject into every discovered form field and URL query param.
    * Uses reflection check AND baseline diff to avoid false positives.
    */
-  private static async testXSS(baseUrl: string, surface: AttackSurface): Promise<PenetrationTestResult[]> {
+  private static async testXSS(baseUrl: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const xssPayloads = [
       '<script>alert("XSS_SENTINEL")</script>',
       '"><script>alert(String.fromCharCode(88,83,83))</script>',
@@ -556,7 +706,7 @@ export class PenetrationTestingService {
       if (form.fields.length === 0) continue;
       const defaultParams = this.buildDefaultParams(form.fields);
       for (const field of form.fields) {
-        // Skip password/token fields — they won't be reflected
+        // Skip password/token fields â€” they won't be reflected
         if (/password|csrf|token|_token/i.test(field)) continue;
         targets.push({ url: form.actionUrl, method: form.method, params: defaultParams, targetParam: field, source: `form field "${field}"` });
       }
@@ -619,9 +769,9 @@ export class PenetrationTestingService {
   }
 
   /**
-   * SQL Injection — error-based + time-based blind detection across crawled params.
+   * SQL Injection â€” error-based + time-based blind detection across crawled params.
    */
-  private static async testSQLInjection(baseUrl: string, surface: AttackSurface): Promise<PenetrationTestResult[]> {
+  private static async testSQLInjection(baseUrl: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const errorPayloads = [
       "'",
       "''",
@@ -662,7 +812,7 @@ export class PenetrationTestingService {
             category: 'Injection',
             severity: 'critical',
             vulnerable: true,
-            description: `SQL error message leaked in response — query string built from user input in ${target.source}.`,
+            description: `SQL error message leaked in response â€” query string built from user input in ${target.source}.`,
             evidence: `URL: ${target.url} | Parameter: ${target.targetParam} | SQL error keywords detected in response body`,
             payload,
             recommendation: 'Use parameterized queries or ORM models exclusively. Never concatenate user input into SQL strings. Enable error suppression in production.',
@@ -684,7 +834,7 @@ export class PenetrationTestingService {
             category: 'Injection',
             severity: 'critical',
             vulnerable: true,
-            description: `Time-based blind SQL injection confirmed — server delayed ${Math.round(delay)}ms when SLEEP/WAITFOR injected into ${target.source}.`,
+            description: `Time-based blind SQL injection confirmed â€” server delayed ${Math.round(delay)}ms when SLEEP/WAITFOR injected into ${target.source}.`,
             evidence: `URL: ${target.url} | Parameter: ${target.targetParam} | Baseline: ${baseline.responseTimeMs}ms | With payload: ${result.responseTimeMs}ms | Delta: ${Math.round(delay)}ms`,
             payload,
             recommendation: 'Use parameterized queries. Implement query timeouts. Monitor for anomalous slow query patterns.',
@@ -704,9 +854,9 @@ export class PenetrationTestingService {
   }
 
   /**
-   * Command Injection — time-based blind (sleep/WAITFOR) across crawled params.
+   * Command Injection â€” time-based blind (sleep/WAITFOR) across crawled params.
    */
-  private static async testCommandInjection(baseUrl: string, surface: AttackSurface): Promise<PenetrationTestResult[]> {
+  private static async testCommandInjection(baseUrl: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const timePayloads = [
       '; sleep 5',
       '| sleep 5',
@@ -735,7 +885,7 @@ export class PenetrationTestingService {
             category: 'Injection',
             severity: 'critical',
             vulnerable: true,
-            description: `OS command output detected in response — ${target.source} passes user input to a system shell.`,
+            description: `OS command output detected in response â€” ${target.source} passes user input to a system shell.`,
             evidence: `URL: ${target.url} | Parameter: ${target.targetParam} | Command echo output found in response`,
             payload,
             recommendation: 'Never execute system commands with user-supplied arguments. Use language-native APIs. If shell is necessary, use allowlist validation for all arguments.',
@@ -757,7 +907,7 @@ export class PenetrationTestingService {
             category: 'Injection',
             severity: 'critical',
             vulnerable: true,
-            description: `Time-based command injection confirmed — server delayed ${Math.round(delay)}ms when sleep injected via ${target.source}.`,
+            description: `Time-based command injection confirmed â€” server delayed ${Math.round(delay)}ms when sleep injected via ${target.source}.`,
             evidence: `URL: ${target.url} | Parameter: ${target.targetParam} | Delta: ${Math.round(delay)}ms`,
             payload,
             recommendation: 'Eliminate all shell command calls using user input. Use subprocess with argument arrays (never shell=True). Apply input allowlisting.',
@@ -777,9 +927,9 @@ export class PenetrationTestingService {
   }
 
   /**
-   * Path Traversal — targets filename-hinting parameters found during crawl.
+   * Path Traversal â€” targets filename-hinting parameters found during crawl.
    */
-  private static async testPathTraversal(baseUrl: string, surface: AttackSurface): Promise<PenetrationTestResult[]> {
+  private static async testPathTraversal(baseUrl: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const traversalPayloads = [
       '../../../etc/passwd',
       '..%2F..%2F..%2Fetc%2Fpasswd',
@@ -825,9 +975,9 @@ export class PenetrationTestingService {
   }
 
   /**
-   * LDAP Injection — targets username/search params.
+   * LDAP Injection â€” targets username/search params.
    */
-  private static async testLDAPInjection(baseUrl: string, surface: AttackSurface): Promise<PenetrationTestResult[]> {
+  private static async testLDAPInjection(baseUrl: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const ldapPayloads = ['*', '*)(&', '*)(uid=*))(|(uid=*', 'admin)(|(password=*))'];
     const ldapErrorPatterns = [/LDAP/i, /directory service/i, /javax\.naming/i, /JNDI/i, /ldap:\/\//i];
 
@@ -863,9 +1013,9 @@ export class PenetrationTestingService {
   }
 
   /**
-   * NoSQL Injection — targets filter/query/username params.
+   * NoSQL Injection â€” targets filter/query/username params.
    */
-  private static async testNoSQLInjection(baseUrl: string, surface: AttackSurface): Promise<PenetrationTestResult[]> {
+  private static async testNoSQLInjection(baseUrl: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const nosqlErrorPatterns = [/MongoError/i, /MongoServerError/i, /CastError/i, /mongoose/i, /mongodb/i];
 
     // Test via JSON POST body
@@ -941,9 +1091,9 @@ export class PenetrationTestingService {
   }
 
   /**
-   * Template Injection (SSTI) — inject math expressions into discovered text params.
+   * Template Injection (SSTI) â€” inject math expressions into discovered text params.
    */
-  private static async testTemplateInjection(baseUrl: string, surface: AttackSurface): Promise<PenetrationTestResult[]> {
+  private static async testTemplateInjection(baseUrl: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const templatePayloads = [
       { payload: '{{7*7}}', marker: '49' },
       { payload: '${7*7}', marker: '49' },
@@ -972,7 +1122,7 @@ export class PenetrationTestingService {
             category: 'Injection',
             severity: 'critical',
             vulnerable: true,
-            description: `Template expression evaluated on the server — ${payload} produced ${marker} via ${target.source}. Can escalate to RCE.`,
+            description: `Template expression evaluated on the server â€” ${payload} produced ${marker} via ${target.source}. Can escalate to RCE.`,
             evidence: `URL: ${target.url} | Parameter: ${target.targetParam} | Expression ${payload} evaluated to ${marker}`,
             payload,
             recommendation: 'Never pass user input to a template engine. Use sandboxed template environments. Prefer logic-less templates.',
@@ -992,9 +1142,9 @@ export class PenetrationTestingService {
   }
 
   /**
-   * Remote Code Execution — echo + time-based across crawled targets.
+   * Remote Code Execution â€” echo + time-based across crawled targets.
    */
-  private static async testRemoteCodeExecution(baseUrl: string, surface: AttackSurface): Promise<PenetrationTestResult[]> {
+  private static async testRemoteCodeExecution(baseUrl: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const rcePayloads = [
       '; echo RCE_CONFIRMED',
       '| echo RCE_CONFIRMED',
@@ -1019,7 +1169,7 @@ export class PenetrationTestingService {
             category: 'Code Execution',
             severity: 'critical',
             vulnerable: true,
-            description: `Code execution confirmed — server evaluated injected command/expression via ${target.source}.`,
+            description: `Code execution confirmed â€” server evaluated injected command/expression via ${target.source}.`,
             evidence: `URL: ${target.url} | Parameter: ${target.targetParam} | Execution marker found in response`,
             payload,
             recommendation: 'CRITICAL: Never evaluate user input as code. Disable eval(), exec(), system(). Apply strict input validation.',
@@ -1039,9 +1189,9 @@ export class PenetrationTestingService {
   }
 
   /**
-   * Prototype Pollution — inject __proto__ via query params and POST body.
+   * Prototype Pollution â€” inject __proto__ via query params and POST body.
    */
-  private static async testPrototypePollution(baseUrl: string, surface: AttackSurface): Promise<PenetrationTestResult[]> {
+  private static async testPrototypePollution(baseUrl: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const evidence: string[] = [];
     let vulnerable = false;
 
@@ -1064,7 +1214,7 @@ export class PenetrationTestingService {
           vulnerable = true;
           evidence.push(`Query payload ${payload} reflected prototype properties in JSON response`);
         }
-        if (r.status === 500) evidence.push(`Server 500 on ${payload} — possible prototype mutation crash`);
+        if (r.status === 500) evidence.push(`Server 500 on ${payload} â€” possible prototype mutation crash`);
       } catch { /* network error */ }
     }
 
@@ -1080,7 +1230,7 @@ export class PenetrationTestingService {
         const body = typeof r.data === 'string' ? r.data : JSON.stringify(r.data || '');
         if (ct.includes('application/json') && body.includes('"sentinel_test"')) {
           vulnerable = true;
-          evidence.push(`POST __proto__ injection at ${ep} reflected sentinel property — pollution confirmed`);
+          evidence.push(`POST __proto__ injection at ${ep} reflected sentinel property â€” pollution confirmed`);
         }
       } catch { /* network error */ }
     }
@@ -1098,14 +1248,14 @@ export class PenetrationTestingService {
     }];
   }
 
-  // ──────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // AUTH / SESSION TESTS
-  // ──────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /**
-   * CSRF — check ALL discovered POST forms for missing CSRF tokens.
+   * CSRF â€” check ALL discovered POST forms for missing CSRF tokens.
    */
-  private static async testCSRF(baseUrl: string, surface: AttackSurface): Promise<PenetrationTestResult[]> {
+  private static async testCSRF(baseUrl: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const results: PenetrationTestResult[] = [];
 
     // Check crawled forms
@@ -1126,12 +1276,12 @@ export class PenetrationTestingService {
 
     // Also verify SameSite cookie policy
     try {
-      const resp = await axios.get(baseUrl, { timeout: this.TIMEOUT, validateStatus: () => true, httpsAgent: this.getHttpsAgent() });
+      const resp = await axios.get(baseUrl, this.authCfg(ctx, { timeout: this.TIMEOUT, validateStatus: () => true, httpsAgent: this.getHttpsAgent() }));
       const cookies: string[] = Array.isArray(resp.headers['set-cookie']) ? resp.headers['set-cookie'] : resp.headers['set-cookie'] ? [resp.headers['set-cookie']] : [];
       const noSameSite = cookies.filter(c => !c.toLowerCase().includes('samesite'));
       if (noSameSite.length > 0) {
         results.push({
-          testName: 'CSRF — SameSite Cookie',
+          testName: 'CSRF â€” SameSite Cookie',
           category: 'CSRF',
           severity: 'medium',
           vulnerable: true,
@@ -1157,9 +1307,9 @@ export class PenetrationTestingService {
   }
 
   /**
-   * Authentication Bypass — actually attempts login form submission with default credentials.
+   * Authentication Bypass â€” actually attempts login form submission with default credentials.
    */
-  private static async testAuthenticationBypass(baseUrl: string, surface: AttackSurface): Promise<PenetrationTestResult[]> {
+  private static async testAuthenticationBypass(baseUrl: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const defaultCreds = [
       { username: 'admin', password: 'admin' },
       { username: 'admin', password: 'password' },
@@ -1213,7 +1363,7 @@ export class PenetrationTestingService {
 
           if (isSuccess) {
             return [{
-              testName: 'Default Credentials — Authentication Bypass',
+              testName: 'Default Credentials â€” Authentication Bypass',
               category: 'Authentication',
               severity: 'critical',
               vulnerable: true,
@@ -1247,7 +1397,7 @@ export class PenetrationTestingService {
           // 200 JSON with a token = successful login
           if (resp.status === 200 && ct.includes('application/json') && (body.includes('token') || body.includes('access_token') || body.includes('jwt'))) {
             return [{
-              testName: 'Default Credentials — API Auth Bypass',
+              testName: 'Default Credentials â€” API Auth Bypass',
               category: 'Authentication',
               severity: 'critical',
               vulnerable: true,
@@ -1278,12 +1428,12 @@ export class PenetrationTestingService {
   }
 
   /**
-   * Session Management — cookie security flags.
+   * Session Management â€” cookie security flags.
    */
-  private static async testSessionManagement(baseUrl: string): Promise<PenetrationTestResult[]> {
+  private static async testSessionManagement(baseUrl: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const results: PenetrationTestResult[] = [];
     try {
-      const resp = await axios.get(baseUrl, { timeout: this.TIMEOUT, httpsAgent: this.getHttpsAgent(), validateStatus: () => true });
+      const resp = await axios.get(baseUrl, this.authCfg(ctx, { timeout: this.TIMEOUT, httpsAgent: this.getHttpsAgent(), validateStatus: () => true }));
       const cookies: string[] = Array.isArray(resp.headers['set-cookie']) ? resp.headers['set-cookie'] : resp.headers['set-cookie'] ? [resp.headers['set-cookie']] : [];
 
       const issues: string[] = [];
@@ -1329,9 +1479,9 @@ export class PenetrationTestingService {
   }
 
   /**
-   * File Upload — targets discovered file input forms.
+   * File Upload â€” targets discovered file input forms.
    */
-  private static async testFileUpload(baseUrl: string, surface: AttackSurface): Promise<PenetrationTestResult[]> {
+  private static async testFileUpload(baseUrl: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const uploadForms = surface.forms.filter(f => f.hasFileInput);
 
     if (uploadForms.length === 0) {
@@ -1382,7 +1532,7 @@ export class PenetrationTestingService {
             severity: 'critical',
             vulnerable: true,
             description: `Upload form at ${form.actionUrl} accepted a file named "test.php" (PHP webshell with JPEG magic bytes).`,
-            evidence: `Form: ${form.actionUrl} | File: test.php (Content-Type: image/jpeg) | HTTP ${resp.status} response — no rejection detected`,
+            evidence: `Form: ${form.actionUrl} | File: test.php (Content-Type: image/jpeg) | HTTP ${resp.status} response â€” no rejection detected`,
             payload: 'test.php (Content-Type: image/jpeg)',
             recommendation: 'Validate file extension AND MIME type server-side. Rename uploaded files. Store outside web root. Scan with antivirus.',
           });
@@ -1405,9 +1555,9 @@ export class PenetrationTestingService {
   }
 
   /**
-   * SSRF — inject internal addresses into URL/redirect params discovered during crawl.
+   * SSRF â€” inject internal addresses into URL/redirect params discovered during crawl.
    */
-  private static async testSSRF(baseUrl: string, surface: AttackSurface): Promise<PenetrationTestResult[]> {
+  private static async testSSRF(baseUrl: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const ssrfPayloads = [
       'http://169.254.169.254/latest/meta-data/',  // AWS IMDS
       'http://metadata.google.internal/computeMetadata/v1/',  // GCP metadata
@@ -1435,7 +1585,7 @@ export class PenetrationTestingService {
             category: 'SSRF',
             severity: 'critical',
             vulnerable: true,
-            description: `SSRF confirmed — server fetched an internal/cloud metadata URL via ${target.source}.`,
+            description: `SSRF confirmed â€” server fetched an internal/cloud metadata URL via ${target.source}.`,
             evidence: `URL: ${target.url} | Parameter: ${target.targetParam} | Cloud metadata content detected in response`,
             payload,
             recommendation: 'Validate URLs against an allowlist of permitted external domains. Block requests to RFC1918 and link-local addresses. Use a dedicated egress proxy with strict ACLs.',
@@ -1455,9 +1605,9 @@ export class PenetrationTestingService {
   }
 
   /**
-   * Open Redirect — inject evil redirect targets into redirect params.
+   * Open Redirect â€” inject evil redirect targets into redirect params.
    */
-  private static async testOpenRedirect(baseUrl: string, surface: AttackSurface): Promise<PenetrationTestResult[]> {
+  private static async testOpenRedirect(baseUrl: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const redirectPayloads = [
       'https://evil-sentinel-test.com',
       '//evil-sentinel-test.com',
@@ -1488,7 +1638,7 @@ export class PenetrationTestingService {
               category: 'Open Redirect',
               severity: 'medium',
               vulnerable: true,
-              description: `Unvalidated redirect via ${target.source} — attacker can redirect users to arbitrary external sites.`,
+              description: `Unvalidated redirect via ${target.source} â€” attacker can redirect users to arbitrary external sites.`,
               evidence: `URL: ${target.url} | Parameter: ${target.targetParam} | Location: ${location}`,
               payload,
               recommendation: 'Validate redirect targets against a strict allowlist. Use relative paths for internal redirects. Never trust user-supplied redirect destinations.',
@@ -1508,14 +1658,14 @@ export class PenetrationTestingService {
     }];
   }
 
-  // ──────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // RACE CONDITIONS & BUSINESS LOGIC
-  // ──────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /**
-   * Race Conditions — uses discovered POST API endpoints, not the homepage root.
+   * Race Conditions â€” uses discovered POST API endpoints, not the homepage root.
    */
-  private static async testRaceConditions(baseUrl: string, surface: AttackSurface): Promise<PenetrationTestResult[]> {
+  private static async testRaceConditions(baseUrl: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     // Find a real POST endpoint from discovered API endpoints
     const postEndpoints = surface.apiEndpoints.filter(e =>
       /order|cart|payment|checkout|transfer|withdraw|purchase|buy|coupon|redeem/i.test(e)
@@ -1529,21 +1679,21 @@ export class PenetrationTestingService {
         category: 'Business Logic',
         severity: 'info',
         vulnerable: false,
-        description: 'No transaction/payment API endpoints discovered — race condition testing skipped. Manual testing required for critical business operations.',
+        description: 'No transaction/payment API endpoints discovered â€” race condition testing skipped. Manual testing required for critical business operations.',
         recommendation: 'Implement database-level locking, idempotency keys, and optimistic concurrency for all financial/critical operations.',
       }];
     }
 
     // Measure baseline first
     try {
-      const base = await axios.get(target, { timeout: 4000, validateStatus: () => true, httpsAgent: this.getHttpsAgent() });
+      const base = await axios.get(target, this.authCfg(ctx, { timeout: 4000, validateStatus: () => true, httpsAgent: this.getHttpsAgent() }));
       if (base.status === 404) {
         return [{
           testName: 'Race Condition',
           category: 'Business Logic',
           severity: 'info',
           vulnerable: false,
-          description: `Discovered endpoint ${target} returned 404 — could not test race conditions.`,
+          description: `Discovered endpoint ${target} returned 404 â€” could not test race conditions.`,
           recommendation: 'Implement database locking for critical operations.',
         }];
       }
@@ -1578,7 +1728,7 @@ export class PenetrationTestingService {
           category: 'Business Logic',
           severity: 'high',
           vulnerable: true,
-          description: `${successCodes.length}/${concurrentCount} concurrent POST requests to ${target} all returned 200 — no idempotency protection detected.`,
+          description: `${successCodes.length}/${concurrentCount} concurrent POST requests to ${target} all returned 200 â€” no idempotency protection detected.`,
           evidence: `Target: ${target} | ${successCodes.length} simultaneous successful responses | No 409 Conflict or idempotency headers detected`,
           recommendation: 'Implement idempotency keys, database row locks (SELECT FOR UPDATE), and deduplication logic. Return 409 for duplicate concurrent requests.',
         }];
@@ -1596,9 +1746,9 @@ export class PenetrationTestingService {
   }
 
   /**
-   * Business Logic Flaws — probe discovered API endpoints with boundary values.
+   * Business Logic Flaws â€” probe discovered API endpoints with boundary values.
    */
-  private static async testBusinessLogicFlaws(baseUrl: string, surface: AttackSurface): Promise<PenetrationTestResult[]> {
+  private static async testBusinessLogicFlaws(baseUrl: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const results: PenetrationTestResult[] = [];
 
     // Find endpoints likely to accept numeric business values
@@ -1629,7 +1779,7 @@ export class PenetrationTestingService {
 
           if (resp.status === 200 && ct.includes('application/json') && !body.includes('<!DOCTYPE')) {
             results.push({
-              testName: 'Business Logic Flaw — Boundary Values',
+              testName: 'Business Logic Flaw â€” Boundary Values',
               category: 'Business Logic',
               severity: 'high',
               vulnerable: true,
@@ -1659,14 +1809,14 @@ export class PenetrationTestingService {
     return results;
   }
 
-  // ──────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // API & ACCESS CONTROL
-  // ──────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /**
-   * API Vulnerabilities — uses confirmed API endpoints from crawler.
+   * API Vulnerabilities â€” uses confirmed API endpoints from crawler.
    */
-  private static async testAPIVulnerabilities(baseUrl: string, surface: AttackSurface): Promise<PenetrationTestResult[]> {
+  private static async testAPIVulnerabilities(baseUrl: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const results: PenetrationTestResult[] = [];
 
     // Check discovered API endpoints for exposed docs
@@ -1727,7 +1877,7 @@ export class PenetrationTestingService {
             severity: 'high',
             vulnerable: true,
             description: `API endpoint ${ep} returns user data without authentication.`,
-            evidence: `Endpoint: ${ep} | HTTP 200 JSON with email fields — no auth required`,
+            evidence: `Endpoint: ${ep} | HTTP 200 JSON with email fields â€” no auth required`,
             recommendation: 'Enforce authentication on all data-returning API endpoints. Implement object-level authorization.',
           });
         }
@@ -1749,13 +1899,13 @@ export class PenetrationTestingService {
   }
 
   /**
-   * IDOR — uses discovered API endpoints with ID substitution.
+   * IDOR â€” uses discovered API endpoints with ID substitution.
    */
-  private static async testIDOR(baseUrl: string, surface: AttackSurface): Promise<PenetrationTestResult[]> {
+  private static async testIDOR(baseUrl: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const issues: string[] = [];
     let vulnerable = false;
 
-    // Common resource patterns with sequential IDs — test IDs 1 and 2
+    // Common resource patterns with sequential IDs â€” test IDs 1 and 2
     const idEndpointPatterns = [
       '/api/user/{id}', '/api/users/{id}', '/api/account/{id}',
       '/api/order/{id}', '/api/profile/{id}', '/api/document/{id}',
@@ -1822,9 +1972,9 @@ export class PenetrationTestingService {
   }
 
   /**
-   * Rate Limiting — uses the discovered login endpoint for targeted brute-force simulation.
+   * Rate Limiting â€” uses the discovered login endpoint for targeted brute-force simulation.
    */
-  private static async testRateLimiting(baseUrl: string, surface: AttackSurface): Promise<PenetrationTestResult[]> {
+  private static async testRateLimiting(baseUrl: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const evidence: string[] = [];
     let vulnerable = false;
 
@@ -1836,7 +1986,7 @@ export class PenetrationTestingService {
     // First: burst the general endpoint
     const responses = await Promise.allSettled(
       Array.from({ length: BURST }, () =>
-        axios.get(baseUrl, { timeout: 5000, validateStatus: () => true, httpsAgent: this.getHttpsAgent() })
+        axios.get(baseUrl, this.authCfg(ctx, { timeout: 5000, validateStatus: () => true, httpsAgent: this.getHttpsAgent() }))
       )
     );
     const fulfilled = responses.filter((r): r is PromiseFulfilledResult<AxiosResponse> => r.status === 'fulfilled').map(r => r.value);
@@ -1864,7 +2014,7 @@ export class PenetrationTestingService {
       if (!loginHas429 && !loginHasRLHeader) {
         vulnerable = true;
         const codes = loginFulfilled.map(r => r.status).join(', ');
-        evidence.push(`Login endpoint ${loginEp} — ${BURST} rapid auth attempts returned [${codes}] — no 429 or rate-limit headers`);
+        evidence.push(`Login endpoint ${loginEp} â€” ${BURST} rapid auth attempts returned [${codes}] â€” no 429 or rate-limit headers`);
       } else {
         evidence.push(`Login endpoint rate limiting confirmed at ${loginEp}`);
       }
@@ -1879,18 +2029,18 @@ export class PenetrationTestingService {
       severity: vulnerable ? 'medium' : 'info',
       vulnerable,
       description: vulnerable
-        ? `No rate limiting detected — susceptible to brute force and credential stuffing.`
+        ? `No rate limiting detected â€” susceptible to brute force and credential stuffing.`
         : `Rate limiting is in place.`,
       evidence: evidence.join('\n') || undefined,
       recommendation: 'Limit auth attempts to 5/minute per IP. Return 429 with Retry-After. Implement progressive lockout and CAPTCHA. Use fail2ban or WAF-level rate limiting.',
     }];
   }
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // HEADER / STATIC TESTS (these were already correct — kept as-is)
-  // ──────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // HEADER / STATIC TESTS (these were already correct â€” kept as-is)
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  private static async testXMLInjection(url: string): Promise<PenetrationTestResult[]> {
+  private static async testXMLInjection(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const xmlPayload = `<?xml version="1.0"?>\n<user>\n  <name>admin</name>\n  <role>administrator</role>\n</user>`;
     try {
       const resp = await axios.post(url, xmlPayload, {
@@ -1903,7 +2053,7 @@ export class PenetrationTestingService {
           category: 'Injection',
           severity: 'high',
           vulnerable: true,
-          description: 'XML content processed without validation — role escalation via XML injection.',
+          description: 'XML content processed without validation â€” role escalation via XML injection.',
           evidence: 'XML body with administrator role reflected in response',
           payload: xmlPayload,
           recommendation: 'Validate and sanitize XML input. Use XML schema validation. Disable entity expansion.',
@@ -1920,7 +2070,7 @@ export class PenetrationTestingService {
     }];
   }
 
-  private static async testHTTPHeaderInjection(url: string): Promise<PenetrationTestResult[]> {
+  private static async testHTTPHeaderInjection(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const headerPayloads = [
       'test\r\nX-Sentinel-Injected: true',
       'test\nX-Sentinel-Injected: true',
@@ -1939,7 +2089,7 @@ export class PenetrationTestingService {
             category: 'Injection',
             severity: 'high',
             vulnerable: true,
-            description: 'CRLF/Header injection — attacker can inject arbitrary HTTP response headers.',
+            description: 'CRLF/Header injection â€” attacker can inject arbitrary HTTP response headers.',
             evidence: 'X-Sentinel-Injected header found in response',
             payload,
             recommendation: 'Remove CR (\\r) and LF (\\n) from all user input used in HTTP headers.',
@@ -1957,7 +2107,7 @@ export class PenetrationTestingService {
     }];
   }
 
-  private static async testCRLFInjection(url: string): Promise<PenetrationTestResult[]> {
+  private static async testCRLFInjection(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const crlfPayloads = [
       '%0d%0aSet-Cookie: sentinel_injected=true',
       '%0aSet-Cookie: sentinel_injected=true',
@@ -1965,7 +2115,7 @@ export class PenetrationTestingService {
     for (const payload of crlfPayloads) {
       try {
         const testUrl = `${url}?param=${payload}`;
-        const resp = await axios.get(testUrl, { timeout: this.TIMEOUT, validateStatus: () => true, httpsAgent: this.getHttpsAgent() });
+        const resp = await axios.get(testUrl, this.authCfg(ctx, { timeout: this.TIMEOUT, validateStatus: () => true, httpsAgent: this.getHttpsAgent() }));
         const cookies: string[] = Array.isArray(resp.headers['set-cookie']) ? resp.headers['set-cookie'] : [];
         if (cookies.some((c: string) => c.includes('sentinel_injected=true'))) {
           return [{
@@ -1991,7 +2141,7 @@ export class PenetrationTestingService {
     }];
   }
 
-  private static async testHostHeaderInjection(url: string): Promise<PenetrationTestResult[]> {
+  private static async testHostHeaderInjection(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     try {
       const resp = await axios.get(url, {
         headers: { Host: 'evil-sentinel-test.com' },
@@ -2003,7 +2153,7 @@ export class PenetrationTestingService {
           category: 'Injection',
           severity: 'medium',
           vulnerable: true,
-          description: 'Application reflects Host header — cache poisoning risk.',
+          description: 'Application reflects Host header â€” cache poisoning risk.',
           evidence: 'Host: evil-sentinel-test.com reflected in response',
           recommendation: 'Validate Host header against an allowlist. Use absolute URLs from config, not the Host header.',
         }];
@@ -2019,7 +2169,7 @@ export class PenetrationTestingService {
     }];
   }
 
-  private static async testXXE(url: string): Promise<PenetrationTestResult[]> {
+  private static async testXXE(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const xxePayload = `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>\n<data>&xxe;</data>`;
     try {
       const resp = await axios.post(url, xxePayload, {
@@ -2032,7 +2182,7 @@ export class PenetrationTestingService {
           category: 'XXE',
           severity: 'critical',
           vulnerable: true,
-          description: 'XXE vulnerability confirmed — /etc/passwd content retrieved.',
+          description: 'XXE vulnerability confirmed â€” /etc/passwd content retrieved.',
           evidence: 'File content from /etc/passwd in response',
           payload: xxePayload,
           recommendation: 'Disable external entity processing in XML parsers. Use JSON instead of XML where possible.',
@@ -2049,7 +2199,7 @@ export class PenetrationTestingService {
     }];
   }
 
-  private static async testDeserializationAttacks(url: string): Promise<PenetrationTestResult[]> {
+  private static async testDeserializationAttacks(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const deserializationPayloads = [
       'O:8:"stdClass":0:{}',
       'rO0ABXNyABFqYXZhLnV0aWwuSGFzaE1hcAUH2sHDFmDRAwACRgAKbG9hZEZhY3RvckkACXRocmVzaG9sZHhwP0AAAAAAAAx3CAAAABAAAAABdAAEdGVzdHQABHRlc3R4',
@@ -2066,7 +2216,7 @@ export class PenetrationTestingService {
             category: 'Deserialization',
             severity: 'critical',
             vulnerable: true,
-            description: 'Deserialization endpoint detected and returning error — potential RCE vector.',
+            description: 'Deserialization endpoint detected and returning error â€” potential RCE vector.',
             evidence: 'Deserialization error in response body',
             recommendation: 'Avoid deserializing untrusted data. Use safe serialization formats.',
           }];
@@ -2083,7 +2233,7 @@ export class PenetrationTestingService {
     }];
   }
 
-  private static async testSecurityMisconfigurations(url: string): Promise<PenetrationTestResult[]> {
+  private static async testSecurityMisconfigurations(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const sensitiveFiles = [
       { path: '/.git/config', signatures: ['[core]', '[remote', 'repositoryformatversion'], type: 'git config' },
       { path: '/.env',        signatures: ['APP_', 'DB_', 'SECRET', 'KEY=', 'PASSWORD=', 'TOKEN='], type: '.env file' },
@@ -2122,7 +2272,7 @@ export class PenetrationTestingService {
             recommendation: 'Remove or restrict access to sensitive files. Configure web server to deny access to config/source files.',
           });
         }
-      } catch { /* 404 or error — good */ }
+      } catch { /* 404 or error â€” good */ }
     }
 
     if (results.length === 0) {
@@ -2138,7 +2288,7 @@ export class PenetrationTestingService {
     return results;
   }
 
-  private static async testCORSMisconfiguration(url: string): Promise<PenetrationTestResult[]> {
+  private static async testCORSMisconfiguration(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     try {
       const resp = await axios.get(url, {
         headers: { Origin: 'https://evil-sentinel-test.com' },
@@ -2152,7 +2302,7 @@ export class PenetrationTestingService {
           category: 'CORS',
           severity: 'high',
           vulnerable: true,
-          description: `Insecure CORS — Access-Control-Allow-Origin: ${corsHeader}${credentialsHeader === 'true' ? ' with credentials' : ''}.`,
+          description: `Insecure CORS â€” Access-Control-Allow-Origin: ${corsHeader}${credentialsHeader === 'true' ? ' with credentials' : ''}.`,
           evidence: `Access-Control-Allow-Origin: ${corsHeader}`,
           recommendation: 'Restrict CORS to trusted origins. Never combine wildcard (*) with credentials.',
         }];
@@ -2168,9 +2318,9 @@ export class PenetrationTestingService {
     }];
   }
 
-  private static async testClickjacking(url: string): Promise<PenetrationTestResult[]> {
+  private static async testClickjacking(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     try {
-      const resp = await axios.get(url, { timeout: this.TIMEOUT, httpsAgent: this.getHttpsAgent(), validateStatus: () => true });
+      const resp = await axios.get(url, this.authCfg(ctx, { timeout: this.TIMEOUT, httpsAgent: this.getHttpsAgent(), validateStatus: () => true }));
       const xfo = resp.headers['x-frame-options'];
       const csp = resp.headers['content-security-policy'];
       const hasProtection = xfo || (csp && csp.includes('frame-ancestors'));
@@ -2180,7 +2330,7 @@ export class PenetrationTestingService {
           category: 'Clickjacking',
           severity: 'medium',
           vulnerable: true,
-          description: 'No X-Frame-Options or CSP frame-ancestors — page can be embedded in an iframe.',
+          description: 'No X-Frame-Options or CSP frame-ancestors â€” page can be embedded in an iframe.',
           evidence: 'Missing X-Frame-Options and CSP frame-ancestors directive',
           recommendation: 'Add X-Frame-Options: DENY or CSP frame-ancestors \'none\'.',
         }];
@@ -2196,9 +2346,9 @@ export class PenetrationTestingService {
     }];
   }
 
-  private static async testDOMBasedVulnerabilities(url: string): Promise<PenetrationTestResult[]> {
+  private static async testDOMBasedVulnerabilities(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     try {
-      const resp = await axios.get(url, { timeout: this.TIMEOUT, httpsAgent: this.getHttpsAgent(), validateStatus: () => true });
+      const resp = await axios.get(url, this.authCfg(ctx, { timeout: this.TIMEOUT, httpsAgent: this.getHttpsAgent(), validateStatus: () => true }));
       const $ = cheerio.load(resp.data as string);
       const scripts = $('script').text();
       const dangerousPatterns = [
@@ -2231,10 +2381,10 @@ export class PenetrationTestingService {
     }];
   }
 
-  private static async testWebSocketSecurity(url: string): Promise<PenetrationTestResult[]> {
+  private static async testWebSocketSecurity(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     // Check if the page references WebSocket connections in scripts
     try {
-      const resp = await axios.get(url, { timeout: this.TIMEOUT, httpsAgent: this.getHttpsAgent(), validateStatus: () => true });
+      const resp = await axios.get(url, this.authCfg(ctx, { timeout: this.TIMEOUT, httpsAgent: this.getHttpsAgent(), validateStatus: () => true }));
       const body = typeof resp.data === 'string' ? resp.data : '';
       const hasWs = /new WebSocket\s*\(|wss?:\/\//i.test(body);
       if (hasWs) {
@@ -2245,8 +2395,8 @@ export class PenetrationTestingService {
           severity: hasWsAuth ? 'info' : 'medium',
           vulnerable: !hasWsAuth,
           description: hasWsAuth
-            ? 'WebSocket connections detected — authentication headers or tokens are referenced.'
-            : 'WebSocket connections detected — no authentication tokens or Authorization headers referenced in the connection setup.',
+            ? 'WebSocket connections detected â€” authentication headers or tokens are referenced.'
+            : 'WebSocket connections detected â€” no authentication tokens or Authorization headers referenced in the connection setup.',
           evidence: 'WebSocket usage found in page source',
           recommendation: 'Authenticate WebSocket connections on the server side. Validate Origin header. Implement rate limiting for WebSocket frames.',
         }];
@@ -2262,11 +2412,11 @@ export class PenetrationTestingService {
     }];
   }
 
-  // ──────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // MODERN CVE / 2024-2026 TESTS (retained from original, correctness preserved)
-  // ──────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  private static async testLog4Shell(url: string): Promise<PenetrationTestResult[]> {
+  private static async testLog4Shell(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const jndi = '${jndi:ldap://127.0.0.1:1389/a}';
     const headersToTest = [
       { name: 'User-Agent',        value: jndi },
@@ -2296,21 +2446,21 @@ export class PenetrationTestingService {
       severity: vulnerable ? 'critical' : 'info',
       vulnerable,
       description: vulnerable
-        ? 'Server evaluates JNDI lookup expressions in HTTP headers — critical Log4Shell vulnerability.'
+        ? 'Server evaluates JNDI lookup expressions in HTTP headers â€” critical Log4Shell vulnerability.'
         : 'No Log4Shell indicators. Ensure Log4j >= 2.17.1 and JNDI lookups are disabled.',
       evidence: evidence.join('\n') || undefined,
       recommendation: 'Upgrade Log4j to 2.17.1+. Set log4j2.formatMsgNoLookups=true. Block outbound LDAP/RMI.',
     }];
   }
 
-  private static async testJWTSecurity(url: string): Promise<PenetrationTestResult[]> {
+  private static async testJWTSecurity(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const issues: string[] = [];
     let vulnerable = false;
     try {
       const resp = await axios.get(url, { timeout: this.TIMEOUT, validateStatus: () => true, httpsAgent: this.getHttpsAgent(), maxRedirects: 5 });
       const finalUrl = resp.request?.res?.responseUrl || url;
       if (/[?&](token|jwt|access_token|id_token)=ey[A-Za-z0-9_-]+/i.test(finalUrl)) {
-        vulnerable = true; issues.push('JWT token in URL — will be logged by servers and cached by browsers');
+        vulnerable = true; issues.push('JWT token in URL â€” will be logged by servers and cached by browsers');
       }
       const setCookie: string[] = Array.isArray(resp.headers['set-cookie']) ? resp.headers['set-cookie'] : resp.headers['set-cookie'] ? [resp.headers['set-cookie']] : [];
       for (const cookie of setCookie) {
@@ -2348,12 +2498,12 @@ export class PenetrationTestingService {
     }];
   }
 
-  private static async testCSPAnalysis(url: string): Promise<PenetrationTestResult[]> {
+  private static async testCSPAnalysis(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const issues: string[] = [];
     let vulnerable = false;
     let severity: PenetrationTestResult['severity'] = 'info';
     try {
-      const resp = await axios.get(url, { timeout: this.TIMEOUT, validateStatus: () => true, httpsAgent: this.getHttpsAgent() });
+      const resp = await axios.get(url, this.authCfg(ctx, { timeout: this.TIMEOUT, validateStatus: () => true, httpsAgent: this.getHttpsAgent() }));
       const csp = resp.headers['content-security-policy'] || resp.headers['content-security-policy-report-only'] || '';
       if (!csp) {
         vulnerable = true; severity = 'high';
@@ -2378,10 +2528,10 @@ export class PenetrationTestingService {
     }];
   }
 
-  private static async testRequestSmuggling(url: string): Promise<PenetrationTestResult[]> {
+  private static async testRequestSmuggling(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const evidence: string[] = [];
     try {
-      const baseResp = await axios.get(url, { timeout: this.TIMEOUT, validateStatus: () => true, httpsAgent: this.getHttpsAgent() });
+      const baseResp = await axios.get(url, this.authCfg(ctx, { timeout: this.TIMEOUT, validateStatus: () => true, httpsAgent: this.getHttpsAgent() }));
       const teResp = await axios.request({
         method: 'POST', url, timeout: 5000, validateStatus: () => true, httpsAgent: this.getHttpsAgent(),
         headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': '6', 'Transfer-Encoding': 'chunked' },
@@ -2389,12 +2539,12 @@ export class PenetrationTestingService {
       });
       const teBody = (typeof teResp.data === 'string' ? teResp.data : '').toLowerCase();
       if (teResp.status === 400 && (teBody.includes('transfer-encoding') || teBody.includes('chunked'))) {
-        evidence.push('Server returned 400 on CL/TE conflict — potential smuggling sensitivity');
+        evidence.push('Server returned 400 on CL/TE conflict â€” potential smuggling sensitivity');
       }
       const via = baseResp.headers['via'] || '';
       const server = baseResp.headers['server'] || '';
       if (via || /nginx|cloudflare|apache|haproxy|varnish/.test(server.toLowerCase())) {
-        evidence.push(`Proxy detected (${server || via}) — HTTP Request Smuggling surface. Manual Burp Suite verification recommended.`);
+        evidence.push(`Proxy detected (${server || via}) â€” HTTP Request Smuggling surface. Manual Burp Suite verification recommended.`);
       }
     } catch { /* timeout */ }
     return [{
@@ -2402,19 +2552,19 @@ export class PenetrationTestingService {
       category: 'Injection',
       severity: 'info',
       vulnerable: false,
-      description: evidence.length > 0 ? 'Request smuggling surface detected — proxy present. Manual verification required.' : 'No automated HTTP Request Smuggling indicators.',
+      description: evidence.length > 0 ? 'Request smuggling surface detected â€” proxy present. Manual verification required.' : 'No automated HTTP Request Smuggling indicators.',
       evidence: evidence.join('\n') || undefined,
       recommendation: 'Use HTTP/2 end-to-end. Normalize TE/CL conflicts at edge. Reject ambiguous requests on backend.',
     }];
   }
 
-  private static async testMethodOverride(url: string, surface: AttackSurface): Promise<PenetrationTestResult[]> {
+  private static async testMethodOverride(url: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const evidence: string[] = [];
     let vulnerable = false;
     const testUrls = [url, ...surface.apiEndpoints.slice(0, 3)];
     for (const testUrl of testUrls) {
       try {
-        const getResp = await axios.get(testUrl, { timeout: 4000, validateStatus: () => true, httpsAgent: this.getHttpsAgent() });
+        const getResp = await axios.get(testUrl, this.authCfg(ctx, { timeout: 4000, validateStatus: () => true, httpsAgent: this.getHttpsAgent() }));
         const overrideResp = await axios.post(testUrl, {}, {
           timeout: 4000, validateStatus: () => true, httpsAgent: this.getHttpsAgent(),
           headers: { 'X-HTTP-Method-Override': 'DELETE', 'X-Method-Override': 'DELETE', 'Content-Type': 'application/json' },
@@ -2433,19 +2583,19 @@ export class PenetrationTestingService {
       severity: vulnerable ? 'high' : 'info',
       vulnerable,
       description: vulnerable
-        ? `Server accepts X-HTTP-Method-Override — DELETE/PUT via POST possible, bypassing firewall rules.`
+        ? `Server accepts X-HTTP-Method-Override â€” DELETE/PUT via POST possible, bypassing firewall rules.`
         : 'No HTTP method override abuse detected.',
       evidence: evidence.join('\n') || undefined,
       recommendation: 'Disable X-HTTP-Method-Override unless required. Enforce authorization on intended operations.',
     }];
   }
 
-  private static async testServerInfoDisclosure(url: string): Promise<PenetrationTestResult[]> {
+  private static async testServerInfoDisclosure(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const disclosures: string[] = [];
     let vulnerable = false;
     let severity: PenetrationTestResult['severity'] = 'low';
     try {
-      const resp = await axios.get(url, { timeout: this.TIMEOUT, validateStatus: () => true, httpsAgent: this.getHttpsAgent() });
+      const resp = await axios.get(url, this.authCfg(ctx, { timeout: this.TIMEOUT, validateStatus: () => true, httpsAgent: this.getHttpsAgent() }));
       const h = resp.headers;
       const versionHeaders = [
         { key: 'server', label: 'Web server version' },
@@ -2455,7 +2605,7 @@ export class PenetrationTestingService {
       ];
       for (const vh of versionHeaders) {
         const value = h[vh.key];
-        if (value && /\d+\.\d+/.test(value)) { vulnerable = true; disclosures.push(`${vh.key}: "${value}" — ${vh.label} exposed`); }
+        if (value && /\d+\.\d+/.test(value)) { vulnerable = true; disclosures.push(`${vh.key}: "${value}" â€” ${vh.label} exposed`); }
       }
       const body = (typeof resp.data === 'string' ? resp.data : '').toLowerCase();
       if (body.includes('stack trace') || body.includes('traceback') || body.includes('exception in thread')) {
@@ -2480,7 +2630,7 @@ export class PenetrationTestingService {
     }];
   }
 
-  private static async testSecurityLogging(url: string): Promise<PenetrationTestResult[]> {
+  private static async testSecurityLogging(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const issues: string[] = [];
     let vulnerable = false;
     let severity: PenetrationTestResult['severity'] = 'medium';
@@ -2533,7 +2683,7 @@ export class PenetrationTestingService {
     }];
   }
 
-  private static async testOAuthPKCE(url: string): Promise<PenetrationTestResult[]> {
+  private static async testOAuthPKCE(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const issues: string[] = [];
     let vulnerable = false;
     let severity: PenetrationTestResult['severity'] = 'info';
@@ -2549,7 +2699,7 @@ export class PenetrationTestingService {
           const isRealOAuth = !ct.includes('text/html') && (body.includes('response_type') || body.includes('error') || ct.includes('application/json'));
           if (isRealOAuth && !body.includes('state') && (r1.status === 200 || r1.status === 302)) {
             vulnerable = true; severity = 'high';
-            issues.push(`OAuth endpoint ${ep} does not require state parameter — CSRF on OAuth flow possible`);
+            issues.push(`OAuth endpoint ${ep} does not require state parameter â€” CSRF on OAuth flow possible`);
           }
         }
         const r2 = await axios.get(`${origin}${ep}?response_type=code&client_id=test&redirect_uri=${encodeURIComponent('https://evil-sentinel-test.com/callback')}&state=abc`, {
@@ -2557,13 +2707,13 @@ export class PenetrationTestingService {
         });
         if (r2.status === 302 && (r2.headers['location'] || '').includes('evil-sentinel-test.com')) {
           vulnerable = true; severity = 'critical';
-          issues.push(`OAuth open redirect_uri at ${ep} — authorization code theft possible`);
+          issues.push(`OAuth open redirect_uri at ${ep} â€” authorization code theft possible`);
         }
       } catch { /* endpoint not found */ }
     }
     // Check well-known
     try {
-      const wk = await axios.get(`${origin}/.well-known/oauth-authorization-server`, { timeout: 5000, validateStatus: () => true, httpsAgent: this.getHttpsAgent() });
+      const wk = await axios.get(`${origin}/.well-known/oauth-authorization-server`, this.authCfg(ctx, { timeout: 5000, validateStatus: () => true, httpsAgent: this.getHttpsAgent() }));
       if (wk.status === 200) {
         const ct = (wk.headers['content-type'] || '').toLowerCase();
         const body = typeof wk.data === 'object' ? JSON.stringify(wk.data) : (wk.data || '');
@@ -2584,9 +2734,9 @@ export class PenetrationTestingService {
   }
 
   /**
-   * AI Prompt Injection — uses discovered AI/chat endpoints from crawl.
+   * AI Prompt Injection â€” uses discovered AI/chat endpoints from crawl.
    */
-  private static async testPromptInjection(url: string, surface: AttackSurface): Promise<PenetrationTestResult[]> {
+  private static async testPromptInjection(url: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const issues: string[] = [];
     let vulnerable = false;
     const origin = new URL(url).origin;
@@ -2620,7 +2770,7 @@ export class PenetrationTestingService {
           const body = (typeof r.data === 'string' ? r.data : JSON.stringify(r.data || '')).toLowerCase();
           if (r.status === 200 && body.includes(marker)) {
             vulnerable = true;
-            issues.push(`Prompt injection at ${ep} with: "${payload.substring(0, 60)}..." — marker found`);
+            issues.push(`Prompt injection at ${ep} with: "${payload.substring(0, 60)}..." â€” marker found`);
             break;
           }
         }
@@ -2641,7 +2791,7 @@ export class PenetrationTestingService {
     }];
   }
 
-  private static async testDependencyConfusion(url: string): Promise<PenetrationTestResult[]> {
+  private static async testDependencyConfusion(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     const issues: string[] = [];
     let vulnerable = false;
     const origin = new URL(url).origin;
@@ -2673,19 +2823,19 @@ export class PenetrationTestingService {
       severity: vulnerable ? 'high' : 'info',
       vulnerable,
       description: vulnerable
-        ? `Package manifests exposed: ${issues.join('; ')} — attackers can discover internal package names`
+        ? `Package manifests exposed: ${issues.join('; ')} â€” attackers can discover internal package names`
         : 'No exposed package manifests detected.',
       evidence: issues.join('\n') || undefined,
       recommendation: 'Block public access to package manifests and lockfiles. Use private registries with namespace scoping.',
     }];
   }
 
-  private static async testSupplyChain(url: string): Promise<PenetrationTestResult[]> {
+  private static async testSupplyChain(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
     // Check for SubResource Integrity (SRI) on external scripts
     const issues: string[] = [];
     let vulnerable = false;
     try {
-      const resp = await axios.get(url, { timeout: this.TIMEOUT, validateStatus: () => true, httpsAgent: this.getHttpsAgent() });
+      const resp = await axios.get(url, this.authCfg(ctx, { timeout: this.TIMEOUT, validateStatus: () => true, httpsAgent: this.getHttpsAgent() }));
       const $ = cheerio.load(resp.data as string);
       $('script[src]').each((_, el) => {
         const src = $(el).attr('src') || '';
@@ -2705,21 +2855,21 @@ export class PenetrationTestingService {
       });
     } catch { /* continue */ }
     return [{
-      testName: 'Supply Chain — SubResource Integrity',
+      testName: 'Supply Chain â€” SubResource Integrity',
       category: 'Security Misconfiguration',
       severity: vulnerable ? 'medium' : 'info',
       vulnerable,
       description: vulnerable
-        ? `${issues.length} external resource(s) loaded without SubResource Integrity (SRI) — CDN compromise would execute attacker code.`
+        ? `${issues.length} external resource(s) loaded without SubResource Integrity (SRI) â€” CDN compromise would execute attacker code.`
         : 'All external scripts appear to use SRI integrity attributes.',
       evidence: issues.slice(0, 5).join('\n') || undefined,
       recommendation: 'Add integrity and crossorigin attributes to all external scripts and stylesheets. Use SRI hash generator (https://www.srihash.org/).',
     }];
   }
 
-  // ──────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // HELPERS
-  // ──────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /**
    * Build injection test targets from the attack surface,

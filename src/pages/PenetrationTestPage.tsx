@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertTriangle, Loader2, Target, Zap, CheckCircle, XCircle,
   Info, ArrowLeft, Download, Share2, Globe, Shield, Lock,
-  ChevronRight, Activity, Bug, Eye, Database, Cpu,
+  ChevronRight, Activity, Bug, Eye, Database, Cpu, KeyRound, User, EyeOff,
 } from "lucide-react";
 import { PageLayout } from "@/components/PageLayout";
 import { PageHeader } from "@/components/PageHeader";
@@ -49,8 +49,17 @@ export default function PenetrationTestPage() {
   const [viewMode, setViewMode] = useState<"new" | "view">(resultId ? "view" : "new");
   const [authorized, setAuthorized] = useState(false);
   const [domainVerified, setDomainVerified] = useState<boolean | null>(null);
-  const [checkingDomain, setCheckingDomain] = useState(true); // true while initial fetch runs
+  const [checkingDomain, setCheckingDomain] = useState(true);
   const [verifiedDomainsList, setVerifiedDomainsList] = useState<string[]>([]);
+
+  // Authenticated scan state
+  const [authEnabled, setAuthEnabled] = useState(false);
+  const [authUsername, setAuthUsername] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authLoginUrl, setAuthLoginUrl] = useState("");
+  const [authToken, setAuthToken] = useState("");
+  const [authMode, setAuthMode] = useState<"credentials" | "token">("credentials");
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => { if (resultId) loadExistingResult(resultId); }, [resultId]);
 
@@ -125,7 +134,19 @@ export default function PenetrationTestPage() {
     try {
       setTesting(true);
       setReport(null);
-      const result = await websiteScanService.performPenetrationTest(url);
+
+      // Build credentials object if auth toggle is on
+      const credentials = authEnabled
+        ? authMode === "token"
+          ? { token: authToken.trim() || undefined }
+          : {
+              username: authUsername.trim() || undefined,
+              password: authPassword || undefined,
+              loginUrl: authLoginUrl.trim() || undefined,
+            }
+        : undefined;
+
+      const result = await websiteScanService.performPenetrationTest(url, credentials);
       setReport(result);
       toast({ title: "Penetration Test Complete", description: `Found ${result.vulnerabilitiesFound} vulnerabilities` });
     } catch (error: any) {
@@ -288,6 +309,81 @@ export default function PenetrationTestPage() {
                       I understand this executes active vulnerability scans including injection attacks.
                     </span>
                   </label>
+
+                  {/* Authenticated Scan Toggle */}
+                  <div className="rounded-xl overflow-hidden transition-all"
+                    style={{ border: "1px solid hsl(var(--border))", background: "hsl(var(--muted)/0.3)" }}>
+                    <label className="flex items-center gap-3 p-3 cursor-pointer select-none">
+                      <div className={`relative w-9 h-5 rounded-full transition-colors ${authEnabled ? "bg-violet-500" : "bg-muted-foreground/30"}`}
+                        onClick={() => setAuthEnabled(v => !v)}>
+                        <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${authEnabled ? "translate-x-4" : ""}`} />
+                      </div>
+                      <KeyRound className="w-4 h-4 text-violet-400" />
+                      <span className="text-sm font-medium text-foreground">Authenticated Scan</span>
+                      <span className="ml-auto text-xs text-muted-foreground">Test behind login</span>
+                    </label>
+
+                    <AnimatePresence>
+                      {authEnabled && (
+                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }}
+                          className="overflow-hidden">
+                          <div className="px-3 pb-3 space-y-3 border-t" style={{ borderColor: "hsl(var(--border))" }}>
+                            {/* Mode toggle */}
+                            <div className="flex gap-2 pt-3">
+                              {(["credentials", "token"] as const).map(m => (
+                                <button key={m} onClick={() => setAuthMode(m)}
+                                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-medium transition-all ${authMode === m ? "bg-violet-500 text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>
+                                  {m === "credentials" ? "Username / Password" : "Bearer Token"}
+                                </button>
+                              ))}
+                            </div>
+
+                            {authMode === "credentials" ? (
+                              <div className="space-y-2">
+                                <div className="relative">
+                                  <User className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-muted-foreground" />
+                                  <input value={authUsername} onChange={e => setAuthUsername(e.target.value)}
+                                    placeholder="Username or email"
+                                    className="w-full bg-background border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-violet-500/50"
+                                    style={{ borderColor: "hsl(var(--border))" }} />
+                                </div>
+                                <div className="relative">
+                                  <Lock className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-muted-foreground" />
+                                  <input value={authPassword} onChange={e => setAuthPassword(e.target.value)}
+                                    type={showPassword ? "text" : "password"}
+                                    placeholder="Password"
+                                    className="w-full bg-background border rounded-lg pl-8 pr-8 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-violet-500/50"
+                                    style={{ borderColor: "hsl(var(--border))" }} />
+                                  <button type="button" onClick={() => setShowPassword(v => !v)}
+                                    className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground">
+                                    {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                  </button>
+                                </div>
+                                <input value={authLoginUrl} onChange={e => setAuthLoginUrl(e.target.value)}
+                                  placeholder="Login URL (optional — auto-detected)"
+                                  className="w-full bg-background border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-violet-500/50"
+                                  style={{ borderColor: "hsl(var(--border))" }} />
+                                <p className="text-xs text-muted-foreground">
+                                  Credentials are used <span className="text-foreground">only in-memory</span> during the scan and never stored.
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                <input value={authToken} onChange={e => setAuthToken(e.target.value)}
+                                  placeholder="Bearer token / JWT"
+                                  className="w-full bg-background border rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-violet-500/50"
+                                  style={{ borderColor: "hsl(var(--border))" }} />
+                                <p className="text-xs text-muted-foreground">
+                                  Token is used <span className="text-foreground">only in-memory</span> during the scan and never stored.
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
 
                   <div className="flex gap-3">
                     <button onClick={handleTest} disabled={testing || !url.trim() || !authorized}
