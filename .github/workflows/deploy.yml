@@ -1,0 +1,47 @@
+﻿name: Deploy to Vercel
+
+on:
+  push:
+    branches: [main]
+
+env:
+  VERCEL_ORG_ID: team_NMSXVnereosL7KURBgMnsZ59
+  VERCEL_PROJECT_ID: prj_bUTJ5GAGIV3OE1UvRBAaZ3TyeYGS
+
+jobs:
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Vite app
+        run: npm run build
+        env:
+          VITE_API_URL: ''
+
+      # Manually create .vercel/output so --prebuilt works without parsing vercel.json
+      - name: Prepare Vercel output
+        run: |
+          mkdir -p .vercel/output/static
+          cp -r dist/. .vercel/output/static/
+          cat > .vercel/output/config.json << 'EOF'
+          {
+            "version": 3,
+            "routes": [
+              { "handle": "filesystem" },
+              { "src": "/api/(.*)", "dest": "https://sentinel-api.vercel.app/api/$1" },
+              { "src": "/(.*)", "dest": "/index.html" }
+            ]
+          }
+          EOF
+
+      - name: Deploy to Vercel Production
+        run: npx vercel deploy --prod --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
