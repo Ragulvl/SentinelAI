@@ -237,10 +237,6 @@ export default function PenetrationTestPage() {
     }
   };
 
-      setTesting(false);
-    }
-  };
-
   const categories = report ? Array.from(new Set(report.results.map(r => r.category))) : [];
   const filteredResults = selectedCategory ? report?.results.filter(r => r.category === selectedCategory) : report?.results;
   const sortedResults = filteredResults ? [...filteredResults].sort((a, b) => {
