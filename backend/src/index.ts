@@ -25,6 +25,9 @@ import { NotificationService } from './services/notification.service.js';
 
 const app = express();
 
+// Trust Vercel/proxy headers so rate limiter uses real client IPs (not internal Vercel IPs)
+app.set('trust proxy', 1);
+
 // ── Security headers (fixes CSP unsafe-inline, adds Permissions-Policy) ──────
 app.use(helmet({
   contentSecurityPolicy: {
@@ -57,14 +60,14 @@ app.use((_req, res, next) => {
 });
 
 // ── Rate limiting ──────────────────────────────────────────────────────────────
-// Auth endpoints: strict (10 req / 15 min)
+// Auth endpoints: 50 req / 15 min per real IP (trust proxy enabled above)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
-  standardHeaders: true,   // Return rate limit info in RateLimit-* headers
+  max: 50,
+  standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests — please try again later.' },
-  skip: (req) => config.nodeEnv === 'development', // Don't rate-limit in local dev
+  skip: (req) => config.nodeEnv === 'development',
 });
 
 // General API: permissive (100 req / 15 min)
