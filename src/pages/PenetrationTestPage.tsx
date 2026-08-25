@@ -11,7 +11,7 @@ import { PageLayout } from "@/components/PageLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { websiteScanService, PenetrationTestReport } from "@/services/websiteScan.service";
 import { useToast } from "@/hooks/use-toast";
-import { API_ENDPOINTS } from "@/config/api";
+import { API_ENDPOINTS, API_URL } from "@/config/api";
 import { AuthService } from "@/services/auth.service";
 import { exportToPDF, downloadPDF, sharePDF } from "@/utils/pdfExport";
 
@@ -155,7 +155,7 @@ export default function PenetrationTestPage() {
         : undefined;
 
       const token = AuthService.getToken();
-      const baseUrl = API_ENDPOINTS.webscan.pentest.replace('/pentest', '');
+      const baseUrl = API_URL + '/api/website-scan';
       const streamUrl = `${baseUrl}/pentest/stream?token=${encodeURIComponent(token || '')}&url=${encodeURIComponent(url)}${credentials ? `&credentials=${encodeURIComponent(JSON.stringify(credentials))}` : ''}`;
 
       const es = new EventSource(streamUrl);
