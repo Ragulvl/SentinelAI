@@ -241,11 +241,26 @@ export default function PenetrationTestPage() {
         }
       };
 
-      // Run animation and real test in parallel, wait for BOTH
-      const [, result] = await Promise.all([
-        animateTests(),
-        realTestPromise,
-      ]);
+      // Buffer real result in a ref so animation is never blocked by it
+      let realResult: any = null;
+      let realError: any = null;
+      realTestPromise
+        .then(r => { realResult = r; })
+        .catch(e => { realError = e; });
+
+      // Run animation to full completion regardless of backend speed
+      await animateTests();
+
+      // Now get the result — already done or wait for it
+      let result: any;
+      if (realResult) {
+        result = realResult;
+      } else if (realError) {
+        throw realError;
+      } else {
+        setLivePhase('Waiting for scan engine to finish...');
+        result = await realTestPromise;
+      }
 
       // Rebuild terminal with real results
       setLivePhase('Complete ✓');
