@@ -208,7 +208,8 @@ export default function PenetrationTestPage() {
       const realTestPromise = websiteScanService.performPenetrationTest(url, credentials);
 
       const TEST_NAMES = Object.keys(TEST_SCRIPTS);
-      const msPerTest = Math.floor(140000 / TEST_NAMES.length);
+      // 500ms per test = ~22s total animation — fast enough to look live, short enough to finish before backend
+      const msPerTest = 500;
 
       const animateTests = async () => {
         await new Promise(r => setTimeout(r, 800));
@@ -227,7 +228,8 @@ export default function PenetrationTestPage() {
           addLine(`${num} ${name}`, isAI ? 'hsl(280 60% 70%)' : 'hsl(40 80% 70%)');
           scrollTerm();
           const lines = TEST_SCRIPTS[name]?.(baseUrl) || [];
-          const lineDelay = Math.max(120, Math.floor(msPerTest / (lines.length + 2)));
+          // Spread payload lines evenly: each line gets ~120ms so 2-line tests ≈ 300ms, 3-line ≈ 350ms
+          const lineDelay = Math.max(80, Math.floor(msPerTest / (lines.length + 2)));
           for (const [text, color] of lines) {
             await new Promise(r => setTimeout(r, lineDelay));
             addLine(text as string, color as string, true);
