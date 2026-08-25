@@ -230,4 +230,13 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
-startServer();
+// In Vercel serverless: export app (no listen needed — Vercel handles routing)
+// In traditional server (Render/local): call startServer() which calls app.listen()
+if (process.env.VERCEL) {
+  // Connect DB eagerly so first request doesn't time out
+  connectDatabase().catch(err => console.error('DB connect failed:', err));
+} else {
+  startServer();
+}
+
+export default app;
