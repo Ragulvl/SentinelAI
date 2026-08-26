@@ -566,116 +566,116 @@ export default function PenetrationTestPage() {
                   </button>
                 </div>
 
-                {/* Terminal â€” appears when scan starts */}
-                {(testing || terminalLines.length > 0) && (
-                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                    className="rounded-xl overflow-hidden"
-                    style={{ border: `1px solid ${livePhase.startsWith('Complete') ? 'hsl(145 60% 40% / 0.4)' : 'hsl(0 84% 55% / 0.3)'}`, boxShadow: testing ? "0 0 24px hsl(0 84% 55% / 0.08)" : "0 0 24px hsl(145 60% 45% / 0.08)" }}>
+                {/* Terminal - always visible */}
+                <div className="rounded-xl overflow-hidden"
+                  style={{ border: `1px solid ${livePhase.startsWith("Complete") ? "hsl(145 60% 40% / 0.4)" : testing ? "hsl(0 84% 55% / 0.35)" : "hsl(var(--border))"}` }}>
 
-                    {/* Terminal chrome */}
-                    <div className="flex items-center gap-2 px-3 py-2" style={{ background: "hsl(0 0% 8%)" }}>
-                      <div className="flex gap-1.5">
-                        <div className="w-3 h-3 rounded-full bg-red-500/80" />
-                        <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
-                        <div className="w-3 h-3 rounded-full bg-green-500/80" />
+                  <div className="flex items-center gap-2 px-3 py-2" style={{ background: "hsl(0 0% 8%)" }}>
+                    <div className="flex gap-1.5">
+                      <div className="w-3 h-3 rounded-full bg-red-500/80" />
+                      <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
+                      <div className="w-3 h-3 rounded-full bg-green-500/80" />
+                    </div>
+                    <span className="text-[10px] font-mono text-gray-400 ml-1 flex-1 truncate">
+                      {"sentinel-pentest"}{url ? " — " + url : ""}
+                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {testing && <><div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" /><span className="text-[10px] font-mono text-gray-400">LIVE</span></>}
+                      {!testing && livePhase.startsWith("Complete") && <span className="text-[10px] font-mono" style={{ color: "hsl(145 60% 55%)" }}>DONE</span>}
+                      {!testing && !livePhase && <span className="text-[10px] font-mono" style={{ color: "hsl(0 0% 25%)" }}>IDLE</span>}
+                    </div>
+                  </div>
+
+                  <div className="px-3 py-1.5 font-mono text-[10px] flex items-center gap-2 border-b"
+                    style={{ background: "hsl(0 0% 6%)", color: livePhase ? "hsl(145 60% 55%)" : "hsl(0 0% 28%)", borderColor: "hsl(0 0% 12%)" }}>
+                    {testing && <Loader2 className="w-2.5 h-2.5 animate-spin shrink-0" />}
+                    {!testing && livePhase.startsWith("Complete") && <span>✓</span>}
+                    <span>{livePhase ? "$ " + livePhase : "$ awaiting target..."}</span>
+                  </div>
+
+                  <div ref={terminalRef} className="overflow-y-auto p-3 font-mono text-[11px] leading-5 space-y-0.5"
+                    style={{ background: "hsl(0 0% 7%)", height: "340px" }}>
+                    {terminalLines.length === 0 && !testing && (
+                      <div className="h-full flex flex-col justify-center items-center gap-2" style={{ color: "hsl(0 0% 18%)" }}>
+                        <span>sentinel pentest engine v2.0</span>
+                        <span>56 tests ready - OWASP 2024 - AI-enhanced</span>
+                        <span style={{ marginTop: "12px" }}>enter a URL and press Start to begin</span>
                       </div>
-                      <span className="text-[10px] font-mono text-gray-400 ml-1 flex-1 truncate">sentinel-pentest â€” {url || 'target'}</span>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {testing && <><div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" /><span className="text-[10px] font-mono text-gray-400">LIVE</span></>}
-                        {!testing && terminalLines.length > 0 && <span className="text-[10px] font-mono" style={{ color: "hsl(145 60% 55%)" }}>â— DONE</span>}
+                    )}
+                    {terminalLines.map((line, i) => (
+                      <div key={i} className="whitespace-pre-wrap break-all"
+                        style={{ color: line.color, paddingLeft: line.indent ? "1.25rem" : "0" }}>
+                        {line.text || " "}
                       </div>
-                    </div>
+                    ))}
+                    {testing && (
+                      <div className="flex items-center gap-1 mt-1" style={{ color: "hsl(210 80% 65%)" }}>
+                        <span className="animate-pulse text-sm">|</span>
+                      </div>
+                    )}
+                  </div>
 
-                    {/* Phase bar */}
-                    <div className="px-3 py-1.5 font-mono text-[10px] flex items-center gap-2 border-b"
-                      style={{ background: "hsl(0 0% 6%)", color: "hsl(145 60% 55%)", borderColor: "hsl(0 0% 12%)" }}>
-                      {testing && <Loader2 className="w-2.5 h-2.5 animate-spin shrink-0" />}
-                      {!testing && terminalLines.length > 0 && <span style={{ color: "hsl(145 60% 55%)" }}>âœ“</span>}
-                      <span>$ {livePhase || 'Initializing...'}</span>
-                    </div>
-
-                    {/* Terminal body */}
-                    <div ref={terminalRef} className="overflow-y-auto p-3 font-mono text-[11px] leading-5 space-y-0.5"
-                      style={{ background: "hsl(0 0% 7%)", height: "380px" }}>
-                      {terminalLines.map((line, i) => (
-                        <div key={i} className="whitespace-pre-wrap break-all"
-                          style={{ color: line.color, paddingLeft: line.indent ? '1.25rem' : '0' }}>
-                          {line.text || '\u00a0'}
-                        </div>
-                      ))}
-                      {testing && (
-                        <div className="flex items-center gap-1 mt-1" style={{ color: "hsl(210 80% 65%)" }}>
-                          <span className="animate-pulse text-sm">â–Œ</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Stats bar */}
-                    <div className="flex items-center gap-5 px-3 py-2 text-[10px] font-mono border-t"
-                      style={{ background: "hsl(0 0% 8%)", borderColor: "hsl(0 0% 12%)" }}>
-                      <span style={{ color: "hsl(145 60% 55%)" }}>âœ“ {liveStats.passed} passed</span>
-                      <span style={{ color: "#ef4444" }}>âœ— {liveStats.vulns} vuln{liveStats.vulns !== 1 ? 's' : ''}</span>
-                      <span style={{ color: "hsl(0 0% 40%)" }}>{liveStats.total} / 56 tests</span>
-                      {!testing && liveStats.total > 0 && (
-                        <span className="ml-auto" style={{ color: "hsl(0 0% 40%)" }}>
-                          Risk: {Math.round((liveStats.vulns / Math.max(liveStats.total, 1)) * 100)}%
-                        </span>
-                      )}
-                    </div>
-                  </motion.div>
-                )}
+                  <div className="flex items-center gap-5 px-3 py-2 text-[10px] font-mono border-t"
+                    style={{ background: "hsl(0 0% 8%)", borderColor: "hsl(0 0% 12%)" }}>
+                    <span style={{ color: liveStats.passed > 0 ? "hsl(145 60% 55%)" : "hsl(0 0% 28%)" }}>✓ {liveStats.passed} passed</span>
+                    <span style={{ color: liveStats.vulns > 0 ? "#ef4444" : "hsl(0 0% 28%)" }}>✗ {liveStats.vulns} vulns</span>
+                    <span style={{ color: "hsl(0 0% 28%)" }}>{liveStats.total} / 56</span>
+                    {liveStats.total > 0 && (
+                      <span className="ml-auto" style={{ color: liveStats.vulns > 0 ? "#ef4444" : "hsl(145 60% 55%)" }}>
+                        Risk: {Math.round((liveStats.vulns / Math.max(liveStats.total, 1)) * 100)}%
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              {/* â”€â”€ RIGHT: Test list sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+              {/* RIGHT: Info sidebar */}
               <div className="lg:col-span-2 space-y-4">
-                {/* 56 modern tests grouped */}
-                <div className="card-elevated p-4 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg flex items-center justify-center"
-                      style={{ background: "hsl(var(--primary) / 0.1)", border: "1px solid hsl(var(--primary) / 0.2)" }}>
-                      <Shield className="w-3.5 h-3.5 text-primary" />
-                    </div>
+                <div className="card-elevated overflow-hidden">
+                  <div className="px-4 py-3 flex items-center gap-2 border-b" style={{ borderColor: "hsl(var(--border))" }}>
+                    <Shield className="w-4 h-4 text-primary" />
                     <div>
                       <h3 className="font-semibold text-foreground text-sm">56 Security Tests</h3>
                       <p className="text-[10px] text-muted-foreground">OWASP 2024 + Modern threats</p>
                     </div>
                   </div>
-
-                  {/* Grouped test categories */}
-                  {([
-                    { group: "Injection", color: "#EF4444", tests: ["XSS", "SQL Injection", "NoSQL Injection", "Command Injection", "GraphQL Injection", "SSTI", "XXE/XML", "LDAP", "ReDoS"] },
-                    { group: "Authentication", color: "#F97316", tests: ["Auth Bypass", "JWT Security", "Session Mgmt", "OAuth/PKCE", "2FA Bypass", "Password Reset", "Credential Stuffing"] },
-                    { group: "Authorization", color: "#F59E0B", tests: ["IDOR / BOLA", "BFLA", "Mass Assignment", "CSRF", "HTTP Method Override"] },
-                    { group: "Injection (More)", color: "#EF4444", tests: ["Prototype Pollution", "RCE", "Path Traversal", "CRLF", "Header Injection", "Log4Shell", "Deserialization"] },
-                    { group: "Network", color: "#8B5CF6", tests: ["SSRF", "Open Redirect", "Subdomain Takeover", "HTTP Smuggling", "WebSocket", "Cache Poisoning"] },
-                    { group: "Configuration", color: "#3B82F6", tests: ["CSP", "CORS", "Clickjacking", "Security Headers", "Permissions Policy", "Server Info", "API Versioning"] },
-                    { group: "Client-Side", color: "#06B6D4", tests: ["DOM XSS", "PostMessage", "File Upload", "Business Logic", "Race Conditions", "Rate Limiting"] },
-                    { group: "AI & Supply Chain", color: "#A855F7", tests: ["AI/LLM Prompt Injection", "JS Bundle Analysis", "Endpoint Discovery", "Dependency Confusion", "SRI/Supply Chain"] },
-                  ] as const).map(({ group, color, tests }) => (
-                    <div key={group}>
-                      <p className="text-[9px] font-bold tracking-widest mb-1.5"
-                        style={{ color, textTransform: 'uppercase' }}>{group}</p>
-                      <div className="flex flex-wrap gap-1">
-                        {tests.map(t => (
-                          <span key={t} className="text-[10px] px-1.5 py-0.5 rounded font-medium"
-                            style={{ background: `${color}12`, color: `${color}cc`, border: `1px solid ${color}22` }}>
-                            {t}
-                          </span>
-                        ))}
+                  <div className="overflow-y-auto" style={{ maxHeight: "420px" }}>
+                    {([
+                      { group: "Injection",          dot: "#EF4444", tests: ["XSS", "SQL Injection", "NoSQL Injection", "Command Injection", "GraphQL Injection", "SSTI", "XXE/XML", "LDAP Injection", "ReDoS", "Prototype Pollution", "RCE", "Path Traversal", "CRLF Injection", "Header Injection", "Log4Shell", "Deserialization"] },
+                      { group: "Authentication",     dot: "#F97316", tests: ["Auth Bypass", "JWT Security", "Session Management", "OAuth/PKCE", "2FA Bypass", "Password Reset", "Credential Stuffing"] },
+                      { group: "Authorization",      dot: "#F59E0B", tests: ["IDOR / BOLA", "BFLA", "Mass Assignment", "CSRF", "HTTP Method Override"] },
+                      { group: "Network",             dot: "#8B5CF6", tests: ["SSRF", "Open Redirect", "Subdomain Takeover", "HTTP Smuggling", "Web Cache Poisoning", "WebSocket"] },
+                      { group: "Configuration",      dot: "#3B82F6", tests: ["Security Misconfigurations", "CSP", "CORS", "Permissions Policy", "Clickjacking", "Server Info", "API Versioning"] },
+                      { group: "Client-Side",        dot: "#06B6D4", tests: ["DOM XSS", "PostMessage", "File Upload", "Business Logic", "Race Conditions", "Rate Limiting"] },
+                      { group: "AI and Supply Chain",dot: "#A855F7", tests: ["AI Prompt Injection", "JS Bundle Analysis", "Endpoint Discovery", "Dependency Confusion", "SRI Check"] },
+                    ] as const).map(({ group, dot, tests }) => (
+                      <div key={group} className="border-b last:border-0" style={{ borderColor: "hsl(var(--border))" }}>
+                        <div className="px-4 py-2 flex items-center gap-2" style={{ background: "hsl(var(--muted)/0.3)" }}>
+                          <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: dot }} />
+                          <span className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">{group}</span>
+                          <span className="ml-auto text-[10px] text-muted-foreground/40">{tests.length}</span>
+                        </div>
+                        <div className="px-4 py-2 space-y-1.5">
+                          {tests.map((t, ti) => (
+                            <div key={t} className="flex items-center gap-2">
+                              <span className="text-[10px] text-muted-foreground/30 font-mono w-4 shrink-0 text-right">{ti + 1}</span>
+                              <span className="text-xs text-muted-foreground">{t}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
 
-                {/* Risk legend */}
-                <div className="card-elevated p-4 space-y-3">
-                  <h3 className="font-semibold text-foreground text-sm">Risk Severity</h3>
+                <div className="card-elevated p-4 space-y-2.5">
+                  <h3 className="font-semibold text-foreground text-sm mb-3">Risk Severity</h3>
                   {[
-                    { label: "Critical", color: "#FF4444", desc: "Immediate exploitation possible" },
-                    { label: "High", color: "#EF4444", desc: "Significant security risk" },
-                    { label: "Medium", color: "#F97316", desc: "Moderate impact potential" },
-                    { label: "Low", color: "#FACC15", desc: "Minor security concern" },
-                    { label: "Info", color: "#6B7280", desc: "Advisory / best practice" },
+                    { label: "Critical", color: "#FF4444", desc: "Immediate exploitation" },
+                    { label: "High",     color: "#EF4444", desc: "Significant risk" },
+                    { label: "Medium",   color: "#F97316", desc: "Moderate impact" },
+                    { label: "Low",      color: "#FACC15", desc: "Minor concern" },
+                    { label: "Info",     color: "#6B7280", desc: "Best practice" },
                   ].map(level => (
                     <div key={level.label} className="flex items-center gap-3">
                       <div className="w-2 h-2 rounded-full shrink-0" style={{ background: level.color }} />
@@ -688,9 +688,9 @@ export default function PenetrationTestPage() {
             </div>
           )}
 
-          {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
               RESULTS PANEL â€” shown after scan completes
-          â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+
           {report && (
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
 
