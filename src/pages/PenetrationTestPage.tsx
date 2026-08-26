@@ -605,8 +605,8 @@ export default function PenetrationTestPage() {
               </div>
 
               {/* RIGHT: Info sidebar */}
-              <div className="lg:col-span-2 space-y-4">
-                <div className="card-elevated overflow-hidden">
+              <div className="lg:col-span-2 flex flex-col gap-4">
+                <div className="card-elevated overflow-hidden flex flex-col flex-1">
                   <div className="px-4 py-3 flex items-center gap-2 border-b" style={{ borderColor: "hsl(var(--border))" }}>
                     <Shield className="w-4 h-4 text-primary" />
                     <div>
@@ -614,7 +614,7 @@ export default function PenetrationTestPage() {
                       <p className="text-[10px] text-muted-foreground">OWASP 2024 + Modern threats</p>
                     </div>
                   </div>
-                  <div className="overflow-y-auto" style={{ maxHeight: "360px" }}>
+                  <div className="overflow-y-auto flex-1" style={{ minHeight: "0" }}>
                     {([
                       { group: "Injection",          dot: "#EF4444", tests: ["XSS", "SQL Injection", "NoSQL Injection", "Command Injection", "GraphQL Injection", "SSTI", "XXE/XML", "LDAP Injection", "ReDoS", "Prototype Pollution", "RCE", "Path Traversal", "CRLF Injection", "Header Injection", "Log4Shell", "Deserialization"] },
                       { group: "Authentication",     dot: "#F97316", tests: ["Auth Bypass", "JWT Security", "Session Management", "OAuth/PKCE", "2FA Bypass", "Password Reset", "Credential Stuffing"] },
