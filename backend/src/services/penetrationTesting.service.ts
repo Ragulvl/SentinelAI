@@ -1,4 +1,4 @@
-﻿import axios, { AxiosResponse } from 'axios';
+import axios, { AxiosResponse } from 'axios';
 import * as cheerio from 'cheerio';
 import https from 'https';
 import crypto from 'crypto';
@@ -610,11 +610,24 @@ export class PenetrationTestingService {
       { name: 'Deserialization',            fn: () => this.testDeserializationAttacks(normalizedUrl, ctx) },
       { name: 'HTTP Request Smuggling',     fn: () => this.testRequestSmuggling(normalizedUrl, ctx) },
       { name: 'Host Header Injection',      fn: () => this.testHostHeaderInjection(normalizedUrl, ctx) },
-      // 2025-2026
-      { name: 'OAuth 2.0 / PKCE',          fn: () => this.testOAuthPKCE(normalizedUrl, ctx) },
-      { name: 'AI Prompt Injection',        fn: () => this.testPromptInjection(normalizedUrl, surface, ctx) },
-      { name: 'Dependency Confusion',       fn: () => this.testDependencyConfusion(normalizedUrl, ctx) },
-      { name: 'Supply Chain',               fn: () => this.testSupplyChain(normalizedUrl, ctx) },
+      // 2025-2026 modern
+      { name: 'OAuth 2.0 / PKCE',            fn: () => this.testOAuthPKCE(normalizedUrl, ctx) },
+      { name: 'AI / LLM Prompt Injection',   fn: () => this.testPromptInjection(normalizedUrl, surface, ctx) },
+      { name: 'Dependency Confusion',         fn: () => this.testDependencyConfusion(normalizedUrl, ctx) },
+      { name: 'Supply Chain / SRI',          fn: () => this.testSupplyChain(normalizedUrl, ctx) },
+      // New modern tests
+      { name: 'GraphQL Injection',            fn: () => this.testGraphQL(normalizedUrl, ctx) },
+      { name: '2FA / MFA Bypass',            fn: () => this.test2FABypass(normalizedUrl, surface, ctx) },
+      { name: 'Password Reset Flaws',        fn: () => this.testPasswordResetFlaws(normalizedUrl, surface, ctx) },
+      { name: 'Mass Assignment',             fn: () => this.testMassAssignment(normalizedUrl, surface, ctx) },
+      { name: 'BFLA (Broken Func Level Auth)', fn: () => this.testBFLA(normalizedUrl, surface, ctx) },
+      { name: 'Subdomain Takeover',          fn: () => this.testSubdomainTakeover(normalizedUrl, ctx) },
+      { name: 'Web Cache Poisoning',         fn: () => this.testWebCachePoisoning(normalizedUrl, ctx) },
+      { name: 'PostMessage Vulnerabilities', fn: () => this.testPostMessage(normalizedUrl, ctx) },
+      { name: 'Credential Stuffing Guard',   fn: () => this.testCredentialStuffing(normalizedUrl, surface, ctx) },
+      { name: 'Permissions Policy',          fn: () => this.testPermissionsPolicy(normalizedUrl, ctx) },
+      { name: 'API Versioning Exposure',     fn: () => this.testAPIVersioning(normalizedUrl, ctx) },
+      { name: 'ReDoS',                       fn: () => this.testReDoS(normalizedUrl, surface, ctx) },
     ];
 
 
@@ -2999,7 +3012,299 @@ export class PenetrationTestingService {
    * Build injection test targets from the attack surface,
    * prioritizing params whose names match the given hints.
    */
+  // ── NEW MODERN TESTS ─────────────────────────────────────────────────────
+
+  private static async testGraphQL(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
+    const graphqlPaths = ['/graphql', '/api/graphql', '/graphql/v1', '/gql'];
+    const introspectionQuery = JSON.stringify({ query: '{ __schema { types { name } } }' });
+    for (const path of graphqlPaths) {
+      try {
+        const origin = new URL(url).origin;
+        const resp = await axios.post(`${origin}${path}`, introspectionQuery, this.authCfg(ctx, {
+          timeout: 6000, validateStatus: () => true, httpsAgent: this.getHttpsAgent(),
+          headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+        }));
+        if (resp.status === 200 && resp.data?.data?.__schema) {
+          return [{ testName: 'GraphQL Injection', category: 'Injection', severity: 'high', vulnerable: true,
+            description: 'GraphQL introspection is enabled — exposes full schema, types, and operations.',
+            evidence: `Introspection at ${origin}${path} returned ${resp.data.data.__schema.types?.length} types.`,
+            payload: introspectionQuery, recommendation: 'Disable GraphQL introspection in production. Whitelist allowed operations.' }];
+        }
+      } catch { /* path not found */ }
+    }
+    return [{ testName: 'GraphQL Injection', category: 'Injection', severity: 'info', vulnerable: false,
+      description: 'No GraphQL endpoint found or introspection disabled.', recommendation: 'Keep GraphQL introspection disabled in production.' }];
+  }
+
+  private static async test2FABypass(url: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
+    const origin = new URL(url).origin;
+    const otpPaths = ['/api/otp/verify', '/api/2fa/verify', '/api/auth/otp', '/api/verify-otp'];
+    // Test for code reuse / brute-force — try sending invalid OTPs rapidly
+    for (const path of otpPaths) {
+      try {
+        const responses: number[] = [];
+        for (let i = 0; i < 3; i++) {
+          const r = await axios.post(`${origin}${path}`, JSON.stringify({ otp: '000000', code: '000000' }), this.authCfg(ctx, {
+            timeout: 4000, validateStatus: () => true, httpsAgent: this.getHttpsAgent(),
+            headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+          }));
+          responses.push(r.status);
+        }
+        if (responses.some(s => s === 200)) {
+          return [{ testName: '2FA / MFA Bypass', category: 'Authentication', severity: 'critical', vulnerable: true,
+            description: 'OTP endpoint accepted invalid code — 2FA bypass possible.',
+            evidence: `${origin}${path} returned 200 for OTP "000000"`, recommendation: 'Enforce rate limiting, lockout, and HMAC-based TOTP validation.' }];
+        }
+        if (!responses.some(s => s === 429)) {
+          return [{ testName: '2FA / MFA Bypass', category: 'Authentication', severity: 'medium', vulnerable: true,
+            description: 'OTP endpoint has no rate limiting — brute-force of 6-digit codes is feasible.',
+            evidence: `3 rapid requests to ${origin}${path} — no 429 received.`, recommendation: 'Add rate limiting (max 5 attempts, then lockout 15 min). Use exponential backoff.' }];
+        }
+      } catch { /* skip */ }
+    }
+    return [{ testName: '2FA / MFA Bypass', category: 'Authentication', severity: 'info', vulnerable: false,
+      description: 'No 2FA endpoints found or rate limiting is enforced.', recommendation: 'Ensure all MFA endpoints enforce rate limiting and account lockout.' }];
+  }
+
+  private static async testPasswordResetFlaws(url: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
+    const origin = new URL(url).origin;
+    const resetPaths = ['/api/forgot-password', '/api/reset-password', '/api/auth/reset', '/forgot-password', '/api/password/reset'];
+    for (const path of resetPaths) {
+      try {
+        const r1 = await axios.post(`${origin}${path}`, JSON.stringify({ email: 'test@example.com' }), this.authCfg(ctx, {
+          timeout: 6000, validateStatus: () => true, httpsAgent: this.getHttpsAgent(),
+          headers: { 'Content-Type': 'application/json', 'Host': `evil.com`, 'User-Agent': 'Mozilla/5.0' },
+        }));
+        if (r1.status < 400) {
+          return [{ testName: 'Password Reset Flaws', category: 'Authentication', severity: 'high', vulnerable: true,
+            description: 'Password reset endpoint accepts Host header injection — reset link may point to attacker domain.',
+            evidence: `POST ${origin}${path} with Host: evil.com returned ${r1.status}.`,
+            payload: 'Host: evil.com', recommendation: 'Generate reset URLs from server-side SITE_URL env variable, never from request Host header.' }];
+        }
+      } catch { /* skip */ }
+    }
+    return [{ testName: 'Password Reset Flaws', category: 'Authentication', severity: 'info', vulnerable: false,
+      description: 'No exploitable password reset flaws detected.', recommendation: 'Ensure reset tokens are single-use, expire in 15 min, and are cryptographically random (≥32 bytes).' }];
+  }
+
+  private static async testMassAssignment(url: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
+    const origin = new URL(url).origin;
+    const targets = ['/api/users/me', '/api/profile', '/api/account', '/api/register'];
+    const dangerousFields = { role: 'admin', isAdmin: true, admin: true, permissions: ['admin'], verified: true };
+    for (const target of targets) {
+      try {
+        const r = await axios.patch(`${origin}${target}`, JSON.stringify(dangerousFields), this.authCfg(ctx, {
+          timeout: 6000, validateStatus: () => true, httpsAgent: this.getHttpsAgent(),
+          headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+        }));
+        if (r.status === 200 && (r.data?.role === 'admin' || r.data?.isAdmin === true)) {
+          return [{ testName: 'Mass Assignment', category: 'Authorization', severity: 'critical', vulnerable: true,
+            description: 'Mass assignment vulnerability — attacker can set role=admin or isAdmin=true via API.',
+            evidence: `PATCH ${origin}${target} {"role":"admin"} → 200 with admin role in response.`,
+            payload: JSON.stringify(dangerousFields), recommendation: 'Use allowlists (DTO) to restrict which fields are accepted. Never bind request body directly to DB model.' }];
+        }
+      } catch { /* skip */ }
+    }
+    return [{ testName: 'Mass Assignment', category: 'Authorization', severity: 'info', vulnerable: false,
+      description: 'No mass assignment vulnerability detected.', recommendation: 'Use explicit allowlist DTOs. Reject unknown fields.' }];
+  }
+
+  private static async testBFLA(url: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
+    const origin = new URL(url).origin;
+    const adminPaths = ['/api/admin', '/api/admin/users', '/api/admin/config', '/api/management', '/api/internal'];
+    const vulnPaths: string[] = [];
+    for (const path of adminPaths) {
+      try {
+        const r = await axios.get(`${origin}${path}`, this.authCfg(ctx, {
+          timeout: 6000, validateStatus: () => true, httpsAgent: this.getHttpsAgent(),
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+        }));
+        if (r.status === 200) vulnPaths.push(path);
+      } catch { /* skip */ }
+    }
+    if (vulnPaths.length > 0) {
+      return [{ testName: 'BFLA (Broken Func Level Auth)', category: 'Authorization', severity: 'high', vulnerable: true,
+        description: `Admin-level functions accessible without elevated privileges: ${vulnPaths.join(', ')}`,
+        evidence: `${vulnPaths.map(p => `GET ${origin}${p} → 200`).join('; ')}`,
+        recommendation: 'Enforce role-based access control on every function endpoint. Admin routes must check req.user.role === "admin".' }];
+    }
+    return [{ testName: 'BFLA (Broken Func Level Auth)', category: 'Authorization', severity: 'info', vulnerable: false,
+      description: 'Admin function endpoints properly protected.', recommendation: 'Continuously audit access control on sensitive endpoints.' }];
+  }
+
+  private static async testSubdomainTakeover(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
+    // Check for common takeover indicators in CNAME responses
+    try {
+      const origin = new URL(url).origin;
+      const commonSubdomains = ['api', 'dev', 'staging', 'beta', 'assets', 'cdn', 'mail', 'shop'];
+      const hostname = new URL(url).hostname;
+      const baseDomain = hostname.split('.').slice(-2).join('.');
+      const takeoverSignatures = ['There is no app configured at that hostname', 'NoSuchBucket', "Fastly error: unknown domain",
+        'This domain is not connected', "Project doesn't exist", 'Heroku | No such app', 'GitHub Pages - Page not found'];
+      for (const sub of commonSubdomains.slice(0, 4)) {
+        try {
+          const subUrl = `https://${sub}.${baseDomain}`;
+          const r = await axios.get(subUrl, { timeout: 5000, validateStatus: () => true, httpsAgent: this.getHttpsAgent(),
+            headers: { 'User-Agent': 'Mozilla/5.0' } });
+          const body = typeof r.data === 'string' ? r.data : '';
+          const match = takeoverSignatures.find(sig => body.toLowerCase().includes(sig.toLowerCase()));
+          if (match) {
+            return [{ testName: 'Subdomain Takeover', category: 'Misconfiguration', severity: 'high', vulnerable: true,
+              description: `Subdomain ${sub}.${baseDomain} may be vulnerable to takeover — orphaned CNAME detected.`,
+              evidence: `${subUrl} returned: "${match}"`, recommendation: 'Remove unused DNS records (CNAME, A) pointing to decommissioned services.' }];
+          }
+        } catch { /* subdomain unreachable */ }
+      }
+    } catch { /* skip */ }
+    return [{ testName: 'Subdomain Takeover', category: 'Misconfiguration', severity: 'info', vulnerable: false,
+      description: 'No subdomain takeover indicators found.', recommendation: 'Regularly audit DNS records and remove orphaned CNAMEs.' }];
+  }
+
+  private static async testWebCachePoisoning(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
+    try {
+      const uniqVal = `canary-${Date.now()}`;
+      const r1 = await axios.get(url, this.authCfg(ctx, { timeout: 7000, validateStatus: () => true,
+        httpsAgent: this.getHttpsAgent(),
+        headers: { 'User-Agent': 'Mozilla/5.0', 'X-Forwarded-Host': uniqVal, 'X-Original-URL': `/?poison=${uniqVal}` } }));
+      const body1 = typeof r1.data === 'string' ? r1.data : '';
+      if (body1.includes(uniqVal)) {
+        return [{ testName: 'Web Cache Poisoning', category: 'Injection', severity: 'high', vulnerable: true,
+          description: 'Web cache poisoning — injected X-Forwarded-Host header reflected in response.',
+          evidence: `X-Forwarded-Host: ${uniqVal} was reflected in response body.`,
+          payload: `X-Forwarded-Host: ${uniqVal}`, recommendation: 'Strip untrusted headers (X-Forwarded-Host, X-Original-URL) at edge/proxy. Use explicit TRUSTED_HOST list.' }];
+      }
+      const age = r1.headers['age'] || r1.headers['x-cache'];
+      if (age && body1.includes(uniqVal.slice(0, 8))) {
+        return [{ testName: 'Web Cache Poisoning', category: 'Injection', severity: 'medium', vulnerable: true,
+          description: 'Possible cache poisoning via unkeyed headers.', evidence: `Age/X-Cache header present and injected value reflected.`,
+          recommendation: 'Key cache on full URL + relevant headers. Use Vary header appropriately.' }];
+      }
+    } catch { /* skip */ }
+    return [{ testName: 'Web Cache Poisoning', category: 'Injection', severity: 'info', vulnerable: false,
+      description: 'No web cache poisoning vector detected.', recommendation: 'Configure cache to ignore or normalize unkeyed headers.' }];
+  }
+
+  private static async testPostMessage(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
+    try {
+      const r = await axios.get(url, this.authCfg(ctx, { timeout: 6000, validateStatus: () => true,
+        httpsAgent: this.getHttpsAgent(), headers: { 'User-Agent': 'Mozilla/5.0' } }));
+      const body = typeof r.data === 'string' ? r.data : '';
+      const hasPostMessage = /addEventListener\s*\(\s*['"]message['"]/i.test(body);
+      const hasOriginCheck = /event\.origin\s*[!=]==?/i.test(body);
+      if (hasPostMessage && !hasOriginCheck) {
+        return [{ testName: 'PostMessage Vulnerabilities', category: 'Client-Side', severity: 'medium', vulnerable: true,
+          description: 'window.addEventListener("message") found without origin validation — cross-origin message injection possible.',
+          evidence: 'Detected postMessage listener without event.origin check in page JS.',
+          recommendation: 'Always validate event.origin against an allowlist before processing postMessage data.' }];
+      }
+    } catch { /* skip */ }
+    return [{ testName: 'PostMessage Vulnerabilities', category: 'Client-Side', severity: 'info', vulnerable: false,
+      description: 'No unsafe postMessage listeners detected.', recommendation: 'Ensure all postMessage handlers validate event.origin.' }];
+  }
+
+  private static async testCredentialStuffing(url: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
+    const origin = new URL(url).origin;
+    const loginEndpoint = surface.loginEndpoint || `${origin}/api/login`;
+    try {
+      const attempts = 6;
+      const codes: number[] = [];
+      for (let i = 0; i < attempts; i++) {
+        const r = await axios.post(loginEndpoint, JSON.stringify({ username: `user${i}@test.com`, password: 'wrongpassword123' }),
+          this.authCfg(ctx, { timeout: 4000, validateStatus: () => true, httpsAgent: this.getHttpsAgent(),
+            headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' } }));
+        codes.push(r.status);
+      }
+      const has429 = codes.some(c => c === 429);
+      const hasCaptcha = codes.some(c => c === 403);
+      if (!has429 && !hasCaptcha) {
+        return [{ testName: 'Credential Stuffing Guard', category: 'Authentication', severity: 'high', vulnerable: true,
+          description: `Login endpoint has no rate limiting — credential stuffing attack feasible. Sent ${attempts} attempts without throttling.`,
+          evidence: `${attempts} requests to ${loginEndpoint} — codes: [${codes.join(',')}] — no 429/CAPTCHA.`,
+          recommendation: 'Implement rate limiting (max 5 attempts/min/IP), CAPTCHA after 3 failures, and account lockout.' }];
+      }
+    } catch { /* skip */ }
+    return [{ testName: 'Credential Stuffing Guard', category: 'Authentication', severity: 'info', vulnerable: false,
+      description: 'Login endpoint appears to have rate limiting or CAPTCHA protection.', recommendation: 'Also consider breached password detection (HaveIBeenPwned API).' }];
+  }
+
+  private static async testPermissionsPolicy(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
+    try {
+      const r = await axios.get(url, this.authCfg(ctx, { timeout: 6000, validateStatus: () => true,
+        httpsAgent: this.getHttpsAgent(), headers: { 'User-Agent': 'Mozilla/5.0' } }));
+      const pp = r.headers['permissions-policy'] || r.headers['feature-policy'];
+      if (!pp) {
+        return [{ testName: 'Permissions Policy', category: 'Security Misconfiguration', severity: 'low', vulnerable: true,
+          description: 'Missing Permissions-Policy header — browser features (camera, microphone, geolocation) not restricted.',
+          evidence: 'Permissions-Policy header absent from response.', recommendation: 'Add: Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()' }];
+      }
+      const dangerous = ['camera=*', 'microphone=*', 'geolocation=*'].filter(d => pp.includes(d));
+      if (dangerous.length > 0) {
+        return [{ testName: 'Permissions Policy', category: 'Security Misconfiguration', severity: 'medium', vulnerable: true,
+          description: `Permissions-Policy allows dangerous features: ${dangerous.join(', ')}`,
+          evidence: `Permissions-Policy: ${pp}`, recommendation: 'Restrict sensitive features to () (deny) unless explicitly required.' }];
+      }
+    } catch { /* skip */ }
+    return [{ testName: 'Permissions Policy', category: 'Security Misconfiguration', severity: 'info', vulnerable: false,
+      description: 'Permissions-Policy header is present and restrictive.', recommendation: 'Review policy regularly as browser feature APIs expand.' }];
+  }
+
+  private static async testAPIVersioning(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
+    const origin = new URL(url).origin;
+    const legacyPaths = ['/api/v1/', '/api/v1/users', '/api/v2/', '/api/v1/admin', '/api/v0/', '/v1/', '/v2/'];
+    const exposed: string[] = [];
+    for (const path of legacyPaths) {
+      try {
+        const r = await axios.get(`${origin}${path}`, this.authCfg(ctx, { timeout: 5000, validateStatus: () => true,
+          httpsAgent: this.getHttpsAgent(), headers: { 'User-Agent': 'Mozilla/5.0' } }));
+        if (r.status === 200) exposed.push(path);
+      } catch { /* skip */ }
+    }
+    if (exposed.length > 0) {
+      return [{ testName: 'API Versioning Exposure', category: 'Security Misconfiguration', severity: 'medium', vulnerable: true,
+        description: `Legacy API versions accessible — may lack security controls of current version: ${exposed.join(', ')}`,
+        evidence: exposed.map(p => `GET ${origin}${p} → 200`).join('; '),
+        recommendation: 'Decommission or protect legacy API versions. Apply same auth/rate-limit middleware to all versions.' }];
+    }
+    return [{ testName: 'API Versioning Exposure', category: 'Security Misconfiguration', severity: 'info', vulnerable: false,
+      description: 'No exposed legacy API versions found.', recommendation: 'Maintain an API inventory and retire old versions with sunset headers.' }];
+  }
+
+  private static async testReDoS(url: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
+    // ReDoS payloads that cause catastrophic backtracking in common regex patterns
+    const redosPayloads = ['aaaaaaaaaaaaaaaaaaaaaaaaaaaa!', '(a+)+$'.repeat(5), 'a'.repeat(50) + '!'];
+    const targets = this.buildInjectionTargets(url, surface, ['search', 'q', 'query', 'email', 'username', 'name', 'input']);
+    if (targets.length === 0) {
+      return [{ testName: 'ReDoS', category: 'Denial of Service', severity: 'info', vulnerable: false,
+        description: 'No injectable parameters found for ReDoS testing.', recommendation: 'Use safe regex libraries (re2) and input length limits.' }];
+    }
+    for (const target of targets.slice(0, 2)) {
+      for (const payload of redosPayloads.slice(0, 2)) {
+        try {
+          const t0 = Date.now();
+          const params = { ...target.params, [target.targetParam]: payload };
+          let resp: any;
+          if (target.method === 'GET') {
+            resp = await axios.get(target.url, this.authCfg(ctx, { params, timeout: 8000, validateStatus: () => true, httpsAgent: this.getHttpsAgent() }));
+          } else {
+            resp = await axios.post(target.url, JSON.stringify(params), this.authCfg(ctx, { timeout: 8000, validateStatus: () => true,
+              httpsAgent: this.getHttpsAgent(), headers: { 'Content-Type': 'application/json' } }));
+          }
+          const elapsed = Date.now() - t0;
+          if (elapsed > 5000 && resp.status < 500) {
+            return [{ testName: 'ReDoS', category: 'Denial of Service', severity: 'high', vulnerable: true,
+              description: `ReDoS suspected — server took ${elapsed}ms to respond to regex stress payload.`,
+              evidence: `Payload "${payload}" caused ${elapsed}ms response on ${target.url}`,
+              payload, recommendation: 'Replace vulnerable regex with linear-time alternatives. Use the re2 library. Enforce input length limits.' }];
+          }
+        } catch { /* timeout = server crashed */ }
+      }
+    }
+    return [{ testName: 'ReDoS', category: 'Denial of Service', severity: 'info', vulnerable: false,
+      description: 'No ReDoS vulnerability detected.', recommendation: 'Use re2 or similar linear-time regex engines for user-supplied input.' }];
+  }
+
   private static buildInjectionTargets(
+
     baseUrl: string,
     surface: AttackSurface,
     preferredParamNames: string[]
