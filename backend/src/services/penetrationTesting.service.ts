@@ -102,6 +102,23 @@ interface ScanContext {
 
 const EMPTY_CTX: ScanContext = { cookieStr: '', extraHeaders: {} };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Tech Stack Detection
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface TechStack {
+  isSPA: boolean;          // React/Vue/Angular with catch-all HTML routing
+  isSSR: boolean;          // Next.js, Nuxt, server-side rendered
+  isWordPress: boolean;
+  isDjango: boolean;
+  isLaravel: boolean;
+  isPHP: boolean;
+  isExpress: boolean;      // Node.js Express backend
+  frameworks: string[];    // human-readable list e.g. ['React', 'Next.js', 'Nginx']
+  apiBase: string;         // best-guess API prefix e.g. '/api' or 'https://api.example.com'
+  catchAllHtml: boolean;   // server returns same HTML for unknown paths (SPA routing)
+}
+
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Main service
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -521,6 +538,158 @@ export class PenetrationTestingService {
   // MAIN ENTRY POINT
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // TECH STACK DETECTION
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Fingerprints the target site to determine its tech stack.
+   * Checks response headers, HTML content, cookies, and routing behaviour.
+   * Used to adapt tests to the actual stack — avoid false positives on SPAs.
+   */
+  static async detectTechStack(baseUrl: string, ctx: ScanContext = EMPTY_CTX): Promise<TechStack> {
+    const stack: TechStack = {
+      isSPA: false, isSSR: false, isWordPress: false, isDjango: false,
+      isLaravel: false, isPHP: false, isExpress: false,
+      frameworks: [], apiBase: '/api', catchAllHtml: false,
+    };
+
+    try {
+      const origin = new URL(baseUrl).origin;
+
+      // ── 1. Fetch homepage ─────────────────────────────────────────────────
+      const homeResp = await axios.get(baseUrl, this.authCfg(ctx, {
+        timeout: 8000, validateStatus: () => true, httpsAgent: this.getHttpsAgent(),
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SecurityScanner/1.0)', 'Accept': 'text/html' },
+      }));
+      const html = typeof homeResp.data === 'string' ? homeResp.data : '';
+      const headers = homeResp.headers as Record<string, string>;
+      const cookies = (headers['set-cookie'] || '') as string;
+      const server = (headers['server'] || '').toLowerCase();
+      const powered = (headers['x-powered-by'] || '').toLowerCase();
+
+      const nonExistentPath = `/sentinel-probe-${Date.now()}-xyz`;
+      const probeResp = await axios.get(`${origin}${nonExistentPath}`, this.authCfg(ctx, {
+        timeout: 5000, validateStatus: () => true, httpsAgent: this.getHttpsAgent(),
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+      }));
+      const probeCt = (probeResp.headers['content-type'] || '').toLowerCase();
+      const probeBody = typeof probeResp.data === 'string' ? probeResp.data.trim() : '';
+      if (probeResp.status === 200 && probeCt.includes('text/html') &&
+          (probeBody.startsWith('<!DOCTYPE') || probeBody.startsWith('<html'))) {
+        stack.catchAllHtml = true;
+        stack.isSPA = true;
+      }
+      const $ = cheerio.load(html);
+      // React
+      if (html.includes('id="root"') || html.includes("id='root'") ||
+          html.includes('__REACT') || html.includes('react-root') ||
+          $('script[src*="react"]').length > 0 ||
+          $('script[src*="/static/js/main"]').length > 0) {
+        stack.frameworks.push('React');
+        stack.isSPA = true;
+      }
+
+      // Next.js (SSR — can have real server routes)
+      if (html.includes('/_next/static') || html.includes('__NEXT_DATA__') ||
+          $('script[src*="/_next/"]').length > 0) {
+        stack.frameworks.push('Next.js');
+        stack.isSSR = true;
+        stack.isSPA = false; // Next.js has real server-side routes
+      }
+
+      // Vue
+      if (html.includes('id="app"') || html.includes("id='app'") ||
+          html.includes('__vue_app__') || $('script[src*="vue"]').length > 0) {
+        stack.frameworks.push('Vue');
+        stack.isSPA = true;
+      }
+
+      // Angular
+      if (html.includes('ng-version') || html.includes('_angular_app') ||
+          $('app-root').length > 0 || $('[ng-version]').length > 0) {
+        stack.frameworks.push('Angular');
+        stack.isSPA = true;
+      }
+
+      // Nuxt.js
+      if (html.includes('__NUXT__') || html.includes('/_nuxt/')) {
+        stack.frameworks.push('Nuxt.js');
+        stack.isSSR = true;
+      }
+
+      // ── 4. WordPress ──────────────────────────────────────────────────────
+      if (html.includes('/wp-content/') || html.includes('/wp-includes/') ||
+          $('meta[name="generator"][content*="WordPress"]').length > 0) {
+        stack.isWordPress = true;
+        stack.isSPA = false;
+        stack.frameworks.push('WordPress');
+        // WordPress REST API base
+        try {
+          const wpJson = await axios.get(`${origin}/wp-json`, { timeout: 4000, validateStatus: () => true, httpsAgent: this.getHttpsAgent() });
+          if (wpJson.status === 200 && (wpJson.headers['content-type'] || '').includes('json')) {
+            stack.apiBase = '/wp-json';
+          }
+        } catch { /* skip */ }
+      }
+
+      // ── 5. Server/Backend headers ─────────────────────────────────────────
+      if (powered.includes('express') || powered.includes('node')) {
+        stack.isExpress = true;
+        stack.frameworks.push('Node.js/Express');
+      }
+      if (powered.includes('php') || cookies.includes('PHPSESSID') || server.includes('apache')) {
+        stack.isPHP = true;
+        stack.frameworks.push('PHP');
+      }
+      if (cookies.includes('csrftoken') || cookies.includes('sessionid') || powered.includes('django') ||
+          html.includes('csrfmiddlewaretoken')) {
+        stack.isDjango = true;
+        stack.isSPA = false;
+        stack.frameworks.push('Django');
+      }
+      if (cookies.includes('laravel_session') || powered.includes('laravel') ||
+          html.includes('laravel') || headers['x-laravel-version']) {
+        stack.isLaravel = true;
+        stack.isPHP = true;
+        stack.isSPA = false;
+        stack.frameworks.push('Laravel');
+      }
+
+      // ── 6. Server infrastructure ──────────────────────────────────────────
+      if (server.includes('nginx')) stack.frameworks.push('Nginx');
+      if (server.includes('apache')) stack.frameworks.push('Apache');
+      if (server.includes('cloudflare') || headers['cf-ray']) stack.frameworks.push('Cloudflare');
+      if (headers['x-vercel-id'] || headers['x-vercel-cache']) stack.frameworks.push('Vercel');
+
+      // ── 7. Detect real API base ───────────────────────────────────────────
+      // For SPAs, the real API might be /api, /api/v1, or on a different subdomain
+      const apiCandidates = ['/api', '/api/v1', '/api/v2', '/graphql', '/rest'];
+      for (const candidate of apiCandidates) {
+        try {
+          const r = await axios.get(`${origin}${candidate}`, this.authCfg(ctx, {
+            timeout: 3000, validateStatus: () => true, httpsAgent: this.getHttpsAgent(),
+            headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+          }));
+          const ct = (r.headers['content-type'] || '').toLowerCase();
+          const body = typeof r.data === 'string' ? r.data.trim() : JSON.stringify(r.data || '');
+          if (ct.includes('application/json') || body.startsWith('{') || body.startsWith('[')) {
+            stack.apiBase = candidate;
+            console.log(`  [StackDetect] Real API base: ${candidate}`);
+            break;
+          }
+        } catch { /* skip */ }
+      }
+
+      console.log(`  [StackDetect] Stack: ${stack.frameworks.join(', ') || 'unknown'} | SPA:${stack.isSPA} | SSR:${stack.isSSR} | WP:${stack.isWordPress} | API:${stack.apiBase}`);
+    } catch (e: any) {
+      console.warn(`  [StackDetect] Detection failed: ${e.message}`);
+    }
+    return stack;
+  }
+
+  // MAIN ENTRY POINT
+
   static async performPenetrationTest(
     url: string,
     credentials?: ScanCredentials,
@@ -528,23 +697,28 @@ export class PenetrationTestingService {
   ): Promise<PenetrationTestReport> {
     const normalizedUrl = url.startsWith('http') ? url : `https://${url}`;
     const results: PenetrationTestResult[] = [];
-    // Probe log â€” every HTTP request/response pair collected for LLM analysis
+    // Probe log — every HTTP request/response pair collected for LLM analysis
     const probeLog: PentestProbe[] = [];
 
-    // â”€â”€ Phase 0: Authenticate (if credentials supplied) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // Phase 0a: Detect tech stack
+    onProgress?.({ type: 'phase', phase: 0, message: 'Detecting tech stack...' });
+    const stack = await this.detectTechStack(normalizedUrl);
+    onProgress?.({ type: 'phase', phase: 0, message: `Stack: ${stack.frameworks.join(', ') || 'Unknown'} ${stack.isSPA ? '(SPA)' : stack.isSSR ? '(SSR)' : '(MPA)'}` });
+
+    // Phase 0b: Authenticate
     let ctx: ScanContext = EMPTY_CTX;
     if (credentials) {
       try {
-        console.log('[Pentest] Phase 0: Attempting authentication...');
+        console.log('[Pentest] Phase 0b: Attempting authentication...');
         ctx = await this.attemptLogin(normalizedUrl, credentials);
-        console.log('[Pentest] Phase 0: Auth OK â€”', ctx.cookieStr ? 'session cookie captured' : 'bearer token set');
+        console.log('[Pentest] Phase 0b: Auth OK');
       } catch (err: any) {
-        console.warn('[Pentest] Phase 0: Auth failed â€”', err.message, 'â€” continuing as anonymous');
+        console.warn('[Pentest] Phase 0b: Auth failed:', err.message);
       }
     }
 
     console.log(`Starting penetration test for: ${normalizedUrl}`);
-    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`Stack: ${stack.frameworks.join(', ') || 'Unknown'} | SPA:${stack.isSPA} | API:${stack.apiBase}`);
 
     // Step 1: Crawl to build real attack surface
     onProgress?.({ type: 'phase', phase: 1, message: 'Crawling attack surface...' });
