@@ -732,77 +732,227 @@ export class PenetrationTestingService {
       surface = { pages: [normalizedUrl], forms: [], apiEndpoints: [], queryParams: [] };
     }
 
-    // Step 2: Run all tests with the discovered surface
-    onProgress?.({ type: 'phase', phase: 2, message: `Running attack tests...` });
-    console.log(`[Pentest] Phase 2: Running attack tests...`);
+    // ── Build stack-aware test list ────────────────────────────────────────
+    // Universal tests run for ALL stacks
+    const universalTests = [
+      // Headers / client-side (always relevant)
+      { name: 'Clickjacking',               fn: () => this.testClickjacking(normalizedUrl, ctx) },
+      { name: 'Content Security Policy',    fn: () => this.testCSPAnalysis(normalizedUrl, ctx) },
+      { name: 'CORS Misconfiguration',      fn: () => this.testCORSMisconfiguration(normalizedUrl, ctx) },
+      { name: 'Security Misconfigurations', fn: () => this.testSecurityMisconfigurations(normalizedUrl, ctx) },
+      { name: 'Server Info Disclosure',     fn: () => this.testServerInfoDisclosure(normalizedUrl, ctx) },
+      { name: 'Permissions Policy',         fn: () => this.testPermissionsPolicy(normalizedUrl, ctx) },
+      { name: 'Subdomain Takeover',         fn: () => this.testSubdomainTakeover(normalizedUrl, ctx) },
+      { name: 'Web Cache Poisoning',        fn: () => this.testWebCachePoisoning(normalizedUrl, ctx) },
+      { name: 'HTTP Request Smuggling',     fn: () => this.testRequestSmuggling(normalizedUrl, ctx) },
+      { name: 'Host Header Injection',      fn: () => this.testHostHeaderInjection(normalizedUrl, ctx) },
+      { name: 'Supply Chain / SRI',         fn: () => this.testSupplyChain(normalizedUrl, ctx) },
+      { name: 'DOM-based Vulnerabilities',  fn: () => this.testDOMBasedVulnerabilities(normalizedUrl, ctx) },
+      { name: 'PostMessage Vulnerabilities',fn: () => this.testPostMessage(normalizedUrl, ctx) },
+      { name: 'Dependency Confusion',       fn: () => this.testDependencyConfusion(normalizedUrl, ctx) },
+    ];
 
-    const tests = [
-      // Injection tests
-      { name: 'XSS',                       fn: () => this.testXSS(normalizedUrl, surface, ctx) },
-      { name: 'SQL Injection',              fn: () => this.testSQLInjection(normalizedUrl, surface, ctx) },
-      { name: 'Command Injection',          fn: () => this.testCommandInjection(normalizedUrl, surface, ctx) },
-      { name: 'Path Traversal',             fn: () => this.testPathTraversal(normalizedUrl, surface, ctx) },
-      { name: 'LDAP Injection',             fn: () => this.testLDAPInjection(normalizedUrl, surface, ctx) },
-      { name: 'NoSQL Injection',            fn: () => this.testNoSQLInjection(normalizedUrl, surface, ctx) },
-      { name: 'Template Injection',         fn: () => this.testTemplateInjection(normalizedUrl, surface, ctx) },
-      { name: 'XML Injection',              fn: () => this.testXMLInjection(normalizedUrl, ctx) },
-      { name: 'HTTP Header Injection',      fn: () => this.testHTTPHeaderInjection(normalizedUrl, ctx) },
-      { name: 'CRLF Injection',             fn: () => this.testCRLFInjection(normalizedUrl, ctx) },
-      { name: 'Remote Code Execution',      fn: () => this.testRemoteCodeExecution(normalizedUrl, surface, ctx) },
-      { name: 'Prototype Pollution',        fn: () => this.testPrototypePollution(normalizedUrl, surface, ctx) },
-      // Auth / session
+    // SPA tests — React / Vue / Angular (client-side focused)
+    const spaTests = [
+      { name: 'XSS',                        fn: () => this.testXSS(normalizedUrl, surface, ctx) },
+      { name: 'Supply Chain / SRI',         fn: () => this.testSupplyChain(normalizedUrl, ctx) },
+      { name: 'OAuth 2.0 / PKCE',           fn: () => this.testOAuthPKCE(normalizedUrl, ctx) },
+      { name: 'AI / LLM Prompt Injection',  fn: () => this.testPromptInjection(normalizedUrl, surface, ctx) },
+      { name: 'Open Redirect',              fn: () => this.testOpenRedirect(normalizedUrl, surface, ctx) },
       { name: 'CSRF',                       fn: () => this.testCSRF(normalizedUrl, surface, ctx) },
+      { name: 'WebSocket Security',         fn: () => this.testWebSocketSecurity(normalizedUrl, ctx) },
+      // API tests only if a real JSON API base was found
+      ...(stack.apiBase !== '/api' || surface.apiEndpoints.length > 0 ? [
+        { name: 'BFLA (Broken Func Level Auth)', fn: () => this.testBFLA(normalizedUrl, surface, ctx) },
+        { name: 'Credential Stuffing Guard', fn: () => this.testCredentialStuffing(normalizedUrl, surface, ctx) },
+        { name: '2FA / MFA Bypass',          fn: () => this.test2FABypass(normalizedUrl, surface, ctx) },
+        { name: 'Rate Limiting',             fn: () => this.testRateLimiting(normalizedUrl, surface, ctx) },
+        { name: 'API Versioning Exposure',   fn: () => this.testAPIVersioning(normalizedUrl, ctx) },
+        { name: 'Mass Assignment',           fn: () => this.testMassAssignment(normalizedUrl, surface, ctx) },
+        { name: 'IDOR / Broken Object Auth', fn: () => this.testIDOR(normalizedUrl, surface, ctx) },
+        { name: 'API Vulnerabilities',       fn: () => this.testAPIVulnerabilities(normalizedUrl, surface, ctx) },
+        { name: 'JWT Security',              fn: () => this.testJWTSecurity(normalizedUrl, ctx) },
+        { name: 'GraphQL Injection',         fn: () => this.testGraphQL(normalizedUrl, ctx) },
+      ] : []),
+    ];
+
+    // Next.js / SSR tests — has real server routes, API routes, and client bundle
+    const ssrTests = [
+      { name: 'XSS',                        fn: () => this.testXSS(normalizedUrl, surface, ctx) },
+      { name: 'SQL Injection',              fn: () => this.testSQLInjection(normalizedUrl, surface, ctx) },
+      { name: 'CSRF',                       fn: () => this.testCSRF(normalizedUrl, surface, ctx) },
+      { name: 'SSRF',                       fn: () => this.testSSRF(normalizedUrl, surface, ctx) },
+      { name: 'Open Redirect',              fn: () => this.testOpenRedirect(normalizedUrl, surface, ctx) },
+      { name: 'Path Traversal',             fn: () => this.testPathTraversal(normalizedUrl, surface, ctx) },
       { name: 'Authentication Bypass',      fn: () => this.testAuthenticationBypass(normalizedUrl, surface, ctx) },
       { name: 'Session Management',         fn: () => this.testSessionManagement(normalizedUrl, ctx) },
       { name: 'JWT Security',               fn: () => this.testJWTSecurity(normalizedUrl, ctx) },
-      // Access control
+      { name: 'BFLA (Broken Func Level Auth)', fn: () => this.testBFLA(normalizedUrl, surface, ctx) },
+      { name: 'Credential Stuffing Guard',  fn: () => this.testCredentialStuffing(normalizedUrl, surface, ctx) },
+      { name: '2FA / MFA Bypass',           fn: () => this.test2FABypass(normalizedUrl, surface, ctx) },
+      { name: 'Rate Limiting',              fn: () => this.testRateLimiting(normalizedUrl, surface, ctx) },
+      { name: 'API Versioning Exposure',    fn: () => this.testAPIVersioning(normalizedUrl, ctx) },
+      { name: 'Mass Assignment',            fn: () => this.testMassAssignment(normalizedUrl, surface, ctx) },
       { name: 'IDOR / Broken Object Auth',  fn: () => this.testIDOR(normalizedUrl, surface, ctx) },
+      { name: 'API Vulnerabilities',        fn: () => this.testAPIVulnerabilities(normalizedUrl, surface, ctx) },
+      { name: 'GraphQL Injection',          fn: () => this.testGraphQL(normalizedUrl, ctx) },
+      { name: 'OAuth 2.0 / PKCE',           fn: () => this.testOAuthPKCE(normalizedUrl, ctx) },
+      { name: 'AI / LLM Prompt Injection',  fn: () => this.testPromptInjection(normalizedUrl, surface, ctx) },
+      { name: 'Password Reset Flaws',       fn: () => this.testPasswordResetFlaws(normalizedUrl, surface, ctx) },
+      { name: 'Business Logic Flaws',       fn: () => this.testBusinessLogicFlaws(normalizedUrl, surface, ctx) },
+      { name: 'WebSocket Security',         fn: () => this.testWebSocketSecurity(normalizedUrl, ctx) },
+      { name: 'Race Conditions',            fn: () => this.testRaceConditions(normalizedUrl, surface, ctx) },
+      { name: 'ReDoS',                      fn: () => this.testReDoS(normalizedUrl, surface, ctx) },
+    ];
+
+    // WordPress-specific tests
+    const wordpressTests = [
+      { name: 'XSS',                        fn: () => this.testXSS(normalizedUrl, surface, ctx) },
+      { name: 'SQL Injection',              fn: () => this.testSQLInjection(normalizedUrl, surface, ctx) },
+      { name: 'CSRF',                       fn: () => this.testCSRF(normalizedUrl, surface, ctx) },
+      { name: 'File Upload',                fn: () => this.testFileUpload(normalizedUrl, surface, ctx) },
+      { name: 'Path Traversal',             fn: () => this.testPathTraversal(normalizedUrl, surface, ctx) },
+      { name: 'Authentication Bypass',      fn: () => this.testAuthenticationBypass(normalizedUrl, surface, ctx) },
+      { name: 'User Enumeration (WP)',      fn: () => this.testWordPressUserEnum(normalizedUrl, ctx) },
+      { name: 'XML-RPC Abuse',             fn: () => this.testXMLRPCAbuse(normalizedUrl, ctx) },
+      { name: 'WP REST API Exposure',      fn: () => this.testWordPressRestAPI(normalizedUrl, ctx) },
+      { name: 'API Vulnerabilities',        fn: () => this.testAPIVulnerabilities(normalizedUrl, surface, ctx) },
+      { name: 'Credential Stuffing Guard',  fn: () => this.testCredentialStuffing(normalizedUrl, surface, ctx) },
+      { name: 'Rate Limiting',              fn: () => this.testRateLimiting(normalizedUrl, surface, ctx) },
       { name: 'HTTP Method Override',       fn: () => this.testMethodOverride(normalizedUrl, surface, ctx) },
-      // SSRF / redirects
       { name: 'SSRF',                       fn: () => this.testSSRF(normalizedUrl, surface, ctx) },
       { name: 'Open Redirect',              fn: () => this.testOpenRedirect(normalizedUrl, surface, ctx) },
-      // Misconfigurations
-      { name: 'Security Misconfigurations', fn: () => this.testSecurityMisconfigurations(normalizedUrl, ctx) },
-      { name: 'CORS Misconfiguration',      fn: () => this.testCORSMisconfiguration(normalizedUrl, ctx) },
-      { name: 'Clickjacking',               fn: () => this.testClickjacking(normalizedUrl, ctx) },
-      { name: 'Content Security Policy',    fn: () => this.testCSPAnalysis(normalizedUrl, ctx) },
-      { name: 'Server Info Disclosure',     fn: () => this.testServerInfoDisclosure(normalizedUrl, ctx) },
+      { name: 'Business Logic Flaws',       fn: () => this.testBusinessLogicFlaws(normalizedUrl, surface, ctx) },
+      { name: 'XXE',                        fn: () => this.testXXE(normalizedUrl, ctx) },
+    ];
+
+    // Django / Python backend tests
+    const djangoTests = [
+      { name: 'SQL Injection',              fn: () => this.testSQLInjection(normalizedUrl, surface, ctx) },
+      { name: 'XSS',                        fn: () => this.testXSS(normalizedUrl, surface, ctx) },
+      { name: 'CSRF',                       fn: () => this.testCSRF(normalizedUrl, surface, ctx) },
+      { name: 'Authentication Bypass',      fn: () => this.testAuthenticationBypass(normalizedUrl, surface, ctx) },
+      { name: 'SSRF',                       fn: () => this.testSSRF(normalizedUrl, surface, ctx) },
+      { name: 'Open Redirect',              fn: () => this.testOpenRedirect(normalizedUrl, surface, ctx) },
+      { name: 'Path Traversal',             fn: () => this.testPathTraversal(normalizedUrl, surface, ctx) },
+      { name: 'Template Injection',         fn: () => this.testTemplateInjection(normalizedUrl, surface, ctx) },
       { name: 'Security Logging & Debug',   fn: () => this.testSecurityLogging(normalizedUrl, ctx) },
-      // Features
+      { name: 'Session Management',         fn: () => this.testSessionManagement(normalizedUrl, ctx) },
+      { name: 'IDOR / Broken Object Auth',  fn: () => this.testIDOR(normalizedUrl, surface, ctx) },
+      { name: 'BFLA (Broken Func Level Auth)', fn: () => this.testBFLA(normalizedUrl, surface, ctx) },
+      { name: 'Mass Assignment',            fn: () => this.testMassAssignment(normalizedUrl, surface, ctx) },
+      { name: 'Rate Limiting',              fn: () => this.testRateLimiting(normalizedUrl, surface, ctx) },
+      { name: 'API Versioning Exposure',    fn: () => this.testAPIVersioning(normalizedUrl, ctx) },
       { name: 'File Upload',                fn: () => this.testFileUpload(normalizedUrl, surface, ctx) },
-      { name: 'WebSocket Security',         fn: () => this.testWebSocketSecurity(normalizedUrl, ctx) },
-      { name: 'DOM-based Vulnerabilities',  fn: () => this.testDOMBasedVulnerabilities(normalizedUrl, ctx) },
-      // Race / business logic
+      { name: 'ReDoS',                      fn: () => this.testReDoS(normalizedUrl, surface, ctx) },
+      { name: 'Business Logic Flaws',       fn: () => this.testBusinessLogicFlaws(normalizedUrl, surface, ctx) },
+      { name: 'Password Reset Flaws',       fn: () => this.testPasswordResetFlaws(normalizedUrl, surface, ctx) },
+    ];
+
+    // Laravel / PHP backend tests
+    const laravelTests = [
+      { name: 'SQL Injection',              fn: () => this.testSQLInjection(normalizedUrl, surface, ctx) },
+      { name: 'XSS',                        fn: () => this.testXSS(normalizedUrl, surface, ctx) },
+      { name: 'CSRF',                       fn: () => this.testCSRF(normalizedUrl, surface, ctx) },
+      { name: 'Path Traversal',             fn: () => this.testPathTraversal(normalizedUrl, surface, ctx) },
+      { name: 'File Upload',                fn: () => this.testFileUpload(normalizedUrl, surface, ctx) },
+      { name: 'Authentication Bypass',      fn: () => this.testAuthenticationBypass(normalizedUrl, surface, ctx) },
+      { name: 'Session Management',         fn: () => this.testSessionManagement(normalizedUrl, ctx) },
+      { name: 'Security Logging & Debug',   fn: () => this.testSecurityLogging(normalizedUrl, ctx) },
+      { name: 'Mass Assignment',            fn: () => this.testMassAssignment(normalizedUrl, surface, ctx) },
+      { name: 'BFLA (Broken Func Level Auth)', fn: () => this.testBFLA(normalizedUrl, surface, ctx) },
+      { name: 'IDOR / Broken Object Auth',  fn: () => this.testIDOR(normalizedUrl, surface, ctx) },
+      { name: 'SSRF',                       fn: () => this.testSSRF(normalizedUrl, surface, ctx) },
+      { name: 'Open Redirect',              fn: () => this.testOpenRedirect(normalizedUrl, surface, ctx) },
+      { name: 'HTTP Method Override',       fn: () => this.testMethodOverride(normalizedUrl, surface, ctx) },
+      { name: 'Rate Limiting',              fn: () => this.testRateLimiting(normalizedUrl, surface, ctx) },
+      { name: 'Deserialization',            fn: () => this.testDeserializationAttacks(normalizedUrl, ctx) },
+      { name: 'API Versioning Exposure',    fn: () => this.testAPIVersioning(normalizedUrl, ctx) },
+      { name: 'Command Injection',          fn: () => this.testCommandInjection(normalizedUrl, surface, ctx) },
+      { name: 'Password Reset Flaws',       fn: () => this.testPasswordResetFlaws(normalizedUrl, surface, ctx) },
+      { name: 'Business Logic Flaws',       fn: () => this.testBusinessLogicFlaws(normalizedUrl, surface, ctx) },
+      { name: 'ReDoS',                      fn: () => this.testReDoS(normalizedUrl, surface, ctx) },
+    ];
+
+    // Express / Node.js backend tests
+    const expressTests = [
+      { name: 'SQL Injection',              fn: () => this.testSQLInjection(normalizedUrl, surface, ctx) },
+      { name: 'NoSQL Injection',            fn: () => this.testNoSQLInjection(normalizedUrl, surface, ctx) },
+      { name: 'XSS',                        fn: () => this.testXSS(normalizedUrl, surface, ctx) },
+      { name: 'Command Injection',          fn: () => this.testCommandInjection(normalizedUrl, surface, ctx) },
+      { name: 'Prototype Pollution',        fn: () => this.testPrototypePollution(normalizedUrl, surface, ctx) },
+      { name: 'CSRF',                       fn: () => this.testCSRF(normalizedUrl, surface, ctx) },
+      { name: 'JWT Security',               fn: () => this.testJWTSecurity(normalizedUrl, ctx) },
+      { name: 'Authentication Bypass',      fn: () => this.testAuthenticationBypass(normalizedUrl, surface, ctx) },
+      { name: 'Session Management',         fn: () => this.testSessionManagement(normalizedUrl, ctx) },
+      { name: 'BFLA (Broken Func Level Auth)', fn: () => this.testBFLA(normalizedUrl, surface, ctx) },
+      { name: 'IDOR / Broken Object Auth',  fn: () => this.testIDOR(normalizedUrl, surface, ctx) },
+      { name: 'Mass Assignment',            fn: () => this.testMassAssignment(normalizedUrl, surface, ctx) },
+      { name: 'SSRF',                       fn: () => this.testSSRF(normalizedUrl, surface, ctx) },
+      { name: 'Open Redirect',              fn: () => this.testOpenRedirect(normalizedUrl, surface, ctx) },
+      { name: 'Rate Limiting',              fn: () => this.testRateLimiting(normalizedUrl, surface, ctx) },
+      { name: 'Credential Stuffing Guard',  fn: () => this.testCredentialStuffing(normalizedUrl, surface, ctx) },
+      { name: '2FA / MFA Bypass',           fn: () => this.test2FABypass(normalizedUrl, surface, ctx) },
+      { name: 'API Versioning Exposure',    fn: () => this.testAPIVersioning(normalizedUrl, ctx) },
+      { name: 'API Vulnerabilities',        fn: () => this.testAPIVulnerabilities(normalizedUrl, surface, ctx) },
+      { name: 'GraphQL Injection',          fn: () => this.testGraphQL(normalizedUrl, ctx) },
+      { name: 'ReDoS',                      fn: () => this.testReDoS(normalizedUrl, surface, ctx) },
+      { name: 'Deserialization',            fn: () => this.testDeserializationAttacks(normalizedUrl, ctx) },
+      { name: 'Log4Shell / JNDI',           fn: () => this.testLog4Shell(normalizedUrl, ctx) },
+      { name: 'Path Traversal',             fn: () => this.testPathTraversal(normalizedUrl, surface, ctx) },
+      { name: 'File Upload',                fn: () => this.testFileUpload(normalizedUrl, surface, ctx) },
       { name: 'Race Conditions',            fn: () => this.testRaceConditions(normalizedUrl, surface, ctx) },
       { name: 'Business Logic Flaws',       fn: () => this.testBusinessLogicFlaws(normalizedUrl, surface, ctx) },
-      { name: 'Rate Limiting',              fn: () => this.testRateLimiting(normalizedUrl, surface, ctx) },
-      // API
-      { name: 'API Vulnerabilities',        fn: () => this.testAPIVulnerabilities(normalizedUrl, surface, ctx) },
-      // Modern CVEs
-      { name: 'Log4Shell / JNDI',           fn: () => this.testLog4Shell(normalizedUrl, ctx) },
-      { name: 'XXE',                        fn: () => this.testXXE(normalizedUrl, ctx) },
-      { name: 'Deserialization',            fn: () => this.testDeserializationAttacks(normalizedUrl, ctx) },
-      { name: 'HTTP Request Smuggling',     fn: () => this.testRequestSmuggling(normalizedUrl, ctx) },
-      { name: 'Host Header Injection',      fn: () => this.testHostHeaderInjection(normalizedUrl, ctx) },
-      // 2025-2026 modern
-      { name: 'OAuth 2.0 / PKCE',            fn: () => this.testOAuthPKCE(normalizedUrl, ctx) },
-      { name: 'AI / LLM Prompt Injection',   fn: () => this.testPromptInjection(normalizedUrl, surface, ctx) },
-      { name: 'Dependency Confusion',         fn: () => this.testDependencyConfusion(normalizedUrl, ctx) },
-      { name: 'Supply Chain / SRI',          fn: () => this.testSupplyChain(normalizedUrl, ctx) },
-      // New modern tests
-      { name: 'GraphQL Injection',            fn: () => this.testGraphQL(normalizedUrl, ctx) },
-      { name: '2FA / MFA Bypass',            fn: () => this.test2FABypass(normalizedUrl, surface, ctx) },
-      { name: 'Password Reset Flaws',        fn: () => this.testPasswordResetFlaws(normalizedUrl, surface, ctx) },
-      { name: 'Mass Assignment',             fn: () => this.testMassAssignment(normalizedUrl, surface, ctx) },
-      { name: 'BFLA (Broken Func Level Auth)', fn: () => this.testBFLA(normalizedUrl, surface, ctx) },
-      { name: 'Subdomain Takeover',          fn: () => this.testSubdomainTakeover(normalizedUrl, ctx) },
-      { name: 'Web Cache Poisoning',         fn: () => this.testWebCachePoisoning(normalizedUrl, ctx) },
-      { name: 'PostMessage Vulnerabilities', fn: () => this.testPostMessage(normalizedUrl, ctx) },
-      { name: 'Credential Stuffing Guard',   fn: () => this.testCredentialStuffing(normalizedUrl, surface, ctx) },
-      { name: 'Permissions Policy',          fn: () => this.testPermissionsPolicy(normalizedUrl, ctx) },
-      { name: 'API Versioning Exposure',     fn: () => this.testAPIVersioning(normalizedUrl, ctx) },
-      { name: 'ReDoS',                       fn: () => this.testReDoS(normalizedUrl, surface, ctx) },
+      { name: 'Password Reset Flaws',       fn: () => this.testPasswordResetFlaws(normalizedUrl, surface, ctx) },
+      { name: 'HTTP Method Override',       fn: () => this.testMethodOverride(normalizedUrl, surface, ctx) },
+      { name: 'OAuth 2.0 / PKCE',           fn: () => this.testOAuthPKCE(normalizedUrl, ctx) },
+      { name: 'AI / LLM Prompt Injection',  fn: () => this.testPromptInjection(normalizedUrl, surface, ctx) },
     ];
+
+    // ── Select tests based on detected stack ────────────────────────────────
+    let stackSpecificTests: typeof universalTests = [];
+    if (stack.isWordPress) {
+      stackSpecificTests = wordpressTests;
+      console.log('[Pentest] Stack: WordPress — running WP-specific attack suite');
+    } else if (stack.isDjango) {
+      stackSpecificTests = djangoTests;
+      console.log('[Pentest] Stack: Django — running Python/Django attack suite');
+    } else if (stack.isLaravel) {
+      stackSpecificTests = laravelTests;
+      console.log('[Pentest] Stack: Laravel — running PHP/Laravel attack suite');
+    } else if (stack.isExpress) {
+      stackSpecificTests = expressTests;
+      console.log('[Pentest] Stack: Express/Node — running Node.js attack suite');
+    } else if (stack.isSSR) {
+      stackSpecificTests = ssrTests;
+      console.log('[Pentest] Stack: SSR (Next.js/Nuxt) — running full-stack attack suite');
+    } else if (stack.isSPA) {
+      stackSpecificTests = spaTests;
+      console.log('[Pentest] Stack: SPA (React/Vue/Angular) — running client-side + API attack suite');
+    } else {
+      // Unknown / generic — run everything
+      stackSpecificTests = [
+        ...ssrTests, ...expressTests,
+        { name: 'LDAP Injection',            fn: () => this.testLDAPInjection(normalizedUrl, surface, ctx) },
+        { name: 'XML Injection',             fn: () => this.testXMLInjection(normalizedUrl, ctx) },
+        { name: 'HTTP Header Injection',     fn: () => this.testHTTPHeaderInjection(normalizedUrl, ctx) },
+        { name: 'CRLF Injection',            fn: () => this.testCRLFInjection(normalizedUrl, ctx) },
+        { name: 'Remote Code Execution',     fn: () => this.testRemoteCodeExecution(normalizedUrl, surface, ctx) },
+        { name: 'XXE',                       fn: () => this.testXXE(normalizedUrl, ctx) },
+      ];
+      console.log('[Pentest] Stack: Unknown — running full generic attack suite');
+    }
+
+    // Deduplicate (universal + stack-specific may overlap on test names)
+    const seen = new Set<string>();
+    const tests = [...universalTests, ...stackSpecificTests].filter(t => {
+      if (seen.has(t.name)) return false;
+      seen.add(t.name);
+      return true;
+    });
+
+    console.log(`[Pentest] Running ${tests.length} stack-adapted tests for ${stack.frameworks.join(', ') || 'unknown'} stack`);
+    onProgress?.({ type: 'phase', phase: 2, message: `Running ${tests.length} targeted tests for ${stack.frameworks.join(', ') || 'detected'} stack...` });
 
 
     // Run in batches of 5 to avoid resource exhaustion
@@ -3597,4 +3747,72 @@ export class PenetrationTestingService {
     results.forEach(r => { if (r.vulnerable) score += weights[r.severity]; });
     return Math.min(100, score);
   }
+
+  // ── WordPress-specific tests ────────────────────────────────────────────
+
+  private static async testWordPressUserEnum(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
+    const origin = new URL(url).origin;
+    const enumUsers: string[] = [];
+    try {
+      for (let id = 1; id <= 5; id++) {
+        const r = await axios.get(`${origin}/?author=${id}`, this.authCfg(ctx, {
+          timeout: 5000, validateStatus: () => true, httpsAgent: this.getHttpsAgent(),
+          maxRedirects: 5, headers: { 'User-Agent': 'Mozilla/5.0' },
+        }));
+        // WordPress redirects /?author=N to /author/username/ — grab username from final URL
+        const finalUrl = (r.request?.res?.responseUrl || r.config?.url || '').toString();
+        const match = finalUrl.match(/\/author\/([^/?#]+)/);
+        if (match && r.status === 200) enumUsers.push(match[1]);
+      }
+      if (enumUsers.length > 0) {
+        return [{ testName: 'User Enumeration (WP)', category: 'Authentication', severity: 'medium', vulnerable: true,
+          description: `WordPress user enumeration via /?author=N — usernames discovered: ${enumUsers.join(', ')}`,
+          evidence: `GET ${origin}/?author=1..5 revealed usernames: ${enumUsers.join(', ')}`,
+          recommendation: 'Disable author archives or redirect /?author=N to homepage. Use security plugins to block enumeration.' }];
+      }
+    } catch { /* skip */ }
+    return [{ testName: 'User Enumeration (WP)', category: 'Authentication', severity: 'info', vulnerable: false,
+      description: 'WordPress user enumeration not detected.', recommendation: 'Keep author archives disabled or protected.' }];
+  }
+
+  private static async testXMLRPCAbuse(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
+    const origin = new URL(url).origin;
+    try {
+      const r = await axios.post(`${origin}/xmlrpc.php`,
+        '<?xml version="1.0"?><methodCall><methodName>system.listMethods</methodName><params></params></methodCall>',
+        this.authCfg(ctx, { timeout: 6000, validateStatus: () => true, httpsAgent: this.getHttpsAgent(),
+          headers: { 'Content-Type': 'text/xml', 'User-Agent': 'Mozilla/5.0' } }));
+      const body = typeof r.data === 'string' ? r.data : '';
+      if (r.status === 200 && body.includes('methodResponse')) {
+        const hasBrute = body.includes('wp.getUsersBlogs') || body.includes('system.multicall');
+        return [{ testName: 'XML-RPC Abuse', category: 'Authentication', severity: hasBrute ? 'high' : 'medium', vulnerable: true,
+          description: `WordPress XML-RPC endpoint is enabled — ${hasBrute ? 'multicall method available, enabling credential brute-force amplification' : 'exposes unnecessary attack surface'}`,
+          evidence: `POST ${origin}/xmlrpc.php returned 200 with valid XML-RPC response. Methods include: ${hasBrute ? 'system.multicall, wp.getUsersBlogs' : 'system.listMethods'}`,
+          recommendation: 'Disable XML-RPC via .htaccess or security plugin unless explicitly needed. Block /xmlrpc.php at WAF/nginx level.' }];
+      }
+    } catch { /* skip */ }
+    return [{ testName: 'XML-RPC Abuse', category: 'Authentication', severity: 'info', vulnerable: false,
+      description: 'WordPress XML-RPC endpoint is disabled or not accessible.', recommendation: 'Keep XML-RPC disabled unless required by plugins.' }];
+  }
+
+  private static async testWordPressRestAPI(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
+    const origin = new URL(url).origin;
+    try {
+      const r = await axios.get(`${origin}/wp-json/wp/v2/users`, this.authCfg(ctx, {
+        timeout: 5000, validateStatus: () => true, httpsAgent: this.getHttpsAgent(),
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' },
+      }));
+      const ct = (r.headers['content-type'] || '').toLowerCase();
+      const body = typeof r.data === 'string' ? r.data : JSON.stringify(r.data || '');
+      if (r.status === 200 && ct.includes('json') && (body.includes('"slug"') || body.includes('"name"'))) {
+        return [{ testName: 'WP REST API Exposure', category: 'Authentication', severity: 'medium', vulnerable: true,
+          description: 'WordPress REST API /wp/v2/users endpoint exposes user list without authentication — enables targeted credential attacks.',
+          evidence: `GET ${origin}/wp-json/wp/v2/users → 200 JSON with user data`,
+          recommendation: 'Restrict REST API user endpoint: add capability check or use a plugin to require authentication for /wp-json/wp/v2/users.' }];
+      }
+    } catch { /* skip */ }
+    return [{ testName: 'WP REST API Exposure', category: 'Authentication', severity: 'info', vulnerable: false,
+      description: 'WordPress REST API user endpoint is protected or returns no data.', recommendation: 'Ensure /wp-json/wp/v2/users requires authentication.' }];
+  }
 }
+
