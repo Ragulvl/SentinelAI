@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -356,7 +356,7 @@ export default function PenetrationTestPage() {
     <PageLayout>
       <PageHeader
         title="Penetration Testing"
-        description="Active security testing for verified domains ”” 56 modern attack vectors including AI security, GraphQL, 2FA bypass, cache poisoning, and more."
+        description="Active security testing for verified domains — adaptive attack vectors including AI security, GraphQL, 2FA bypass, cache poisoning, and more. Test count auto-adjusts based on detected tech stack."
         breadcrumbs={[{ label: "Security Tools" }, { label: "Pentest" }]}
         actions={
           viewMode === "view" ? (
@@ -536,7 +536,7 @@ export default function PenetrationTestPage() {
                       background: (testing || !authorized) ? undefined : "linear-gradient(135deg, hsl(0 84% 55%), hsl(15 90% 55%))",
                       boxShadow: (!testing && authorized) ? "0 0 32px hsl(0 84% 55% / 0.35), 0 4px 16px hsl(0 84% 55% / 0.2)" : undefined,
                     }}>
-                    {testing ? <><Loader2 className="w-4 h-4 animate-spin" /> Scanning ”” waiting for results...</> : <><Zap className="w-4 h-4" /> Start Penetration Test (56 tests)</>}
+                    {testing ? <><Loader2 className="w-4 h-4 animate-spin" /> Scanning ”” waiting for results...</> : <><Zap className="w-4 h-4" /> Start Penetration Test{liveStats.total > 0 ? ` (${liveStats.total} tests)` : ''}</>}
                   </button>
                 </div>
 
@@ -572,7 +572,7 @@ export default function PenetrationTestPage() {
                     {terminalLines.length === 0 && !testing && (
                       <div className="h-full flex flex-col justify-center items-center gap-2" style={{ color: "hsl(0 0% 18%)" }}>
                         <span>sentinel pentest engine v2.0</span>
-                        <span>56 tests ready - OWASP 2024 - AI-enhanced</span>
+                        <span>adaptive tests — OWASP 2024 — AI-enhanced</span>
                         <span style={{ marginTop: "12px" }}>enter a URL and press Start to begin</span>
                       </div>
                     )}
@@ -593,7 +593,7 @@ export default function PenetrationTestPage() {
                     style={{ background: "hsl(0 0% 8%)", borderColor: "hsl(0 0% 12%)" }}>
                     <span style={{ color: liveStats.passed > 0 ? "hsl(145 60% 55%)" : "hsl(0 0% 28%)" }}>✓ {liveStats.passed} passed</span>
                     <span style={{ color: liveStats.vulns > 0 ? "#ef4444" : "hsl(0 0% 28%)" }}>✗ {liveStats.vulns} vulns</span>
-                    <span style={{ color: "hsl(0 0% 28%)" }}>{liveStats.total} / 56</span>
+                    <span style={{ color: "hsl(0 0% 28%)" }}>{liveStats.total} {liveStats.total > 0 ? 'tests run' : '/ —'}</span>
                     {liveStats.total > 0 && (
                       <span className="ml-auto" style={{ color: liveStats.vulns > 0 ? "#ef4444" : "hsl(145 60% 55%)" }}>
                         Risk: {Math.round((liveStats.vulns / Math.max(liveStats.total, 1)) * 100)}%
@@ -609,7 +609,7 @@ export default function PenetrationTestPage() {
                   <div className="px-4 py-3 flex items-center gap-2 border-b" style={{ borderColor: "hsl(var(--border))" }}>
                     <Shield className="w-4 h-4 text-primary" />
                     <div>
-                      <h3 className="font-semibold text-foreground text-sm">56 Security Tests</h3>
+                      <h3 className="font-semibold text-foreground text-sm">Adaptive Security Tests</h3>
                       <p className="text-[10px] text-muted-foreground">OWASP 2024 + Modern threats</p>
                     </div>
                   </div>

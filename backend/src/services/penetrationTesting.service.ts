@@ -575,18 +575,34 @@ export class PenetrationTestingService {
       }));
       const probeCt = (probeResp.headers['content-type'] || '').toLowerCase();
       const probeBody = typeof probeResp.data === 'string' ? probeResp.data.trim() : '';
-      if (probeResp.status === 200 && probeCt.includes('text/html') &&
-          (probeBody.startsWith('<!DOCTYPE') || probeBody.startsWith('<html'))) {
-        stack.catchAllHtml = true;
-        stack.isSPA = true;
+      const probeIsHtml = probeCt.includes('text/html') &&
+        (probeBody.toLowerCase().startsWith('<!doctype') || probeBody.startsWith('<html'));
+      // SPA catch-all: unknown path returns 200 with HTML (React Router / Vue Router / Angular)
+      // OR: server returns HTML 404 page that looks like the app shell (Vercel SPA handling)
+      if (probeIsHtml && (probeResp.status === 200 || probeResp.status === 404)) {
+        // Check if it's the same shell as the homepage (same title / same root div)
+        if (probeBody.includes('id="root"') || probeBody.includes("id='root'") ||
+            probeBody.includes('id="app"') || probeBody.includes('data-reactroot') ||
+            probeResp.status === 200) {
+          stack.catchAllHtml = true;
+          stack.isSPA = true;
+          console.log(`  [StackDetect] Catch-all HTML on unknown path (status:${probeResp.status}) — SPA confirmed`);
+        }
       }
       const $ = cheerio.load(html);
-      // React
+      // Collect all script src attributes for pattern matching
+      const scriptSrcs: string[] = [];
+      $('script[src]').each((_, el) => { scriptSrcs.push($(el).attr('src') || ''); });
+      const scriptSrcsJoined = scriptSrcs.join(' ');
+      console.log(`  [StackDetect] Script srcs: ${scriptSrcsJoined.slice(0, 200)}`);
+
+      // React — id="root", data-reactroot, CRA (/static/js/main), Vite (/assets/index)
       if (html.includes('id="root"') || html.includes("id='root'") ||
-          html.includes('__REACT') || html.includes('react-root') ||
-          $('script[src*="react"]').length > 0 ||
-          $('script[src*="/static/js/main"]').length > 0) {
-        stack.frameworks.push('React');
+          html.includes('data-reactroot') || html.includes('__REACT') ||
+          html.includes('react-root') ||
+          scriptSrcs.some(s => s.includes('/static/js/main') || s.includes('/static/js/bundle') ||
+            s.includes('/assets/index') || s.includes('react') || Boolean(s.match(/\/assets\/[A-Za-z0-9_-]+\.[a-f0-9]{8}\.js/)))) {
+        if (!stack.frameworks.includes('React')) stack.frameworks.push('React');
         stack.isSPA = true;
       }
 
