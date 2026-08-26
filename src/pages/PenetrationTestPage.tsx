@@ -594,7 +594,7 @@ export default function PenetrationTestPage() {
                   </div>
 
                   <div ref={terminalRef} className="overflow-y-auto p-3 font-mono text-[11px] leading-5 space-y-0.5"
-                    style={{ background: "hsl(0 0% 7%)", height: "340px" }}>
+                    style={{ background: "hsl(0 0% 7%)", height: "220px" }}>
                     {terminalLines.length === 0 && !testing && (
                       <div className="h-full flex flex-col justify-center items-center gap-2" style={{ color: "hsl(0 0% 18%)" }}>
                         <span>sentinel pentest engine v2.0</span>
@@ -639,7 +639,7 @@ export default function PenetrationTestPage() {
                       <p className="text-[10px] text-muted-foreground">OWASP 2024 + Modern threats</p>
                     </div>
                   </div>
-                  <div className="overflow-y-auto" style={{ maxHeight: "420px" }}>
+                  <div className="overflow-y-auto" style={{ maxHeight: "360px" }}>
                     {([
                       { group: "Injection",          dot: "#EF4444", tests: ["XSS", "SQL Injection", "NoSQL Injection", "Command Injection", "GraphQL Injection", "SSTI", "XXE/XML", "LDAP Injection", "ReDoS", "Prototype Pollution", "RCE", "Path Traversal", "CRLF Injection", "Header Injection", "Log4Shell", "Deserialization"] },
                       { group: "Authentication",     dot: "#F97316", tests: ["Auth Bypass", "JWT Security", "Session Management", "OAuth/PKCE", "2FA Bypass", "Password Reset", "Credential Stuffing"] },
