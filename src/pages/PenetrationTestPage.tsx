@@ -192,122 +192,121 @@ export default function PenetrationTestPage() {
       return;
     }
 
-    try {
-      setTesting(true);
-      setReport(null);
-      setTerminalLines([]);
-      setLivePhase('Initializing scan engine...');
-      setLiveStats({ vulns: 0, passed: 0, total: 0 });
+    setTesting(true);
+    setReport(null);
+    setTerminalLines([]);
+    setLivePhase('Initializing scan engine...');
+    setLiveStats({ vulns: 0, passed: 0, total: 0 });
 
-      const credentials = authEnabled
-        ? authMode === "token"
-          ? { token: authToken.trim() || undefined }
-          : { username: authUsername.trim() || undefined, password: authPassword || undefined, loginUrl: authLoginUrl.trim() || undefined }
-        : undefined;
+    const baseUrl = (url.startsWith('http') ? url : `https://${url}`).replace(/\/$/, '');
+    const token = AuthService.getToken();
 
-      const baseUrl = (url.startsWith('http') ? url : `https://${url}`).replace(/\/$/, '');
-      const realTestPromise = websiteScanService.performPenetrationTest(url, credentials);
+    const credentials = authEnabled
+      ? authMode === "token"
+        ? { token: authToken.trim() || undefined }
+        : { username: authUsername.trim() || undefined, password: authPassword || undefined, loginUrl: authLoginUrl.trim() || undefined }
+      : undefined;
 
-      const TEST_NAMES = Object.keys(TEST_SCRIPTS);
-      const LINE_DELAY = 90; // ms between payload lines per test
+    // Build SSE URL — backend streams each test result as it actually completes
+    const sseParams = new URLSearchParams({ url: baseUrl, token: token || '' });
+    if (credentials) sseParams.set('credentials', encodeURIComponent(JSON.stringify(credentials)));
+    const sseUrl = `${API_URL}/api/website-scan/pentest/stream?${sseParams.toString()}`;
 
-      // â”€â”€ Phase 1: Show crawl init while backend is running â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-      await new Promise(r => setTimeout(r, 500));
-      addLine('$ crawl ' + baseUrl, 'hsl(145 60% 55%)');
+    let vulns = 0, passed = 0, total = 0;
+    const es = new EventSource(sseUrl);
+
+    const finish = (msg?: string, isError = false) => {
+      if (msg) addLine(msg, isError ? '#ef4444' : 'hsl(145 60% 55%)');
+      setTesting(false);
+      es.close();
       scrollTerm();
-      await new Promise(r => setTimeout(r, 600));
+    };
+
+    es.addEventListener('connected', () => {
+      addLine('$ sentinel-pentest stream connected', 'hsl(145 60% 55%)');
+      addLine(`$ crawl ${baseUrl}`, 'hsl(145 60% 55%)');
       scrollTerm();
-      setLivePhase('Scan engine running ”” collecting results...');
-      addLine('', 'hsl(0 0% 20%)');
+    });
 
-      // â”€â”€ Phase 2: Wait for real backend result â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-      let result: any;
-      try {
-        result = await realTestPromise;
-      } catch (err: any) {
-        if (err.response?.data?.requiresVerification) {
-          setDomainVerified(false);
-          toast({ title: "Domain Not Verified", description: err.response.data.message, variant: "destructive" });
-          return;
-        }
-        throw err;
-      }
-
-      // Update crawl line with real surface data
-      const pageCount = result.results?.length || 0;
+    es.addEventListener('phase', (e: Event) => {
+      const data = JSON.parse((e as MessageEvent).data);
+      setLivePhase(data.message);
+      addLine(`\u25b6 ${data.message}`, 'hsl(210 80% 65%)');
       scrollTerm();
-      setLivePhase(`Replaying ${TEST_NAMES.length} tests with results...`);
-      addLine('', 'hsl(0 0% 20%)');
-      await new Promise(r => setTimeout(r, 300));
+    });
 
-      // â”€â”€ Phase 3: Animate test-by-test with REAL result per test â”€â”€â”€â”€â”€â”€â”€â”€
-      let vulns = 0, passed = 0;
+    es.addEventListener('test_start', (e: Event) => {
+      const data = JSON.parse((e as MessageEvent).data);
+      const isAI = data.name.startsWith('[AI]');
+      addLine(`\u2192 ${data.name}`, isAI ? 'hsl(280 60% 70%)' : 'hsl(40 80% 70%)');
+      // Show payload preview for this specific test
+      const payloadLines = TEST_SCRIPTS[data.name]?.(baseUrl) || [];
+      payloadLines.forEach(([text, color]: [string, string]) => {
+        addLine(`  ${text}`, color, true);
+      });
+      addLine('  \u21ba awaiting response...', 'hsl(0 0% 35%)', true);
+      scrollTerm();
+    });
 
-      for (let i = 0; i < TEST_NAMES.length; i++) {
-        const name = TEST_NAMES[i];
-        const isAI = name.startsWith('[AI]');
-        const cleanName = name.replace('[AI] ', '');
-        const num = `[${String(i + 1).padStart(2, '0')}/${TEST_NAMES.length}]`;
-
-        // Find matching backend result
-        const match = result.results?.find((r: any) =>
-          r.testName.replace('[AI] ', '').toLowerCase() === cleanName.toLowerCase() ||
-          r.testName.toLowerCase().includes(cleanName.toLowerCase().split(/[\s/(]/)[0]) ||
-          cleanName.toLowerCase().includes(r.testName.replace('[AI] ', '').toLowerCase().split(/[\s/(]/)[0])
-        );
-
-        // Test header line
-        addLine(`${num} ${name}`, isAI ? 'hsl(280 60% 70%)' : 'hsl(40 80% 70%)');
-        scrollTerm();
-
-        // Payload lines
-        const payloadLines = TEST_SCRIPTS[name]?.(baseUrl) || [];
-        for (const [text, color] of payloadLines) {
-          await new Promise(r => setTimeout(r, LINE_DELAY));
-          addLine(text as string, color as string, true);
-          scrollTerm();
-        }
-
-        // Brief "sending..." pause to simulate network round-trip
-        await new Promise(r => setTimeout(r, 120));
-
-        // Show REAL result
-        if (match?.vulnerable) {
+    es.addEventListener('test_result', (e: Event) => {
+      const data = JSON.parse((e as MessageEvent).data);
+      (data.results as any[]).forEach((r: any) => {
+        total++;
+        if (r.vulnerable) {
           vulns++;
-          const sev = (match.severity || 'high').toUpperCase();
+          const sev = (r.severity || 'high').toUpperCase();
           const sevColor = sev === 'CRITICAL' ? '#ff4444' : sev === 'HIGH' ? '#ef4444' : sev === 'MEDIUM' ? '#f97316' : '#facc15';
-          addLine(`  âœ— VULNERABLE [${sev}] ”” ${match.description?.slice(0, 90) || 'Vulnerability confirmed'}`, sevColor, true);
+          addLine(`  \u2717 VULNERABLE [${sev}] \u2014 ${(r.description || 'Vulnerability confirmed').slice(0, 100)}`, sevColor, true);
         } else {
           passed++;
-          addLine(`  âœ“ SECURE ”” ${match?.description?.slice(0, 75) || 'No vulnerability detected'}`, 'hsl(145 60% 55%)', true);
+          addLine(`  \u2713 SECURE \u2014 ${(r.description || 'No vulnerability detected').slice(0, 80)}`, 'hsl(145 60% 55%)', true);
         }
-
         addLine('', 'hsl(0 0% 18%)');
-        setLiveStats({ vulns, passed, total: i + 1 });
-        scrollTerm();
-
-        // Small gap between tests
-        await new Promise(r => setTimeout(r, 60));
-      }
-
-      addLine(`â”â” Scan Complete: ${vulns} vulnerabilities, ${passed} passed â”â”`, vulns > 0 ? '#ef4444' : 'hsl(145 60% 55%)');
+      });
+      setLiveStats({ vulns, passed, total });
       scrollTerm();
+    });
 
-      setLivePhase('Complete âœ“');
-      setLiveStats({ vulns, passed, total: result.results.length });
-      setReport(result);
-      setTimeout(() => scrollTerm(), 100);
-      toast({ title: "Penetration Test Complete", description: `Found ${result.vulnerabilitiesFound} vulnerabilities` });
-    } catch (error: any) {
-      if (error.response?.data?.requiresVerification) {
-        setDomainVerified(false);
-        toast({ title: "Domain Not Verified", description: error.response.data.message, variant: "destructive" });
-      } else {
-        toast({ title: "Test Failed", description: error.response?.data?.error || error.message || "Failed to perform penetration test", variant: "destructive" });
+    es.addEventListener('ai_finding', (e: Event) => {
+      const data = JSON.parse((e as MessageEvent).data);
+      const r = data.result;
+      total++;
+      if (r.vulnerable) {
+        vulns++;
+        addLine(`  \u2605 [AI] ${r.testName} \u2014 ${(r.description || '').slice(0, 90)}`, '#a855f7', true);
       }
-    } finally {
-      setTesting(false);
-    }
+      setLiveStats({ vulns, passed, total });
+      scrollTerm();
+    });
+
+    es.addEventListener('done', (e: Event) => {
+      const data = JSON.parse((e as MessageEvent).data);
+      const rep = data.report;
+      addLine('', 'hsl(0 0% 18%)');
+      addLine(`\u2550\u2550 Scan Complete \u2550\u2550 ${rep.vulnerabilitiesFound} vulnerabilities, ${(rep.testsPerformed || total) - rep.vulnerabilitiesFound} passed`, rep.vulnerabilitiesFound > 0 ? '#ef4444' : 'hsl(145 60% 55%)');
+      setLivePhase('Complete \u2713');
+      setLiveStats({ vulns: rep.vulnerabilitiesFound, passed: (rep.testsPerformed || total) - rep.vulnerabilitiesFound, total: rep.testsPerformed || total });
+      setReport(rep);
+      finish();
+      toast({ title: "Penetration Test Complete", description: `Found ${rep.vulnerabilitiesFound} vulnerabilities` });
+    });
+
+    es.addEventListener('error', (e: Event) => {
+      try {
+        const d = JSON.parse((e as MessageEvent).data || '{}');
+        if (d.message === 'Domain not verified') {
+          setDomainVerified(false);
+          toast({ title: "Domain Not Verified", description: "Please verify domain ownership first.", variant: "destructive" });
+          finish('  \u2717 Error: domain not verified', true);
+          return;
+        }
+        finish(`  \u2717 Stream error: ${d.message || 'connection lost'}`, true);
+      } catch {
+        finish('  \u2717 Connection lost \u2014 check network and retry', true);
+      }
+      toast({ title: "Test Failed", description: "Stream connection error. Please try again.", variant: "destructive" });
+      setLivePhase('Error');
+    });
   };
 
 
