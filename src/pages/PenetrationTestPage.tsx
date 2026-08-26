@@ -382,7 +382,7 @@ export default function PenetrationTestPage() {
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
 
               {/* â”€â”€ LEFT: Config + Terminal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-              <div className="lg:col-span-3 flex flex-col gap-4">
+              <div className="lg:col-span-3 space-y-4">
 
                 {/* Legal warning */}
                 <div className="flex items-start gap-3 px-4 py-3 rounded-xl"
@@ -542,7 +542,7 @@ export default function PenetrationTestPage() {
                 </div>
 
                 {/* Terminal - always visible */}
-                <div className="rounded-xl overflow-hidden flex flex-col flex-1"
+                <div className="rounded-xl overflow-hidden flex flex-col"
                   style={{ border: `1px solid ${livePhase.startsWith("Complete") ? "hsl(145 60% 40% / 0.4)" : testing ? "hsl(0 84% 55% / 0.35)" : "hsl(var(--border))"}` }}>
 
                   <div className="flex items-center gap-2 px-3 py-2" style={{ background: "hsl(0 0% 8%)" }}>
@@ -569,7 +569,7 @@ export default function PenetrationTestPage() {
                   </div>
 
                   <div ref={terminalRef} className="overflow-y-auto p-3 font-mono text-[11px] leading-5 space-y-0.5"
-                    style={{ background: "hsl(0 0% 7%)", minHeight: "160px" }} className="flex-1">
+                    style={{ background: "hsl(0 0% 7%)", height: "200px" }}>
                     {terminalLines.length === 0 && !testing && (
                       <div className="h-full flex flex-col justify-center items-center gap-2" style={{ color: "hsl(0 0% 18%)" }}>
                         <span>sentinel pentest engine v2.0</span>
@@ -605,8 +605,8 @@ export default function PenetrationTestPage() {
               </div>
 
               {/* RIGHT: Info sidebar */}
-              <div className="lg:col-span-2 flex flex-col gap-4">
-                <div className="card-elevated overflow-hidden flex flex-col flex-1">
+              <div className="lg:col-span-2 space-y-4">
+                <div className="card-elevated overflow-hidden">
                   <div className="px-4 py-3 flex items-center gap-2 border-b" style={{ borderColor: "hsl(var(--border))" }}>
                     <Shield className="w-4 h-4 text-primary" />
                     <div>
@@ -614,7 +614,7 @@ export default function PenetrationTestPage() {
                       <p className="text-[10px] text-muted-foreground">OWASP 2024 + Modern threats</p>
                     </div>
                   </div>
-                  <div className="overflow-y-auto flex-1" style={{ minHeight: "0" }}>
+                  <div className="overflow-y-auto" style={{ maxHeight: "300px" }}>
                     {([
                       { group: "Injection",          dot: "#EF4444", tests: ["XSS", "SQL Injection", "NoSQL Injection", "Command Injection", "GraphQL Injection", "SSTI", "XXE/XML", "LDAP Injection", "ReDoS", "Prototype Pollution", "RCE", "Path Traversal", "CRLF Injection", "Header Injection", "Log4Shell", "Deserialization"] },
                       { group: "Authentication",     dot: "#F97316", tests: ["Auth Bypass", "JWT Security", "Session Management", "OAuth/PKCE", "2FA Bypass", "Password Reset", "Credential Stuffing"] },
