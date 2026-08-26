@@ -3043,17 +3043,28 @@ export class PenetrationTestingService {
     for (const path of otpPaths) {
       try {
         const responses: number[] = [];
+        let firstContentType = '';
+        let firstBody = '';
         for (let i = 0; i < 3; i++) {
           const r = await axios.post(`${origin}${path}`, JSON.stringify({ otp: '000000', code: '000000' }), this.authCfg(ctx, {
             timeout: 4000, validateStatus: () => true, httpsAgent: this.getHttpsAgent(),
             headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
           }));
           responses.push(r.status);
+          if (i === 0) {
+            firstContentType = r.headers['content-type'] || '';
+            firstBody = typeof r.data === 'string' ? r.data : JSON.stringify(r.data || '');
+          }
+        }
+        // If the endpoint returns HTML, it's a SPA catch-all — not a real OTP endpoint
+        if (!this.isRealApiResponse(responses[0], firstContentType, firstBody)) {
+          console.log(`  [2FA] ${path} returned HTML — SPA catch-all, not a real OTP endpoint`);
+          continue;
         }
         if (responses.some(s => s === 200)) {
           return [{ testName: '2FA / MFA Bypass', category: 'Authentication', severity: 'critical', vulnerable: true,
             description: 'OTP endpoint accepted invalid code — 2FA bypass possible.',
-            evidence: `${origin}${path} returned 200 for OTP "000000"`, recommendation: 'Enforce rate limiting, lockout, and HMAC-based TOTP validation.' }];
+            evidence: `${origin}${path} returned 200 (JSON) for OTP "000000"`, recommendation: 'Enforce rate limiting, lockout, and HMAC-based TOTP validation.' }];
         }
         if (!responses.some(s => s === 429)) {
           return [{ testName: '2FA / MFA Bypass', category: 'Authentication', severity: 'medium', vulnerable: true,
@@ -3113,23 +3124,32 @@ export class PenetrationTestingService {
     const origin = new URL(url).origin;
     const adminPaths = ['/api/admin', '/api/admin/users', '/api/admin/config', '/api/management', '/api/internal'];
     const vulnPaths: string[] = [];
+    const evidenceParts: string[] = [];
     for (const path of adminPaths) {
       try {
         const r = await axios.get(`${origin}${path}`, this.authCfg(ctx, {
           timeout: 6000, validateStatus: () => true, httpsAgent: this.getHttpsAgent(),
-          headers: { 'User-Agent': 'Mozilla/5.0' },
+          headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' },
         }));
-        if (r.status === 200) vulnPaths.push(path);
+        const body = typeof r.data === 'string' ? r.data : JSON.stringify(r.data || '');
+        // Only flag if response is real JSON data — not a React/SPA HTML catch-all page
+        if (r.status === 200 && this.isRealApiResponse(r.status, r.headers['content-type'] || '', body)) {
+          vulnPaths.push(path);
+          evidenceParts.push(`GET ${origin}${path} → 200 (JSON)`);
+        } else if (r.status === 200) {
+          // 200 + HTML = SPA catch-all, not a real admin endpoint
+          console.log(`  [BFLA] ${path} returned 200 but HTML — SPA catch-all, skipping`);
+        }
       } catch { /* skip */ }
     }
     if (vulnPaths.length > 0) {
       return [{ testName: 'BFLA (Broken Func Level Auth)', category: 'Authorization', severity: 'high', vulnerable: true,
         description: `Admin-level functions accessible without elevated privileges: ${vulnPaths.join(', ')}`,
-        evidence: `${vulnPaths.map(p => `GET ${origin}${p} → 200`).join('; ')}`,
+        evidence: evidenceParts.join('; '),
         recommendation: 'Enforce role-based access control on every function endpoint. Admin routes must check req.user.role === "admin".' }];
     }
     return [{ testName: 'BFLA (Broken Func Level Auth)', category: 'Authorization', severity: 'info', vulnerable: false,
-      description: 'Admin function endpoints properly protected.', recommendation: 'Continuously audit access control on sensitive endpoints.' }];
+      description: 'Admin function endpoints properly protected (or return HTML/SPA catch-all).', recommendation: 'Continuously audit access control on sensitive endpoints.' }];
   }
 
   private static async testSubdomainTakeover(url: string, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
@@ -3208,11 +3228,23 @@ export class PenetrationTestingService {
     try {
       const attempts = 6;
       const codes: number[] = [];
+      let firstContentType = '';
+      let firstBody = '';
       for (let i = 0; i < attempts; i++) {
         const r = await axios.post(loginEndpoint, JSON.stringify({ username: `user${i}@test.com`, password: 'wrongpassword123' }),
           this.authCfg(ctx, { timeout: 4000, validateStatus: () => true, httpsAgent: this.getHttpsAgent(),
             headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' } }));
         codes.push(r.status);
+        if (i === 0) {
+          firstContentType = r.headers['content-type'] || '';
+          firstBody = typeof r.data === 'string' ? r.data : JSON.stringify(r.data || '');
+        }
+      }
+      // If all responses are HTML (SPA catch-all), the login endpoint doesn't exist — skip
+      if (!this.isRealApiResponse(codes[0], firstContentType, firstBody)) {
+        console.log(`  [CredentialStuffing] ${loginEndpoint} returned HTML — endpoint not found (SPA catch-all), skipping`);
+        return [{ testName: 'Credential Stuffing Guard', category: 'Authentication', severity: 'info', vulnerable: false,
+          description: 'No login API endpoint found to test for rate limiting.', recommendation: 'Implement rate limiting (max 5 attempts/min/IP), CAPTCHA after 3 failures, and account lockout.' }];
       }
       const has429 = codes.some(c => c === 429);
       const hasCaptcha = codes.some(c => c === 403);
@@ -3252,21 +3284,30 @@ export class PenetrationTestingService {
     const origin = new URL(url).origin;
     const legacyPaths = ['/api/v1/', '/api/v1/users', '/api/v2/', '/api/v1/admin', '/api/v0/', '/v1/', '/v2/'];
     const exposed: string[] = [];
+    const evidenceParts: string[] = [];
     for (const path of legacyPaths) {
       try {
         const r = await axios.get(`${origin}${path}`, this.authCfg(ctx, { timeout: 5000, validateStatus: () => true,
-          httpsAgent: this.getHttpsAgent(), headers: { 'User-Agent': 'Mozilla/5.0' } }));
-        if (r.status === 200) exposed.push(path);
+          httpsAgent: this.getHttpsAgent(), headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' } }));
+        const body = typeof r.data === 'string' ? r.data : JSON.stringify(r.data || '');
+        // Only flag if the response is real JSON — not a React/SPA HTML catch-all page
+        if (r.status === 200 && this.isRealApiResponse(r.status, r.headers['content-type'] || '', body)) {
+          exposed.push(path);
+          evidenceParts.push(`GET ${origin}${path} → 200 (JSON)`);
+        } else if (r.status === 401 || r.status === 403) {
+          // Endpoint exists but requires auth — not vulnerable
+          console.log(`  [APIVersioning] ${path} → ${r.status} (protected)`);
+        }
       } catch { /* skip */ }
     }
     if (exposed.length > 0) {
       return [{ testName: 'API Versioning Exposure', category: 'Security Misconfiguration', severity: 'medium', vulnerable: true,
         description: `Legacy API versions accessible — may lack security controls of current version: ${exposed.join(', ')}`,
-        evidence: exposed.map(p => `GET ${origin}${p} → 200`).join('; '),
+        evidence: evidenceParts.join('; '),
         recommendation: 'Decommission or protect legacy API versions. Apply same auth/rate-limit middleware to all versions.' }];
     }
     return [{ testName: 'API Versioning Exposure', category: 'Security Misconfiguration', severity: 'info', vulnerable: false,
-      description: 'No exposed legacy API versions found.', recommendation: 'Maintain an API inventory and retire old versions with sunset headers.' }];
+      description: 'No exposed legacy API versions found (HTML responses indicate SPA catch-all, not real endpoints).', recommendation: 'Maintain an API inventory and retire old versions with sunset headers.' }];
   }
 
   private static async testReDoS(url: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
@@ -3351,6 +3392,29 @@ export class PenetrationTestingService {
     });
 
     return targets;
+  }
+
+  /**
+   * Determines whether an HTTP response is a real API response (JSON) or a SPA catch-all (HTML).
+   * React/Next/Vue SPAs return index.html with HTTP 200 for all unknown routes.
+   * Flagging those as vulnerabilities produces false positives.
+   */
+  private static isRealApiResponse(status: number, contentType: string, body: string): boolean {
+    const ct = contentType.toLowerCase();
+    const bodyTrimmed = body.trim();
+    // 401/403 always = real endpoint (server knows the route, just needs auth)
+    if (status === 401 || status === 403) return true;
+    // HTML response = SPA catch-all or server error page — not a real API
+    const isHtml = ct.includes('text/html') ||
+      bodyTrimmed.startsWith('<!DOCTYPE') ||
+      bodyTrimmed.startsWith('<html') ||
+      bodyTrimmed.startsWith('<!doctype');
+    if (isHtml) return false;
+    // JSON content-type or JSON body = real API
+    const isJson = ct.includes('application/json') ||
+      bodyTrimmed.startsWith('{') ||
+      bodyTrimmed.startsWith('[');
+    return isJson;
   }
 
   private static calculateRiskScore(results: PenetrationTestResult[]): number {
