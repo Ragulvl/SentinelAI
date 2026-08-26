@@ -676,12 +676,20 @@ export class PenetrationTestingService {
           if (ct.includes('application/json') || body.startsWith('{') || body.startsWith('[')) {
             stack.apiBase = candidate;
             console.log(`  [StackDetect] Real API base: ${candidate}`);
+            // If we found a real JSON API AND the site is a SPA, the backend must exist
+            // Mark as Express/Node unless a more specific backend was already detected
+            if (stack.isSPA && !stack.isExpress && !stack.isDjango && !stack.isLaravel && !stack.isWordPress) {
+              stack.isExpress = true;
+              if (!stack.frameworks.includes('Node.js/Express')) stack.frameworks.push('Node.js/Express (inferred from API)');
+              console.log(`  [StackDetect] Real JSON API found on SPA — inferred Node.js/Express backend`);
+            }
             break;
           }
         } catch { /* skip */ }
       }
 
-      console.log(`  [StackDetect] Stack: ${stack.frameworks.join(', ') || 'unknown'} | SPA:${stack.isSPA} | SSR:${stack.isSSR} | WP:${stack.isWordPress} | API:${stack.apiBase}`);
+      console.log(`  [StackDetect] Stack: ${stack.frameworks.join(', ') || 'unknown'} | SPA:${stack.isSPA} | Express:${stack.isExpress} | SSR:${stack.isSSR} | WP:${stack.isWordPress} | API:${stack.apiBase}`);
+
     } catch (e: any) {
       console.warn(`  [StackDetect] Detection failed: ${e.message}`);
     }
@@ -910,49 +918,64 @@ export class PenetrationTestingService {
     ];
 
     // ── Select tests based on detected stack ────────────────────────────────
-    let stackSpecificTests: typeof universalTests = [];
+    // ── ADDITIVE stack selector — ALL detected stacks contribute tests ─────
+    // Real apps are often React frontend + Express backend simultaneously.
+    // We must run tests for EVERY layer detected, not just the first match.
+    const selectedSuites: (typeof universalTests)[] = [];
+    const stackLabels: string[] = [];
+
     if (stack.isWordPress) {
-      stackSpecificTests = wordpressTests;
-      console.log('[Pentest] Stack: WordPress — running WP-specific attack suite');
-    } else if (stack.isDjango) {
-      stackSpecificTests = djangoTests;
-      console.log('[Pentest] Stack: Django — running Python/Django attack suite');
-    } else if (stack.isLaravel) {
-      stackSpecificTests = laravelTests;
-      console.log('[Pentest] Stack: Laravel — running PHP/Laravel attack suite');
-    } else if (stack.isExpress) {
-      stackSpecificTests = expressTests;
-      console.log('[Pentest] Stack: Express/Node — running Node.js attack suite');
-    } else if (stack.isSSR) {
-      stackSpecificTests = ssrTests;
-      console.log('[Pentest] Stack: SSR (Next.js/Nuxt) — running full-stack attack suite');
-    } else if (stack.isSPA) {
-      stackSpecificTests = spaTests;
-      console.log('[Pentest] Stack: SPA (React/Vue/Angular) — running client-side + API attack suite');
-    } else {
-      // Unknown / generic — run everything
-      stackSpecificTests = [
-        ...ssrTests, ...expressTests,
-        { name: 'LDAP Injection',            fn: () => this.testLDAPInjection(normalizedUrl, surface, ctx) },
-        { name: 'XML Injection',             fn: () => this.testXMLInjection(normalizedUrl, ctx) },
-        { name: 'HTTP Header Injection',     fn: () => this.testHTTPHeaderInjection(normalizedUrl, ctx) },
-        { name: 'CRLF Injection',            fn: () => this.testCRLFInjection(normalizedUrl, ctx) },
-        { name: 'Remote Code Execution',     fn: () => this.testRemoteCodeExecution(normalizedUrl, surface, ctx) },
-        { name: 'XXE',                       fn: () => this.testXXE(normalizedUrl, ctx) },
-      ];
-      console.log('[Pentest] Stack: Unknown — running full generic attack suite');
+      selectedSuites.push(wordpressTests);
+      stackLabels.push('WordPress');
+    }
+    if (stack.isDjango) {
+      selectedSuites.push(djangoTests);
+      stackLabels.push('Django');
+    }
+    if (stack.isLaravel) {
+      selectedSuites.push(laravelTests);
+      stackLabels.push('Laravel/PHP');
+    }
+    if (stack.isExpress) {
+      selectedSuites.push(expressTests);
+      stackLabels.push('Express/Node');
+    }
+    if (stack.isSSR) {
+      selectedSuites.push(ssrTests);
+      stackLabels.push('Next.js/SSR');
+    }
+    if (stack.isSPA) {
+      selectedSuites.push(spaTests);
+      stackLabels.push('React/Vue/Angular SPA');
     }
 
-    // Deduplicate (universal + stack-specific may overlap on test names)
+    // If nothing was detected (unknown stack) — run everything
+    if (selectedSuites.length === 0) {
+      selectedSuites.push(ssrTests, expressTests);
+      stackLabels.push('Unknown (full suite)');
+      // Add generic-only tests not in other suites
+      selectedSuites.push([
+        { name: 'LDAP Injection',        fn: () => this.testLDAPInjection(normalizedUrl, surface, ctx) },
+        { name: 'XML Injection',         fn: () => this.testXMLInjection(normalizedUrl, ctx) },
+        { name: 'HTTP Header Injection', fn: () => this.testHTTPHeaderInjection(normalizedUrl, ctx) },
+        { name: 'CRLF Injection',        fn: () => this.testCRLFInjection(normalizedUrl, ctx) },
+        { name: 'Remote Code Execution', fn: () => this.testRemoteCodeExecution(normalizedUrl, surface, ctx) },
+        { name: 'XXE',                   fn: () => this.testXXE(normalizedUrl, ctx) },
+      ]);
+    }
+
+    console.log(`[Pentest] Detected layers: ${stackLabels.join(' + ')}`);
+
+    // Deduplicate across all suites — test names must be unique
     const seen = new Set<string>();
-    const tests = [...universalTests, ...stackSpecificTests].filter(t => {
+    const tests = [...universalTests, ...selectedSuites.flat()].filter(t => {
       if (seen.has(t.name)) return false;
       seen.add(t.name);
       return true;
     });
 
-    console.log(`[Pentest] Running ${tests.length} stack-adapted tests for ${stack.frameworks.join(', ') || 'unknown'} stack`);
-    onProgress?.({ type: 'phase', phase: 2, message: `Running ${tests.length} targeted tests for ${stack.frameworks.join(', ') || 'detected'} stack...` });
+    console.log(`[Pentest] Running ${tests.length} stack-adapted tests for: ${stackLabels.join(' + ') || 'unknown'}`);
+    onProgress?.({ type: 'phase', phase: 2, message: `Running ${tests.length} targeted tests for ${stackLabels.join(' + ') || 'detected'} stack...` });
 
 
     // Run in batches of 5 to avoid resource exhaustion
