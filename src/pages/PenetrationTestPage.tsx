@@ -382,7 +382,7 @@ export default function PenetrationTestPage() {
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
 
               {/* â”€â”€ LEFT: Config + Terminal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-              <div className="lg:col-span-3 space-y-4">
+              <div className="lg:col-span-3 flex flex-col gap-4">
 
                 {/* Legal warning */}
                 <div className="flex items-start gap-3 px-4 py-3 rounded-xl"
@@ -542,7 +542,7 @@ export default function PenetrationTestPage() {
                 </div>
 
                 {/* Terminal - always visible */}
-                <div className="rounded-xl overflow-hidden"
+                <div className="rounded-xl overflow-hidden flex flex-col flex-1"
                   style={{ border: `1px solid ${livePhase.startsWith("Complete") ? "hsl(145 60% 40% / 0.4)" : testing ? "hsl(0 84% 55% / 0.35)" : "hsl(var(--border))"}` }}>
 
                   <div className="flex items-center gap-2 px-3 py-2" style={{ background: "hsl(0 0% 8%)" }}>
@@ -569,7 +569,7 @@ export default function PenetrationTestPage() {
                   </div>
 
                   <div ref={terminalRef} className="overflow-y-auto p-3 font-mono text-[11px] leading-5 space-y-0.5"
-                    style={{ background: "hsl(0 0% 7%)", height: "220px" }}>
+                    style={{ background: "hsl(0 0% 7%)", minHeight: "160px" }} className="flex-1">
                     {terminalLines.length === 0 && !testing && (
                       <div className="h-full flex flex-col justify-center items-center gap-2" style={{ color: "hsl(0 0% 18%)" }}>
                         <span>sentinel pentest engine v2.0</span>
