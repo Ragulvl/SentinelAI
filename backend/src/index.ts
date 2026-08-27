@@ -20,6 +20,7 @@ import sandboxScanRoutes from './routes/sandboxScan.routes.js';
 import historyRoutes from './routes/history.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
 import telegramRoutes from './routes/telegram.routes.js';
+import adminRoutes from './routes/admin.routes.js';
 import { MonitoringWorker } from './workers/monitoring.worker.js';
 import { NotificationService } from './services/notification.service.js';
 
@@ -127,6 +128,7 @@ app.use('/api/sandbox',      apiLimiter,  sandboxScanRoutes);
 app.use('/api/history',      apiLimiter,  historyRoutes);
 app.use('/api/notifications', apiLimiter, notificationRoutes);
 app.use('/api/telegram',      apiLimiter, telegramRoutes);
+app.use('/api/admin',         apiLimiter, adminRoutes); // Super admin — protected by requireAdmin middleware
 
 // Health check
 app.get('/health', (req, res) => {

@@ -10,6 +10,10 @@ export interface IUser extends Document {
   company?: string;
   location?: string;
   githubAccessToken?: string;
+  role: 'user' | 'admin' | 'superadmin';
+  isBanned: boolean;
+  bannedAt?: Date;
+  bannedReason?: string;
   firstLogin: Date;
   lastLogin: Date;
   lastActive: Date;
@@ -17,9 +21,9 @@ export interface IUser extends Document {
   extra?: Record<string, any>;
   pushSubscription?: any;
   notificationsEnabled?: boolean;
-  whatsappNumber?: string;           // kept temporarily for migration — will be removed
+  whatsappNumber?: string;
   whatsappNotificationsEnabled?: boolean;
-  telegramChatId?: string;           // Telegram chat_id — set when user sends /start to the bot
+  telegramChatId?: string;
   telegramNotificationsEnabled?: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -113,6 +117,19 @@ const UserSchema = new Schema<IUser>(
       type: Boolean,
       default: false,
     },
+    // Role-based access control
+    role: {
+      type: String,
+      enum: ['user', 'admin', 'superadmin'],
+      default: 'user',
+      index: true,
+    },
+    isBanned: {
+      type: Boolean,
+      default: false,
+    },
+    bannedAt: { type: Date, default: null },
+    bannedReason: { type: String, default: null },
 
   },
   {

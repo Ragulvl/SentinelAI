@@ -26,6 +26,7 @@ const UnifiedHistoryPage         = lazy(() => import("./pages/UnifiedHistoryPage
 const ProfilePage                = lazy(() => import("./pages/ProfilePage"));
 const SandboxScanPage            = lazy(() => import("./pages/SandboxScanPage"));
 const NotFound                   = lazy(() => import("./pages/NotFound"));
+const AdminPage                  = lazy(() => import("./pages/AdminPage"));
 
 // ── Shared page-level loading fallback ────────────────────────────────────
 const PageLoader = () => (
@@ -67,6 +68,7 @@ const App = () => (
               <Route path="/scan-history"       element={<UnifiedHistoryPage />} />
               <Route path="/sandbox"            element={<SandboxScanPage />} />
               <Route path="/profile"            element={<ProfilePage />} />
+              <Route path="/admin"              element={<AdminPage />} />
               <Route path="*"                   element={<NotFound />} />
             </Routes>
           </Suspense>
