@@ -37,7 +37,11 @@ export class AuthController {
   static async initiateGitHubLogin(req: Request, res: Response) {
     try {
       const state = createOAuthState();
-      const authUrl = GitHubAuthService.getAuthorizationUrl(state);
+      // Pass forceLogin=true whenever the user explicitly clicks "Sign in"
+      // This adds prompt=select_account so GitHub always shows the account chooser
+      // instead of silently re-using the existing GitHub session.
+      const force = req.query.force !== 'false'; // default true — always force
+      const authUrl = GitHubAuthService.getAuthorizationUrl(state, force);
       res.json({ url: authUrl });
     } catch (error) {
       console.error('Error initiating GitHub login:', error);
@@ -124,8 +128,32 @@ export class AuthController {
   }
 
   static async logout(req: Request, res: Response) {
-    // In a stateless JWT system, logout is handled client-side
-    // If you want to blacklist tokens, implement a token blacklist here
+    try {
+      // Revoke the GitHub OAuth token so GitHub forgets the session.
+      // Without this, GitHub silently re-authorizes on next login click.
+      const token = req.headers.authorization?.replace('Bearer ', '');
+      if (token) {
+        try {
+          const payload = JWTService.verifyToken(token);
+          const githubAccessToken = await UserService.getGithubAccessToken(payload.userId);
+          if (githubAccessToken) {
+            // Revoke via GitHub API — DELETE /applications/{client_id}/token
+            await import('axios').then(({ default: axios }) =>
+              axios.delete(
+                `https://api.github.com/applications/${config.github.clientId}/token`,
+                {
+                  auth: { username: config.github.clientId, password: config.github.clientSecret },
+                  data: { access_token: githubAccessToken },
+                  headers: { Accept: 'application/vnd.github.v3+json' },
+                  validateStatus: () => true, // don't throw on 4xx
+                }
+              )
+            );
+          }
+        } catch { /* non-critical — still log out locally */ }
+      }
+    } catch { /* ignore */ }
+
     res.json({ success: true, message: 'Logged out successfully' });
   }
 

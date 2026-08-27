@@ -6,12 +6,15 @@ export class GitHubAuthService {
   private static readonly GITHUB_API_URL = 'https://api.github.com';
   private static readonly GITHUB_OAUTH_URL = 'https://github.com/login/oauth';
 
-  static getAuthorizationUrl(state: string): string {
+  static getAuthorizationUrl(state: string, forceLogin = false): string {
     const params = new URLSearchParams({
       client_id: config.github.clientId,
       redirect_uri: config.github.callbackUrl,
       scope: 'read:user user:email repo',
       state,
+      // Force GitHub to show the account/login screen every time.
+      // Without this, GitHub silently re-authorizes if the user already approved the app.
+      ...(forceLogin ? { prompt: 'select_account' } : {}),
     });
 
     return `${this.GITHUB_OAUTH_URL}/authorize?${params.toString()}`;
