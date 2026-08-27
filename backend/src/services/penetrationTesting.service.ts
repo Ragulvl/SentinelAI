@@ -2475,64 +2475,63 @@ export class PenetrationTestingService {
    * Rate Limiting â€” uses the discovered login endpoint for targeted brute-force simulation.
    */
   private static async testRateLimiting(baseUrl: string, surface: AttackSurface, ctx: ScanContext = EMPTY_CTX): Promise<PenetrationTestResult[]> {
-    const evidence: string[] = [];
-    let vulnerable = false;
-
-    // Target the real login endpoint if discovered
+    // Only test rate limiting on a real login/auth endpoint.
+    // Bursting the homepage is meaningless — CDNs return HTML with no rate limit.
     const loginEp = surface.loginEndpoint || surface.apiEndpoints.find(e => /login|auth|sign.?in/i.test(e));
+    const targetUrl = loginEp || surface.apiEndpoints[0];
 
-    const BURST = 15;
+    if (!targetUrl) {
+      return [{ testName: 'Rate Limiting', category: 'Security Misconfiguration', severity: 'info', vulnerable: false,
+        description: 'No login or API endpoint found to test rate limiting.',
+        recommendation: 'Implement rate limiting on all auth endpoints (max 5/min/IP, 429 with Retry-After).' }];
+    }
 
-    // First: burst the general endpoint
-    const responses = await Promise.allSettled(
-      Array.from({ length: BURST }, () =>
-        axios.get(baseUrl, this.authCfg(ctx, { timeout: 5000, validateStatus: () => true, httpsAgent: this.getHttpsAgent() }))
+    const BURST = 12;
+    const loginResponses = await Promise.allSettled(
+      Array.from({ length: BURST }, (_, i) =>
+        axios.post(targetUrl, { email: `test${i}@test.com`, password: 'wrongpassword' + i }, {
+          timeout: 4000, validateStatus: () => true, httpsAgent: this.getHttpsAgent(),
+          headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+        })
       )
     );
-    const fulfilled = responses.filter((r): r is PromiseFulfilledResult<AxiosResponse> => r.status === 'fulfilled').map(r => r.value);
+    const fulfilled = loginResponses
+      .filter((r): r is PromiseFulfilledResult<AxiosResponse> => r.status === 'fulfilled')
+      .map(r => r.value);
+
+    const firstResp = fulfilled[0];
+    if (!firstResp) {
+      return [{ testName: 'Rate Limiting', category: 'Security Misconfiguration', severity: 'info', vulnerable: false,
+        description: 'Rate limiting endpoint unreachable.', recommendation: 'Implement rate limiting on all auth endpoints.' }];
+    }
+
+    const firstCt = firstResp.headers['content-type'] || '';
+    const firstBody = typeof firstResp.data === 'string' ? firstResp.data : JSON.stringify(firstResp.data || '');
+    // 404 from Express returns JSON {"error":"Resource not found"} — skip, it's not a real endpoint
+    if (firstResp.status === 404 || !this.isRealApiResponse(firstResp.status, firstCt, firstBody)) {
+      return [{ testName: 'Rate Limiting', category: 'Security Misconfiguration', severity: 'info', vulnerable: false,
+        description: 'No active login API endpoint found to test for rate limiting.',
+        recommendation: 'Implement rate limiting on all auth endpoints (max 5/min/IP, 429 with Retry-After).' }];
+    }
+
     const has429 = fulfilled.some(r => r.status === 429);
     const hasRLHeader = fulfilled.some(r => r.headers['retry-after'] || r.headers['x-ratelimit-limit'] || r.headers['ratelimit-limit']);
 
     if (has429 || hasRLHeader) {
-      evidence.push(`Rate limiting confirmed on base URL: ${has429 ? '429 returned' : 'X-RateLimit header present'}`);
+      return [{ testName: 'Rate Limiting', category: 'Security Misconfiguration', severity: 'info', vulnerable: false,
+        description: 'Rate limiting is active on the login endpoint.',
+        recommendation: 'Good. Also consider progressive lockout and CAPTCHA after 3 failures.' }];
     }
 
-    // Second: target the actual login endpoint with credential stuffing simulation
-    if (loginEp) {
-      const loginResponses = await Promise.allSettled(
-        Array.from({ length: 15 }, () =>
-          axios.post(loginEp, { email: 'test@test.com', password: 'wrongpassword' + Math.random() }, {
-            timeout: 3000, validateStatus: () => true, httpsAgent: this.getHttpsAgent(),
-            headers: { 'Content-Type': 'application/json' },
-          })
-        )
-      );
-      const loginFulfilled = loginResponses.filter((r): r is PromiseFulfilledResult<AxiosResponse> => r.status === 'fulfilled').map(r => r.value);
-      const loginHas429 = loginFulfilled.some(r => r.status === 429);
-      const loginHasRLHeader = loginFulfilled.some(r => r.headers['retry-after'] || r.headers['x-ratelimit-limit']);
-
-      if (!loginHas429 && !loginHasRLHeader) {
-        vulnerable = true;
-        const codes = loginFulfilled.map(r => r.status).join(', ');
-        evidence.push(`Login endpoint ${loginEp} â€” ${BURST} rapid auth attempts returned [${codes}] â€” no 429 or rate-limit headers`);
-      } else {
-        evidence.push(`Login endpoint rate limiting confirmed at ${loginEp}`);
-      }
-    } else if (!has429 && !hasRLHeader) {
-      vulnerable = true;
-      evidence.push(`${BURST} burst requests to base URL returned no 429 or rate-limit headers`);
-    }
-
+    const codes = fulfilled.map(r => r.status).join(', ');
     return [{
-      testName: 'Rate Limiting / Brute Force Protection',
+      testName: 'Rate Limiting',
       category: 'Security Misconfiguration',
-      severity: vulnerable ? 'medium' : 'info',
-      vulnerable,
-      description: vulnerable
-        ? `No rate limiting detected â€” susceptible to brute force and credential stuffing.`
-        : `Rate limiting is in place.`,
-      evidence: evidence.join('\n') || undefined,
-      recommendation: 'Limit auth attempts to 5/minute per IP. Return 429 with Retry-After. Implement progressive lockout and CAPTCHA. Use fail2ban or WAF-level rate limiting.',
+      severity: 'medium',
+      vulnerable: true,
+      description: `No rate limiting detected on ${targetUrl} — susceptible to brute force and credential stuffing.`,
+      evidence: `${BURST} rapid POST requests to ${targetUrl} returned [${codes}] — no 429 or rate-limit headers.`,
+      recommendation: 'Limit auth attempts to 5/minute per IP. Return 429 with Retry-After. Implement progressive lockout and CAPTCHA.',
     }];
   }
 
@@ -3116,7 +3115,7 @@ export class PenetrationTestingService {
       const cspH = (h['content-security-policy'] || '').toLowerCase();
       if (!h['x-frame-options'] && !cspH.includes('frame-ancestors')) missing.push('X-Frame-Options');
       if (!h['referrer-policy']) missing.push('Referrer-Policy');
-      if (!h['permissions-policy']) missing.push('Permissions-Policy');
+      // Permissions-Policy is tested by testPermissionsPolicy() — skip here to avoid duplicate finding
       if (missing.length > 0) { vulnerable = true; disclosures.push(`Missing security headers: ${missing.join(', ')}`); }
     } catch { /* network error */ }
     return [{
@@ -3429,10 +3428,10 @@ export class PenetrationTestingService {
             description: 'OTP endpoint accepted invalid code — 2FA bypass possible.',
             evidence: `${origin}${path} returned 200 (JSON) for OTP "000000"`, recommendation: 'Enforce rate limiting, lockout, and HMAC-based TOTP validation.' }];
         }
-        if (!responses.some(s => s === 429)) {
+        if (!responses.some(s => s === 429) && responses.every(s => s !== 404)) {
           return [{ testName: '2FA / MFA Bypass', category: 'Authentication', severity: 'medium', vulnerable: true,
             description: 'OTP endpoint has no rate limiting — brute-force of 6-digit codes is feasible.',
-            evidence: `3 rapid requests to ${origin}${path} — no 429 received.`, recommendation: 'Add rate limiting (max 5 attempts, then lockout 15 min). Use exponential backoff.' }];
+            evidence: `3 rapid requests to ${origin}${path} returned [${responses.join(',')}] — no 429 received.`, recommendation: 'Add rate limiting (max 5 attempts, then lockout 15 min). Use exponential backoff.' }];
         }
       } catch { /* skip */ }
     }
@@ -3603,9 +3602,10 @@ export class PenetrationTestingService {
           firstBody = typeof r.data === 'string' ? r.data : JSON.stringify(r.data || '');
         }
       }
-      // If all responses are HTML (SPA catch-all), the login endpoint doesn't exist — skip
-      if (!this.isRealApiResponse(codes[0], firstContentType, firstBody)) {
-        console.log(`  [CredentialStuffing] ${loginEndpoint} returned HTML — endpoint not found (SPA catch-all), skipping`);
+      // Skip if HTML (SPA catch-all) OR 404 (Express returns JSON 404 which looks like real API)
+      const isRealEndpoint = this.isRealApiResponse(codes[0], firstContentType, firstBody) && codes[0] !== 404;
+      if (!isRealEndpoint) {
+        console.log(`  [CredentialStuffing] ${loginEndpoint} returned ${codes[0]} — not a real login endpoint, skipping`);
         return [{ testName: 'Credential Stuffing Guard', category: 'Authentication', severity: 'info', vulnerable: false,
           description: 'No login API endpoint found to test for rate limiting.', recommendation: 'Implement rate limiting (max 5 attempts/min/IP), CAPTCHA after 3 failures, and account lockout.' }];
       }
