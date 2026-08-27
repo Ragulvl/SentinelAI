@@ -1163,15 +1163,38 @@ export class PenetrationTestingService {
       }
     } catch (e: any) { console.warn(`[Pentest] Phase 6 failed: ${e.message}`); }
 
-    const finalVulns = results.filter(r => r.vulnerable).length;
-    const finalRisk = this.calculateRiskScore(results);
+    // ── Universal false-positive filter ────────────────────────────────────────
+    // Deduplication: keep only the first occurrence of each testName
+    const seenTestNames = new Set<string>();
+    const deduped = results.filter(r => {
+      if (seenTestNames.has(r.testName)) return false;
+      seenTestNames.add(r.testName);
+      return true;
+    });
+
+    // Evidence requirement: vulnerable:true results MUST have evidence field
+    // Results without evidence are downgraded to info (likely false positives)
+    const validated = deduped.map(r => {
+      if (!r.vulnerable) return r;
+      if (r.evidence && r.evidence.trim().length > 0) return r;
+      // No evidence — downgrade to info (do not flag as vulnerable)
+      return {
+        ...r,
+        vulnerable: false,
+        severity: 'info' as const,
+        description: r.description + ' [Note: Could not confirm — manual verification recommended]',
+      };
+    });
+
+    const finalVulns = validated.filter(r => r.vulnerable).length;
+    const finalRisk = this.calculateRiskScore(validated);
 
     return {
       url: normalizedUrl,
       testDate: new Date(),
-      testsPerformed: results.length,
+      testsPerformed: validated.length,
       vulnerabilitiesFound: finalVulns,
-      results,
+      results: validated,
       riskScore: finalRisk,
       attackChains: attackChains.length > 0 ? attackChains : undefined,
       jsBundleFindings: jsBundleFindings.length > 0 ? jsBundleFindings : undefined,
