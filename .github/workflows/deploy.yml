@@ -1,4 +1,4 @@
-﻿name: Deploy to Vercel
+name: Deploy to Vercel
 
 on:
   push:
@@ -9,8 +9,31 @@ env:
   VERCEL_PROJECT_ID: prj_bUTJ5GAGIV3OE1UvRBAaZ3TyeYGS
 
 jobs:
-  deploy-frontend:
+  deploy-backend:
+    name: Deploy Backend (sentinel-api)
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build backend
+        run: npm run build
+        working-directory: ./backend
+
+      - name: Deploy backend to Vercel Production
+        run: npx vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }}
+        working-directory: ./backend
+        env:
+          VERCEL_ORG_ID: ${{ env.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_BACKEND_PROJECT_ID }}
+
+  deploy-frontend:
+    name: Deploy Frontend (sentinel)
+    runs-on: ubuntu-latest
+    needs: deploy-backend
     steps:
       - uses: actions/checkout@v4
 
@@ -37,11 +60,11 @@ jobs:
             "version": 3,
             "routes": [
               { "handle": "filesystem" },
-              { "src": "/api/(.*)", "dest": "https://sentinel-api.vercel.app/api/$1" },
+              { "src": "/api/(.*)", "dest": "https://sentinel-api-sigma.vercel.app/api/$1" },
               { "src": "/(.*)", "dest": "/index.html" }
             ]
           }
           EOF
 
-      - name: Deploy to Vercel Production
+      - name: Deploy Frontend to Vercel Production
         run: npx vercel deploy --prod --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
