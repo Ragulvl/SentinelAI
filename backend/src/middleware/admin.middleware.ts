@@ -1,41 +1,45 @@
-import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
-import { config } from '../config/env.js';
+import type { Request, Response, NextFunction } from 'express';
+import { JWTService } from '../services/jwt.service.js';
 import { User } from '../db/models/User.model.js';
+
+export interface AdminRequest extends Request {
+  adminUser?: {
+    userId: number;
+    username: string;
+    role: string;
+  };
+}
 
 /**
  * requireAdmin middleware
- * - Validates JWT from Authorization header or cookie
- * - Checks user role === 'superadmin'
- * - Returns 401/403 for unauthorized access
+ * Matches the existing auth pattern (JWTService, githubId as userId).
+ * Checks role === 'superadmin' | 'admin'.
+ * Auto-promotes the designated SUPER_ADMIN_GITHUB username on first access.
  */
-export const requireAdmin = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const requireAdmin = async (req: AdminRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    // Extract token from Authorization header or cookie
-    const authHeader = req.headers.authorization;
-    const token = authHeader?.startsWith('Bearer ')
-      ? authHeader.slice(7)
-      : req.cookies?.token;
+    // Extract token — same pattern as auth.middleware.ts
+    const token = req.headers.authorization?.replace('Bearer ', '');
 
     if (!token) {
       res.status(401).json({ error: 'Authentication required' });
       return;
     }
 
-    // Verify JWT
-    const decoded = jwt.verify(token, config.jwt.secret) as { userId: string };
+    // Verify JWT using the same JWTService used everywhere else
+    const payload = JWTService.verifyToken(token); // throws on invalid/expired
 
-    // Fetch user and check role
-    const user = await User.findById(decoded.userId).select('username role isBanned');
+    // Fetch user role from DB (payload.userId = githubId)
+    const user = await User.findOne({ githubId: payload.userId }).select('username role isBanned githubId');
     if (!user) {
       res.status(401).json({ error: 'User not found' });
       return;
     }
 
-    // Auto-promote designated superadmin GitHub username
-    const superAdminUsername = process.env.SUPER_ADMIN_GITHUB;
-    if (superAdminUsername && user.username === superAdminUsername && user.role !== 'superadmin') {
-      await User.findByIdAndUpdate(decoded.userId, { role: 'superadmin' });
+    // Auto-promote the designated superadmin GitHub username
+    const superAdminGithub = process.env.SUPER_ADMIN_GITHUB;
+    if (superAdminGithub && user.username === superAdminGithub && user.role !== 'superadmin') {
+      await User.findOneAndUpdate({ githubId: payload.userId }, { role: 'superadmin' });
       user.role = 'superadmin';
     }
 
@@ -44,14 +48,9 @@ export const requireAdmin = async (req: Request, res: Response, next: NextFuncti
       return;
     }
 
-    // Attach user to request
-    (req as any).adminUser = { userId: decoded.userId, username: user.username, role: user.role };
+    req.adminUser = { userId: payload.userId, username: user.username, role: user.role };
     next();
-  } catch (err: any) {
-    if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
-      res.status(401).json({ error: 'Invalid or expired token' });
-      return;
-    }
-    res.status(500).json({ error: 'Internal server error' });
+  } catch (error: any) {
+    res.status(401).json({ error: 'Invalid or expired token' });
   }
 };

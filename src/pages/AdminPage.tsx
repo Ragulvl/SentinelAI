@@ -18,10 +18,20 @@ interface AdminUser {
 }
 interface Activity { type: string; icon: string; message: string; time: string; meta: any }
 
-const API = import.meta.env.VITE_API_URL || 'https://sillobite.onrender.com';
+const API = import.meta.env.VITE_API_URL || '';
+// Uses relative /api path — Vercel rewrites /api/* → sentinel-api-sigma.vercel.app/api/*
+
+const getToken = () => localStorage.getItem('token') || '';
 
 const apiFetch = async (path: string, opts?: RequestInit) => {
-  const r = await fetch(`${API}${path}`, { credentials: 'include', ...opts, headers: { 'Content-Type': 'application/json', ...(opts?.headers || {}) } });
+  const r = await fetch(`${API}${path}`, {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${getToken()}`,
+      ...(opts?.headers || {}),
+    },
+  });
   if (!r.ok) throw new Error((await r.json()).error || r.statusText);
   return r.json();
 };
