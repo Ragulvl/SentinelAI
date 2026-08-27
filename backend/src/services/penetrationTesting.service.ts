@@ -3762,9 +3762,23 @@ export class PenetrationTestingService {
    * React/Next/Vue SPAs return index.html with HTTP 200 for all unknown routes.
    * Flagging those as vulnerabilities produces false positives.
    */
+  /**
+   * Determines if an HTTP response is from a real API endpoint vs. a catch-all.
+   *
+   * Universal false-positive prevention rules:
+   * - 404 = endpoint doesn't exist → NOT a real endpoint
+   * - HTML response = SPA catch-all / server error → NOT a real endpoint
+   * - 401/403 = server knows the route, just needs auth → REAL endpoint
+   * - JSON body with non-404 status → REAL endpoint
+   *
+   * This prevents false positives regardless of tech stack
+   * (React SPA, Next.js, Express, Laravel, Django, etc.)
+   */
   private static isRealApiResponse(status: number, contentType: string, body: string): boolean {
-    const ct = contentType.toLowerCase();
-    const bodyTrimmed = body.trim();
+    // 404/405/410 = endpoint doesn't exist or method not allowed — never a real target
+    if (status === 404 || status === 405 || status === 410) return false;
+    const ct = (contentType || '').toLowerCase();
+    const bodyTrimmed = (body || '').trim();
     // 401/403 always = real endpoint (server knows the route, just needs auth)
     if (status === 401 || status === 403) return true;
     // HTML response = SPA catch-all or server error page — not a real API
@@ -3773,11 +3787,29 @@ export class PenetrationTestingService {
       bodyTrimmed.startsWith('<html') ||
       bodyTrimmed.startsWith('<!doctype');
     if (isHtml) return false;
-    // JSON content-type or JSON body = real API
+    // JSON content-type or JSON body with 2xx/5xx = real API
     const isJson = ct.includes('application/json') ||
       bodyTrimmed.startsWith('{') ||
       bodyTrimmed.startsWith('[');
     return isJson;
+  }
+
+  /**
+   * Evidence guard: requires concrete proof before flagging as VULNERABLE.
+   * Use this as a final check in any test before returning a vulnerable result.
+   *
+   * @param status    HTTP status code received
+   * @param ct        Content-Type header
+   * @param body      Response body
+   * @param proof     Specific string/pattern that proves the vulnerability
+   *                  (e.g., SQL error message, actual user data, etc.)
+   *                  Pass null to skip proof check (e.g., timing-based tests)
+   */
+  private static hasVulnerabilityProof(status: number, ct: string, body: string, proof: string | RegExp | null = null): boolean {
+    if (!this.isRealApiResponse(status, ct, body)) return false;
+    if (proof === null) return true; // caller handles proof (e.g., timing)
+    if (typeof proof === 'string') return body.includes(proof);
+    return proof.test(body);
   }
 
   private static calculateRiskScore(results: PenetrationTestResult[]): number {
