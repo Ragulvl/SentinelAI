@@ -19,7 +19,7 @@
     "set:github-token": "tsx scripts/set-github-token.ts"
   },
   "dependencies": {
-    "@vercel/sandbox": "^2.9.2",
+    "@vercel/sandbox": "^3.2.1",
     "archiver": "^7.0.1",
     "axios": "^1.6.2",
     "cheerio": "^1.2.0",
@@ -42,7 +42,7 @@
     "@types/mongoose": "^5.11.96",
     "@types/node": "^20.10.5",
     "@types/web-push": "^3.6.3",
-    "tsx": "^4.7.0",
+    "tsx": "^4.23.12",
     "typescript": "^5.3.3"
   }
 }
