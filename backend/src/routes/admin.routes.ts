@@ -404,7 +404,10 @@ router.get('/users/:id/repos', async (req: Request, res: Response) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/admin/users/:id/repos/:owner/:repo/download
-//   Streams the repo default-branch ZIP using the user's stored GitHub token
+//   Returns GitHub's pre-signed CDN ZIP URL via redirect.
+//   Vercel serverless can't stream large responses, so we capture GitHub's
+//   302 → CDN redirect and forward it to the admin's browser.
+//   The CDN URL is time-limited but requires no auth header.
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: Response) => {
   try {
@@ -417,7 +420,8 @@ router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: R
     const { owner, repo } = req.params;
     const { default: axios } = await import('axios');
 
-    // GitHub redirects zipball to a CDN URL — follow redirect and stream
+    // Step 1: Hit the GitHub zipball endpoint but DON'T follow the redirect.
+    //         GitHub returns 302 → a pre-signed CDN URL (codeload.github.com)
     const ghRes = await axios.get(
       `https://api.github.com/repos/${owner}/${repo}/zipball`,
       {
@@ -426,20 +430,22 @@ router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: R
           Accept: 'application/vnd.github.v3+json',
           'User-Agent': 'SentinelAI-Admin/1.0',
         },
-        responseType: 'stream',
-        maxRedirects: 5,
-        validateStatus: (s) => s < 400,
+        maxRedirects: 0,              // capture the redirect, don't follow it
+        validateStatus: (s) => s < 400 || s === 302 || s === 301,
       }
     );
 
-    const filename = `${owner}-${repo}.zip`;
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    if (ghRes.headers['content-length']) {
-      res.setHeader('Content-Length', ghRes.headers['content-length']);
+    // Step 2: Get the CDN URL from the Location header
+    const cdnUrl = ghRes.headers['location'];
+    if (!cdnUrl) {
+      // Fallback: if GitHub returned the data directly (rare), buffer and send
+      res.status(500).json({ error: 'GitHub did not return a redirect URL. Try again.' });
+      return;
     }
 
-    ghRes.data.pipe(res);
+    // Step 3: Redirect the admin browser straight to GitHub CDN
+    //         The browser will download the ZIP directly — no Vercel size limits
+    res.redirect(302, cdnUrl);
   } catch (err: any) {
     if (!res.headersSent) res.status(500).json({ error: err.message });
   }

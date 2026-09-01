@@ -185,14 +185,24 @@ function RepoModal({ userId, username, onClose }: { userId: string; username: st
     setDownloading(key);
     try {
       const token = localStorage.getItem('token') || '';
+      // fetch follows the 302 → GitHub CDN automatically; CDN returns the ZIP
       const res = await fetch(`/api/admin/users/${userId}/repos/${repo.owner}/${repo.name}/download`, {
         headers: { Authorization: `Bearer ${token}` },
+        redirect: 'follow',
       });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || `Download failed (${res.status})`);
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = `${repo.owner}-${repo.name}.zip`;
-      a.click(); URL.revokeObjectURL(url);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${repo.owner}-${repo.name}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     } catch (e: any) { alert(e.message); }
     finally { setDownloading(null); }
   };
