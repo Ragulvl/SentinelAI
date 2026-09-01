@@ -18,8 +18,6 @@ const ScanProgressPage           = lazy(() => import("./pages/ScanProgressPage")
 const ResultsPage                = lazy(() => import("./pages/ResultsPage"));
 const EditorPage                 = lazy(() => import("./pages/EditorPage"));
 const MonitoringPage             = lazy(() => import("./pages/MonitoringPage"));
-const WebsiteScanPage            = lazy(() => import("./pages/WebsiteScanPage"));
-const ComprehensiveWebsiteScanResults = lazy(() => import("./pages/ComprehensiveWebsiteScanResults"));
 const PenetrationTestPage        = lazy(() => import("./pages/PenetrationTestPage"));
 const LoadTestPage               = lazy(() => import("./pages/LoadTestPage"));
 const DomainVerificationPage     = lazy(() => import("./pages/DomainVerificationPage"));
@@ -62,8 +60,6 @@ const App = () => (
               <Route path="/results"            element={<ResultsPage />} />
               <Route path="/editor"             element={<EditorPage />} />
               <Route path="/monitoring"         element={<MonitoringPage />} />
-              <Route path="/website-scan"       element={<WebsiteScanPage />} />
-              <Route path="/website-scan/:scanId" element={<ComprehensiveWebsiteScanResults />} />
               <Route path="/pentest"            element={<PenetrationTestPage />} />
               <Route path="/loadtest"           element={<LoadTestPage />} />
               <Route path="/domain-verification" element={<DomainVerificationPage />} />

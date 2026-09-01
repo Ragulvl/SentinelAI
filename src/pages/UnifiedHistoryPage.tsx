@@ -101,15 +101,12 @@ const UnifiedHistoryPage = () => {
         }
       } catch { }
 
-      const [repoScans, websiteScans] = await Promise.allSettled([
+      const repoScans = await Promise.allSettled([
         fetch(`${API_ENDPOINTS.scan.history}`, { headers: { Authorization: `Bearer ${token}` } })
           .then(r => r.ok ? r.json() : { scans: [] }),
-        fetch(`${API_ENDPOINTS.websiteScan.history}`, { headers: { Authorization: `Bearer ${token}` } })
-          .then(r => r.ok ? r.json() : []),
       ]);
 
-      const repoScansData = repoScans.status === "fulfilled" ? repoScans.value.scans || [] : [];
-      const websiteScansData = websiteScans.status === "fulfilled" ? websiteScans.value : [];
+      const repoScansData = repoScans[0].status === "fulfilled" ? (repoScans[0].value.scans || []) : [];
 
       const unifiedHistory: UnifiedScan[] = [
         ...repoScansData.map((scan: any) => ({
@@ -118,18 +115,12 @@ const UnifiedHistoryPage = () => {
           summary: scan.summary, vulnerabilities: scan.summary?.total || 0,
           score: scan.summary ? calculateRepoScore(scan.summary) : 0,
         })),
-        ...websiteScansData.map((scan: any) => ({
-          id: scan._id, type: "website" as ScanType, target: scan.url,
-          url: scan.url, date: scan.scanDate, status: "completed",
-          vulnerabilities: scan.vulnerabilities?.length || 0,
-          score: scan.securityScore || 0, technologies: scan.technologies || [],
-        })),
       ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
       setHistory(unifiedHistory);
       setStats({
         totalScans: unifiedHistory.length, repoScans: repoScansData.length,
-        websiteScans: websiteScansData.length, pentests: 0, loadTests: 0,
+        websiteScans: 0, pentests: 0, loadTests: 0,
       });
     } catch {
       toast({ title: "Error", description: "Failed to load scan history", variant: "destructive" });
@@ -152,13 +143,11 @@ const UnifiedHistoryPage = () => {
 
   const handleScanClick = (scan: UnifiedScan) => {
     if (scan.type === "repository") navigate(`/results?scanId=${scan.id}`);
-    else if (scan.type === "website") navigate(`/website-scan/${scan.id}`);
   };
 
   const filterTabs: Array<{ key: ScanType | "all"; label: string; count: number }> = [
     { key: "all", label: "All", count: stats.totalScans },
     { key: "repository", label: "Repo", count: stats.repoScans },
-    { key: "website", label: "Website", count: stats.websiteScans },
     { key: "penetration", label: "Pentest", count: stats.pentests },
     { key: "load", label: "Load", count: stats.loadTests },
   ];
@@ -189,7 +178,6 @@ const UnifiedHistoryPage = () => {
         {[
           { label: "Total Scans", value: stats.totalScans, icon: Shield },
           { label: "Repo Scans", value: stats.repoScans, icon: GitBranch },
-          { label: "Website Scans", value: stats.websiteScans, icon: Globe },
           { label: "Pentests", value: stats.pentests, icon: Target },
         ].map(s => {
           const Icon = s.icon;

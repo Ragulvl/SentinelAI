@@ -168,10 +168,10 @@ const ProfilePage = () => {
               <div className="text-xs font-semibold text-foreground mb-0.5">Scan History</div>
               <div className="text-[10px] text-muted-foreground">Browse past results</div>
             </button>
-            <button onClick={() => navigate("/website-scan")}
+            <button onClick={() => navigate("/pentest")}
               className="card-interactive p-3 text-left">
-              <div className="text-xs font-semibold text-foreground mb-0.5">Website Scan</div>
-              <div className="text-[10px] text-muted-foreground">Audit an endpoint</div>
+              <div className="text-xs font-semibold text-foreground mb-0.5">Pentest</div>
+              <div className="text-[10px] text-muted-foreground">Active security testing</div>
             </button>
           </div>
         </motion.div>

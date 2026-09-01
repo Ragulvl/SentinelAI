@@ -513,13 +513,7 @@ const SandboxScanPage = () => {
 
                   {/* Actions */}
                   <div className="flex gap-3">
-                    {sandboxStatus.scanId && (
-                      <button
-                        onClick={() => navigate(`/website-scan/${sandboxStatus.scanId}`)}
-                        className="btn-primary flex-1 justify-center text-sm">
-                        View Full Report
-                      </button>
-                    )}
+
                     <button onClick={resetScan} className="btn-secondary flex-1 justify-center text-sm">
                       Scan Another Repo
                     </button>

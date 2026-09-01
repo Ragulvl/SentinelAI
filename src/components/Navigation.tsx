@@ -23,7 +23,6 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { label: "Code Scan", path: "/repos", icon: GitBranch, description: "Scan repositories" },
       { label: "Monitoring", path: "/monitoring", icon: Activity, description: "Uptime & health" },
-      { label: "Website Scan", path: "/website-scan", icon: Globe, description: "Endpoint auditing" },
     ],
   },
   {

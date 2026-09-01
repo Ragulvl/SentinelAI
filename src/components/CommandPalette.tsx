@@ -20,7 +20,6 @@ const COMMANDS: CommandItem[] = [
   { id: "home", label: "Home", description: "Go to landing page", icon: Home, path: "/", group: "Navigation" },
   { id: "repos", label: "Code Scan", description: "Select a repository to scan", icon: GitBranch, path: "/repos", group: "Navigation" },
   { id: "monitoring", label: "Monitoring", description: "Website uptime monitoring", icon: Activity, path: "/monitoring", group: "Navigation" },
-  { id: "website-scan", label: "Website Scan", description: "Scan a website for vulnerabilities", icon: Globe, path: "/website-scan", group: "Navigation" },
   { id: "pentest", label: "Penetration Test", description: "Active security testing", icon: Target, path: "/pentest", group: "Navigation" },
   { id: "loadtest", label: "Load Test", description: "Performance & load testing", icon: Zap, path: "/loadtest", group: "Navigation" },
   { id: "sandbox", label: "Sandbox Scan", description: "Isolated environment testing", icon: Box, path: "/sandbox", group: "Navigation" },
