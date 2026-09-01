@@ -181,22 +181,30 @@ export class WebsiteScanController {
       } catch { /* client disconnected */ }
     };
 
+    // SSE heartbeat — send a comment-line every 15 s to prevent Vercel/proxy timeout
+    // during long-running phases (Phase 7 AI loop can take 60-120 s).
+    // SSE comment lines (': ping') are ignored by EventSource but keep the TCP connection alive.
+    const heartbeat = setInterval(() => {
+      try { res.write(': ping\n\n'); if ((res as any).flush) (res as any).flush(); } catch { /* ignore */ }
+    }, 15_000);
+
     send('connected', { message: 'Stream connected' });
 
     let credentials: any;
     try { credentials = credentialsRaw ? JSON.parse(decodeURIComponent(credentialsRaw)) : undefined; } catch { /* ignore */ }
 
-    let finalReport: any;
     const onProgress = (event: PentestProgressEvent) => {
       if (event.type === 'phase') send('phase', event);
       else if (event.type === 'test_start') send('test_start', event);
       else if (event.type === 'test_result') send('test_result', event);
       else if (event.type === 'ai_finding') send('ai_finding', event);
-      else if (event.type === 'done') { finalReport = event.report; send('done', event); }
+      // Note: orchestrator never emits type:'done' to onProgress —
+      // the 'done' event is sent once below after performPenetrationTest resolves.
     };
 
     try {
       const testResult = await PenetrationTestingService.performPenetrationTest(url, credentials, onProgress);
+      clearInterval(heartbeat);
       send('done', { report: testResult });
 
       // Save to DB
@@ -224,8 +232,10 @@ export class WebsiteScanController {
         console.warn('SSE pentest DB save failed:', dbErr.message);
       }
     } catch (err: any) {
+      clearInterval(heartbeat);
       send('error', { message: err.message || 'Penetration test failed' });
     } finally {
+      clearInterval(heartbeat);
       res.end();
     }
   }
