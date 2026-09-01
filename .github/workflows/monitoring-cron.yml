@@ -1,0 +1,25 @@
+name: Monitoring Cron
+
+on:
+  schedule:
+    # Run every 5 minutes
+    - cron: '*/5 * * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  trigger-monitoring:
+    name: Trigger Monitoring Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping monitoring cron endpoint
+        run: |
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            "https://sentinel-api-sigma.vercel.app/api/monitoring/cron")
+          echo "Response: $RESPONSE"
+          if [ "$RESPONSE" != "200" ]; then
+            echo "Cron endpoint returned $RESPONSE"
+            exit 1
+          fi

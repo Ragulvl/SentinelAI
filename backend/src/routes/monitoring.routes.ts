@@ -4,26 +4,20 @@ import { authMiddleware } from '../middleware/auth.middleware.js';
 
 const router = Router();
 
-// All routes require authentication
+// Public cron endpoint — authenticated via CRON_SECRET header, NOT user JWT
+router.post('/cron', MonitoringController.runCron);
+
+// Live URL test — requires auth to prevent abuse
+router.post('/check', authMiddleware, MonitoringController.testUrl);
+
+// All routes below require user auth
 router.use(authMiddleware);
 
-// Get all monitored sites for the user
-router.get('/', MonitoringController.getSites);
-
-// Add a new site to monitor
-router.post('/', MonitoringController.addSite);
-
-// Refresh all sites
-router.post('/refresh', MonitoringController.refreshAllSites);
-
-// Refresh a specific site
-// CWE-434: Restrict siteId to alphanumeric/dash/underscore to prevent path traversal
-router.post('/:siteId([a-zA-Z0-9_-]+)/refresh', MonitoringController.refreshSite);
-
-// Update check interval for a site
-router.patch('/:siteId([a-zA-Z0-9_-]+)/interval', MonitoringController.updateCheckInterval);
-
-// Remove a monitored site
-router.delete('/:siteId([a-zA-Z0-9_-]+)', MonitoringController.removeSite);
+router.get('/',                                              MonitoringController.getSites);
+router.post('/',                                             MonitoringController.addSite);
+router.post('/refresh',                                      MonitoringController.refreshAllSites);
+router.post('/:siteId([a-zA-Z0-9_-]+)/refresh',             MonitoringController.refreshSite);
+router.patch('/:siteId([a-zA-Z0-9_-]+)/interval',           MonitoringController.updateCheckInterval);
+router.delete('/:siteId([a-zA-Z0-9_-]+)',                   MonitoringController.removeSite);
 
 export default router;
