@@ -199,7 +199,7 @@ const AddMonitorModal = ({ onClose, onAdd }: { onClose: () => void; onAdd: (s: S
           <label className="section-label">URL *</label>
           <div className="flex gap-2">
             <input value={url} onChange={e=>setUrl(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleTest()}
-              className="input flex-1 font-mono text-sm" placeholder="https://example.com" />
+              className="input-base flex-1 font-mono text-sm" placeholder="https://example.com" />
             <button onClick={handleTest} disabled={testing||!url.trim()} className="btn-ghost-border text-xs px-3 shrink-0 gap-1.5">
               {testing?<RefreshCw className="w-3.5 h-3.5 animate-spin"/>:<Signal className="w-3.5 h-3.5"/>}
               {testing?"Testing…":"Test"}
@@ -228,7 +228,7 @@ const AddMonitorModal = ({ onClose, onAdd }: { onClose: () => void; onAdd: (s: S
         {/* Name */}
         <div className="space-y-1.5">
           <label className="section-label">Display Name</label>
-          <input value={name} onChange={e=>setName(e.target.value)} className="input w-full text-sm"
+          <input value={name} onChange={e=>setName(e.target.value)} className="input-base w-full text-sm"
             placeholder="My Website (auto-filled after test)" />
         </div>
 
@@ -236,7 +236,7 @@ const AddMonitorModal = ({ onClose, onAdd }: { onClose: () => void; onAdd: (s: S
         {monitorType==="keyword"&&(
           <div className="space-y-3 p-3 rounded-lg" style={{ background:"hsl(var(--surface))", border:"1px solid hsl(var(--border))" }}>
             <label className="section-label">Keyword Check</label>
-            <input value={keyword} onChange={e=>setKeyword(e.target.value)} className="input w-full font-mono text-sm"
+            <input value={keyword} onChange={e=>setKeyword(e.target.value)} className="input-base w-full font-mono text-sm"
               placeholder="e.g. healthy, OK, success" />
             <div className="flex gap-2">
               {[{v:true,l:"Must be present"},{v:false,l:"Must be absent"}].map(o=>(
@@ -257,7 +257,7 @@ const AddMonitorModal = ({ onClose, onAdd }: { onClose: () => void; onAdd: (s: S
           <div className="space-y-1.5">
             <label className="section-label">Port Number</label>
             <input type="number" value={port} onChange={e=>setPort(Number(e.target.value))}
-              className="input w-full font-mono text-sm" min={1} max={65535} />
+              className="input-base w-full font-mono text-sm" min={1} max={65535} />
           </div>
         )}
 
@@ -266,7 +266,7 @@ const AddMonitorModal = ({ onClose, onAdd }: { onClose: () => void; onAdd: (s: S
           <div className="space-y-1.5">
             <label className="section-label">Expected HTTP Status</label>
             <input type="number" value={expStatus} onChange={e=>setExpStatus(Number(e.target.value))}
-              className="input w-full font-mono text-sm" min={100} max={599}/>
+              className="input-base w-full font-mono text-sm" min={100} max={599}/>
             <p className="text-[10px] text-muted-foreground">Alert if response code differs (default 200)</p>
           </div>
         )}
@@ -679,3 +679,5 @@ const MonitoringPage = () => {
 };
 
 export default MonitoringPage;
+
+
