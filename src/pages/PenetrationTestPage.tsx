@@ -318,15 +318,15 @@ export default function PenetrationTestPage() {
       );
       setLivePhase('Complete \u2713');
       setLiveStats({ vulns: rep.vulnerabilitiesFound, passed: (rep.testsPerformed || total) - rep.vulnerabilitiesFound, total: rep.testsPerformed || total });
+      setTesting(false); // stop spinner immediately — terminal is done
       es.close();
       scrollTerm();
 
-      // Phase B: render results panel 100ms later — just enough for terminal to paint first
+      // Phase B: render results panel 80ms later — gives terminal one paint before results appear
       setTimeout(() => {
         setReport(rep);
-        setTesting(false);
         toast({ title: 'Penetration Test Complete', description: `Found ${rep.vulnerabilitiesFound} ${rep.vulnerabilitiesFound === 1 ? 'vulnerability' : 'vulnerabilities'}` });
-      }, 100);
+      }, 80);
     });
 
     es.addEventListener('error', (e: Event) => {
