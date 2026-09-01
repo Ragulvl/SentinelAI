@@ -5,7 +5,7 @@ import {
   AlertTriangle, Download, GitPullRequest, Code2,
   ChevronDown, ChevronRight, FileWarning, CheckCircle2,
   XCircle, Loader2, Shield, ArrowLeft, ExternalLink,
-  ChevronLeft,
+  ChevronLeft, Terminal, Flame,
 } from "lucide-react";
 import { Severity, Vulnerability, ScanResult } from "@/types/sentinel";
 import { PageLayout } from "@/components/PageLayout";
@@ -78,6 +78,22 @@ const VulnRow = ({ vuln, onViewDiff }: { vuln: Vulnerability; onViewDiff: () => 
   const [open, setOpen] = useState(false);
   const cfg = SEV_CONFIG[vuln.severity];
 
+  const priorityLabel = (p?: number) => {
+    if (!p) return null;
+    const map: Record<number, { label: string; color: string }> = {
+      1: { label: "P1 Fix Now",    color: "hsl(var(--destructive))" },
+      2: { label: "P2 High",       color: "#F97316" },
+      3: { label: "P3 Medium",     color: "#EAB308" },
+      4: { label: "P4 Low",        color: "hsl(var(--muted-foreground))" },
+      5: { label: "P5 Info",       color: "hsl(var(--muted-foreground))" },
+    };
+    return map[p] || null;
+  };
+  const pri = priorityLabel((vuln as any).remediationPriority);
+  const cvss = (vuln as any).cvssScore;
+  const lineEnd = (vuln as any).lineEnd;
+  const exploitExample = (vuln as any).exploitExample;
+
   return (
     <div className={`rounded-xl overflow-hidden border ${cfg.border} card-base`}>
       <button
@@ -89,15 +105,34 @@ const VulnRow = ({ vuln, onViewDiff }: { vuln: Vulnerability; onViewDiff: () => 
           <ChevronRight className="w-4 h-4" />
         </span>
         <SeverityBadge severity={vuln.severity} />
+        {/* CVSS score badge */}
+        {cvss !== undefined && (
+          <span
+            className="shrink-0 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded"
+            style={{
+              background: cvss >= 9 ? "hsl(var(--destructive) / 0.15)" : cvss >= 7 ? "hsl(25 95% 53% / 0.15)" : "hsl(var(--muted))",
+              color: cvss >= 9 ? "hsl(var(--destructive))" : cvss >= 7 ? "#F97316" : "hsl(var(--muted-foreground))",
+              border: `1px solid ${cvss >= 9 ? "hsl(var(--destructive) / 0.3)" : cvss >= 7 ? "rgba(249,115,22,0.3)" : "hsl(var(--border))"}`,
+            }}
+          >
+            CVSS {cvss.toFixed(1)}
+          </span>
+        )}
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold text-foreground truncate">{vuln.title}</div>
           <div className="text-xs text-muted-foreground font-mono mt-0.5 flex items-center gap-2">
             <FileWarning className="w-3 h-3 shrink-0" />
-            <span className="truncate">{vuln.file}:{vuln.line}</span>
-            <span className="opacity-40">·</span>
-            <span>{vuln.scanner}</span>
+            <span className="truncate">
+              {vuln.file}:{vuln.line}{lineEnd && lineEnd !== vuln.line ? `–${lineEnd}` : ""}
+            </span>
             <span className="opacity-40">·</span>
             <span>{vuln.cweId}</span>
+            {pri && (
+              <>
+                <span className="opacity-40">·</span>
+                <span style={{ color: pri.color, fontWeight: 600 }}>{pri.label}</span>
+              </>
+            )}
           </div>
         </div>
         {vuln.fixAvailable ? (
@@ -122,6 +157,22 @@ const VulnRow = ({ vuln, onViewDiff }: { vuln: Vulnerability; onViewDiff: () => 
           >
             <div className="px-4 py-4 space-y-4" style={{ borderTop: "1px solid hsl(var(--border))" }}>
               <p className="text-sm text-muted-foreground leading-relaxed">{vuln.description}</p>
+
+              {/* Exploit PoC */}
+              {exploitExample && (
+                <div>
+                  <div className="text-[10px] font-mono font-semibold mb-2 uppercase tracking-wider flex items-center gap-1.5"
+                    style={{ color: "#F97316" }}>
+                    <Flame className="w-3 h-3" /> Exploit PoC
+                  </div>
+                  <pre
+                    className="terminal-bg p-3 text-xs overflow-x-auto whitespace-pre-wrap rounded-lg"
+                    style={{ borderColor: "rgba(249,115,22,0.25)", color: "#FED7AA" }}
+                  >
+                    {exploitExample}
+                  </pre>
+                </div>
+              )}
 
               {(vuln.originalCode || vuln.patchedCode) && (
                 <div className="grid grid-cols-2 gap-4">

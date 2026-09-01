@@ -272,9 +272,9 @@ const RepoSelectPage = () => {
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {paginatedRepos.map((repo, i) => {
-              const langShort = LANG_SHORT[repo.language] || repo.language?.toLowerCase()?.slice(0, 4);
-              const orgName = repo.fullName.split("/")[0];
-              const isOrg = repo.fullName !== repo.name; // has an owner prefix different from repo name
+              const langShort = LANG_SHORT[repo.language] || (repo.language !== "Unknown" ? repo.language?.toLowerCase()?.slice(0, 6) : null);
+              const orgOwner = repo.fullName.split("/")[0];
+              const isOrg = orgOwner.toLowerCase() !== repo.name.toLowerCase();
 
               return (
                 <motion.div
@@ -285,83 +285,97 @@ const RepoSelectPage = () => {
                 >
                   <div
                     onClick={() => handleSelect(repo)}
-                    className="card-interactive cursor-pointer h-full flex flex-col group"
+                    className="card-interactive cursor-pointer group"
+                    style={{ height: 160, display: "flex", flexDirection: "column" }}
                   >
-                    <div className="p-4 space-y-2.5 flex-1">
-                      {/* Header */}
-                      <div className="flex items-start justify-between gap-2">
+                    <div className="p-4 flex flex-col h-full">
+
+                      {/* ── Header row ─────────────────────────────────── */}
+                      <div className="flex items-start justify-between gap-2 mb-2">
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5 mb-0.5">
+                          {/* Repo name + lock icon */}
+                          <div className="flex items-center gap-1.5">
                             {repo.isPrivate
-                              ? <Lock className="w-3 h-3 shrink-0" strokeWidth={1.5} style={{ color: "hsl(var(--muted-foreground))" }} />
-                              : <Unlock className="w-3 h-3 shrink-0" strokeWidth={1.5} style={{ color: "hsl(var(--dim-foreground))" }} />}
+                              ? <Lock className="w-3 h-3 shrink-0 text-muted-foreground" strokeWidth={1.5} />
+                              : <Unlock className="w-3 h-3 shrink-0 opacity-40" strokeWidth={1.5} />}
                             <h3
-                              className="truncate"
-                              style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, fontWeight: 600, color: "hsl(var(--foreground))" }}
+                              className="truncate font-semibold"
+                              style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: "hsl(var(--foreground))" }}
                             >
                               {repo.name}
                             </h3>
                           </div>
-                          <p
-                            className="truncate flex items-center gap-1"
-                            style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: "hsl(var(--muted-foreground) / 0.55)" }}
-                          >
-                            {isOrg && <Building2 className="w-2.5 h-2.5 shrink-0" />}
-                            {repo.fullName}
-                          </p>
+                          {/* Owner / org badge row */}
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            {isOrg ? (
+                              <span
+                                className="flex items-center gap-1 shrink-0"
+                                style={{
+                                  fontFamily: "'JetBrains Mono', monospace", fontSize: 9, fontWeight: 600,
+                                  color: "hsl(var(--primary))", background: "hsl(var(--primary) / 0.1)",
+                                  border: "1px solid hsl(var(--primary) / 0.25)", borderRadius: 2, padding: "1px 5px",
+                                }}
+                              >
+                                <Building2 className="w-2.5 h-2.5" />{orgOwner}
+                              </span>
+                            ) : (
+                              <span
+                                style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "hsl(var(--muted-foreground) / 0.5)" }}
+                              >
+                                {orgOwner}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        {/* Arrow shown on hover */}
+                        {/* Arrow on hover */}
                         <div
-                          className="w-6 h-6 shrink-0 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="w-6 h-6 shrink-0 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 transition-opacity mt-0.5"
                           style={{ background: "hsl(var(--primary) / 0.12)", border: "1px solid hsl(var(--primary) / 0.25)" }}
                         >
                           <ArrowRight className="w-3 h-3 text-primary" />
                         </div>
                       </div>
 
-                      {/* Description */}
-                      {repo.description && (
-                        <p className="line-clamp-2" style={{ fontSize: 12, color: "hsl(var(--muted-foreground))", lineHeight: 1.55 }}>
-                          {repo.description}
-                        </p>
-                      )}
+                      {/* ── Description — fixed 2-line slot ────────────── */}
+                      <p
+                        className="line-clamp-2 flex-1"
+                        style={{
+                          fontSize: 11.5,
+                          color: repo.description ? "hsl(var(--muted-foreground))" : "hsl(var(--muted-foreground) / 0.3)",
+                          lineHeight: 1.5,
+                          fontStyle: repo.description ? "normal" : "italic",
+                        }}
+                      >
+                        {repo.description || "No description provided"}
+                      </p>
 
-                      {/* Meta row */}
+                      {/* ── Meta row — pinned to bottom ────────────────── */}
                       <div
-                        className="flex items-center gap-3 pt-2.5 mt-auto"
+                        className="flex items-center gap-2.5 pt-2 mt-2 shrink-0"
                         style={{ borderTop: "1px solid hsl(var(--border))" }}
                       >
-                        {langShort && (
+                        {langShort ? (
                           <span
                             style={{
-                              fontFamily: "'JetBrains Mono', monospace",
-                              fontSize: 10,
-                              fontWeight: 500,
-                              color: "hsl(var(--muted-foreground))",
-                              background: "hsl(var(--muted))",
-                              border: "1px solid hsl(var(--border))",
-                              borderRadius: 2,
-                              padding: "1px 5px",
+                              fontFamily: "'JetBrains Mono', monospace", fontSize: 9.5, fontWeight: 500,
+                              color: "hsl(var(--muted-foreground))", background: "hsl(var(--muted))",
+                              border: "1px solid hsl(var(--border))", borderRadius: 2, padding: "1px 5px",
                             }}
                           >
                             {langShort}
                           </span>
+                        ) : (
+                          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9.5, color: "hsl(var(--muted-foreground) / 0.3)" }}>
+                            —
+                          </span>
                         )}
-                        <span
-                          className="flex items-center gap-1 ml-auto"
-                          style={{ fontSize: 11, color: "hsl(var(--muted-foreground))" }}
-                        >
+                        <span className="flex items-center gap-1 ml-auto" style={{ fontSize: 11, color: "hsl(var(--muted-foreground))" }}>
                           <Star className="w-3 h-3" strokeWidth={1.5} />{repo.stars}
                         </span>
-                        <span
-                          className="flex items-center gap-1"
-                          style={{ fontSize: 11, color: "hsl(var(--muted-foreground))" }}
-                        >
+                        <span className="flex items-center gap-1" style={{ fontSize: 11, color: "hsl(var(--muted-foreground))" }}>
                           <GitFork className="w-3 h-3" strokeWidth={1.5} />{repo.forks}
                         </span>
-                        <span
-                          style={{ fontSize: 10, color: "hsl(var(--dim-foreground))", fontFamily: "'JetBrains Mono', monospace" }}
-                        >
+                        <span style={{ fontSize: 9.5, color: "hsl(var(--dim-foreground))", fontFamily: "'JetBrains Mono', monospace" }}>
                           {timeAgo(repo.updatedAt)}
                         </span>
                       </div>
