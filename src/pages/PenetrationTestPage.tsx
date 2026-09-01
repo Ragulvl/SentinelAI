@@ -214,6 +214,11 @@ export default function PenetrationTestPage() {
 
     let vulns = 0, passed = 0, total = 0;
     const es = new EventSource(sseUrl);
+    // Track whether the backend already sent a Phase 7 completion line as a 'phase' event.
+    // If so, the done handler skips its fallback to avoid duplicates.
+    // If the phase event was dropped (arrived in the same TCP burst as 'done'), the
+    // done handler adds it from the report data instead.
+    let aiLoopStatusShown = false;
 
     const finish = (msg?: string, isError = false) => {
       if (msg) addLine(msg, isError ? '#ef4444' : 'hsl(145 60% 55%)');
@@ -232,6 +237,8 @@ export default function PenetrationTestPage() {
       const data = JSON.parse((e as MessageEvent).data);
       setLivePhase(data.message);
       addLine(`\u25b6 ${data.message}`, 'hsl(210 80% 65%)');
+      // Mark Phase 7 status as shown so done handler doesn't duplicate it
+      if (/AI loop (complete|skipped)/i.test(data.message)) aiLoopStatusShown = true;
       scrollTerm();
     });
 
@@ -284,9 +291,26 @@ export default function PenetrationTestPage() {
       const rep = data.report;
 
       // Phase A: terminal completion (immediate render)
-      // NOTE: the backend sends a 'phase' event for AI loop status just before 'done',
-      // so we do NOT add another "AI loop complete" line here to avoid duplicates.
-      // We only add the final scan summary line.
+      // Fallback: if the backend's Phase 7 'phase' event was dropped (arrived in the same
+      // TCP burst as 'done' and got discarded when es.close() ran), show it from report data.
+      if (!aiLoopStatusShown) {
+        if (rep.aiLoopRoundsRun !== undefined) {
+          const exitLabel: Record<string, string> = {
+            early_exit_no_new_findings: 'no new findings (clean target)',
+            cap_reached: 'max rounds reached',
+            error: 'loop error — LLM API rate-limited',
+          };
+          const newFindings = rep.results?.filter((r: any) => r.aiEnhanced).length ?? 0;
+          const exitMsg = exitLabel[rep.aiLoopExitReason] || rep.aiLoopExitReason || 'done';
+          addLine(
+            `\u25b6 AI loop complete \u2014 ${rep.aiLoopRoundsRun} round(s) \u00b7 ${exitMsg} \u00b7 ${newFindings} new finding(s)`,
+            newFindings > 0 ? 'hsl(35 90% 62%)' : 'hsl(210 80% 65%)'
+          );
+        } else {
+          addLine('\u25b6 AI loop: skipped \u2014 LLM API unavailable (rate limit / key exhaustion)', 'hsl(0 0% 45%)');
+        }
+      }
+
       addLine('', 'hsl(0 0% 18%)');
       addLine(
         `\u2550\u2550 Scan Complete \u2550\u2550 ${rep.vulnerabilitiesFound} ${rep.vulnerabilitiesFound === 1 ? 'vulnerability' : 'vulnerabilities'}, ${(rep.testsPerformed || total) - rep.vulnerabilitiesFound} passed`,
