@@ -50,13 +50,22 @@ jobs:
         run: npm run build:frontend   # runs locally where vite IS available
 
       # Create Vercel Build Output API v3 structure
-      # Only SPA routing here — API proxy is handled by root vercel.json (respected by --prebuilt)
+      # vercel.json rewrites are NOT applied with --prebuilt, so API proxy must be in config.json
       - name: Prepare prebuilt output
         run: |
           mkdir -p .vercel/output/static
           cp -r dist/. .vercel/output/static/
-          printf '{"version":3,"routes":[{"handle":"filesystem"},{"src":"/(.*)","dest":"/index.html"}]}' \
-            > .vercel/output/config.json
+          cat > .vercel/output/config.json << 'EOF'
+          {
+            "version": 3,
+            "routes": [
+              { "src": "^/api/(.*)", "dest": "https://sentinel-api-sigma.vercel.app/api/$1" },
+              { "src": "^/health$",  "dest": "https://sentinel-api-sigma.vercel.app/health" },
+              { "handle": "filesystem" },
+              { "src": "/(.*)",      "dest": "/index.html" }
+            ]
+          }
+          EOF
 
       - name: Deploy Frontend to Vercel Production
         run: npx vercel deploy --prod --prebuilt --token=${{ secrets.VERCEL_TOKEN }} --yes
