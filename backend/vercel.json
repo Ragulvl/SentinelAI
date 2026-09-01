@@ -3,11 +3,11 @@
   "buildCommand": "npm run build",
   "installCommand": "npm ci",
   "functions": {
-    "dist/index.js": {
+    "api/index.js": {
       "maxDuration": 300
     }
   },
   "rewrites": [
-    { "source": "/(.*)", "destination": "/dist/index.js" }
+    { "source": "/(.*)", "destination": "/api/index" }
   ]
 }
