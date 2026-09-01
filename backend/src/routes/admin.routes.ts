@@ -404,9 +404,8 @@ router.get('/users/:id/repos', async (req: Request, res: Response) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/admin/users/:id/repos/:owner/:repo/download
-//   Uses github.com/archive/refs/heads/{branch}.zip  (same as "Download ZIP")
-//   Follows all redirects with auth — github.com CDN does NOT pre-sign URLs
-//   like api.github.com/zipball does, so auth must carry through to CDN.
+//   api.github.com/zipball → CDN (legacy.zip) requires Bearer auth.
+//   Two phases to keep control but both use the same token.
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: Response) => {
   try {
@@ -419,7 +418,7 @@ router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: R
     const { owner, repo } = req.params;
     const { default: axios } = await import('axios');
 
-    const apiHeaders = {
+    const ghHeaders = {
       Authorization: `Bearer ${token}`,
       Accept: 'application/vnd.github.v3+json',
       'User-Agent': 'SentinelAI-Admin/1.0',
@@ -429,46 +428,63 @@ router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: R
     let branch = (req.query.ref as string) || '';
     const meta = await axios.get(
       `https://api.github.com/repos/${owner}/${repo}`,
-      { headers: apiHeaders, timeout: 15_000, validateStatus: s => s < 500 }
+      { headers: ghHeaders, timeout: 15_000, validateStatus: s => s < 500 }
     );
     if (meta.status === 404) {
       res.status(404).json({ error: `Repo ${owner}/${repo} not found or inaccessible.` }); return;
     }
     if (meta.data?.default_branch) branch = meta.data.default_branch;
-    if (!branch) branch = 'main';
+    if (!branch) branch = 'HEAD';
 
-    // ── Step 2: Download ZIP following all redirects ───────────────────────
-    // github.com/archive CDN does NOT embed auth tokens in the redirect URL
-    // (unlike api.github.com/zipball). So we must carry auth through the full
-    // redirect chain (github.com → codeload.github.com).
-    // axios sends the same headers to all redirect targets by default.
-    const archiveUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/${encodeURIComponent(branch)}.zip`;
+    // ── Step 2: Get CDN URL from GitHub API zipball endpoint ──────────────
+    const zipReq = await axios.get(
+      `https://api.github.com/repos/${owner}/${repo}/zipball/${encodeURIComponent(branch)}`,
+      {
+        headers: ghHeaders,
+        maxRedirects: 0,
+        validateStatus: s => s === 301 || s === 302 || (s >= 200 && s < 400),
+        timeout: 15_000,
+      }
+    );
+    if (zipReq.status === 404) {
+      res.status(404).json({ error: `No archive for ${owner}/${repo}@${branch}.` }); return;
+    }
+    if (zipReq.status === 401 || zipReq.status === 403) {
+      res.status(zipReq.status).json({ error: 'GitHub token expired or lacks access.' }); return;
+    }
 
-    const archiveRes = await axios.get(archiveUrl, {
+    const cdnUrl = zipReq.headers['location'];
+    if (!cdnUrl) {
+      res.status(500).json({ error: 'GitHub did not return a CDN redirect URL.' }); return;
+    }
+
+    // ── Step 3: Download from CDN WITH Bearer auth ────────────────────────
+    // The api.github.com CDN (codeload.github.com/legacy.zip/) accepts Bearer
+    // tokens — unlike the github.com web CDN which requires cookies.
+    const cdnRes = await axios.get(cdnUrl, {
       headers: {
-        Authorization: `token ${token}`,    // github.com web token format
+        Authorization: `Bearer ${token}`,
         'User-Agent': 'SentinelAI-Admin/1.0',
         Accept: 'application/zip, application/octet-stream, */*',
       },
       responseType: 'arraybuffer',
-      maxRedirects: 10,                     // follow all: github.com → CDN
+      maxRedirects: 5,
       timeout: 120_000,
       validateStatus: s => s < 500,
     });
 
-    if (archiveRes.status === 404) {
-      res.status(404).json({ error: `Branch "${branch}" not found in ${owner}/${repo}.` }); return;
+    if (cdnRes.status === 404) {
+      res.status(404).json({ error: `CDN 404: ${cdnUrl}` }); return;
     }
-    if (archiveRes.status === 401 || archiveRes.status === 403) {
-      res.status(archiveRes.status).json({ error: 'GitHub token lacks access to this repo.' }); return;
+    if (cdnRes.status === 401 || cdnRes.status === 403) {
+      res.status(cdnRes.status).json({ error: 'CDN rejected token. User may need to re-login.' }); return;
     }
 
-    // Verify we got actual ZIP bytes (first 2 bytes are 'PK' for valid ZIPs)
-    const buf = Buffer.from(archiveRes.data);
+    // Validate ZIP magic bytes (PK header = 0x50 0x4B)
+    const buf = Buffer.from(cdnRes.data);
     if (buf.length < 4 || buf[0] !== 0x50 || buf[1] !== 0x4B) {
-      // Not a valid ZIP — likely got HTML (login page). Log first 200 chars.
-      const preview = buf.slice(0, 200).toString('utf8');
-      res.status(502).json({ error: 'GitHub returned non-ZIP content. Token may lack access.', preview });
+      const preview = buf.slice(0, 300).toString('utf8');
+      res.status(502).json({ error: 'CDN returned non-ZIP data.', cdnUrl, preview });
       return;
     }
 
