@@ -283,9 +283,8 @@ export default function PenetrationTestPage() {
       const data = JSON.parse((e as MessageEvent).data);
       const rep = data.report;
 
-      // Always show AI loop summary — the backend sends a 'phase' event for this but it
-      // can get dropped if es.close() fires before the browser processes it.
-      // Reading directly from the report guarantees it always appears.
+      // Always show Phase 7 status — if aiLoopRoundsRun is undefined it means the AI
+      // loop was skipped (LLM API error / rate limit / keys exhausted after phases 3-6).
       if (rep.aiLoopRoundsRun !== undefined) {
         const exitLabel: Record<string, string> = {
           early_exit_no_new_findings: 'no new findings (clean target)',
@@ -296,6 +295,9 @@ export default function PenetrationTestPage() {
         const exitMsg = exitLabel[rep.aiLoopExitReason] || rep.aiLoopExitReason || 'done';
         addLine(`▶ AI loop complete — ${rep.aiLoopRoundsRun} round(s) · ${exitMsg} · ${newFindings} new finding(s)`,
           newFindings > 0 ? 'hsl(35 90% 62%)' : 'hsl(210 80% 65%)');
+      } else {
+        // Phase 7 was skipped (API rate limit after running phases 3-6, or no AI keys)
+        addLine('▶ AI loop: skipped — LLM API unavailable (rate limit / key exhaustion)', 'hsl(0 0% 45%)');
       }
 
       addLine('', 'hsl(0 0% 18%)');
