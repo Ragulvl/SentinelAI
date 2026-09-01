@@ -185,27 +185,29 @@ function RepoModal({ userId, username, onClose }: { userId: string; username: st
     setDownloading(key);
     try {
       const token = localStorage.getItem('token') || '';
-      // Step 1: Ask backend for the pre-signed GitHub CDN URL
-      // Include the default branch so GitHub's CDN URL contains a valid ref
       const ref = encodeURIComponent(repo.defaultBranch || 'HEAD');
+
+      // Backend proxies the entire download server-side — browser only
+      // talks to our API, never directly to GitHub CDN (no CORS, no 404s)
       const res = await fetch(
         `/api/admin/users/${userId}/repos/${repo.owner}/${repo.name}/download?ref=${ref}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `Failed (${res.status})`);
 
-      // Step 2: Open the CDN URL directly in the browser.
-      // window.open / <a> navigation is NOT subject to CORS — browser downloads
-      // the ZIP straight from GitHub CDN without any cross-origin restrictions.
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || `Download failed (${res.status})`);
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = data.downloadUrl;
-      a.download = data.filename || `${repo.owner}-${repo.name}.zip`;
-      a.target = '_blank';        // open in new tab as fallback
-      a.rel = 'noopener noreferrer';
+      a.href = url;
+      a.download = `${repo.owner}-${repo.name}.zip`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     } catch (e: any) { alert(e.message); }
     finally { setDownloading(null); }
   };

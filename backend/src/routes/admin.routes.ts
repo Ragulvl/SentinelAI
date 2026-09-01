@@ -403,11 +403,10 @@ router.get('/users/:id/repos', async (req: Request, res: Response) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET /api/admin/users/:id/repos/:owner/:repo/download
-//   Returns the GitHub pre-signed CDN URL as JSON { downloadUrl }.
-//   Frontend opens this URL directly via window.open() — browser navigations
-//   are NOT subject to CORS, so the download works without any headers.
-//   The CDN URL (codeload.github.com) is time-limited and pre-signed by GitHub.
+// GET /api/admin/users/:id/repos/:owner/:repo/download?ref=<branch>
+//   Full server-side proxy: backend follows GitHub's redirect chain,
+//   downloads the ZIP into memory, and pipes it to the admin browser.
+//   Browser NEVER touches GitHub CDN — no CORS, no expired token 404s.
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: Response) => {
   try {
@@ -418,34 +417,40 @@ router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: R
     if (!token) { res.status(400).json({ error: 'No stored GitHub token for this user.' }); return; }
 
     const { owner, repo } = req.params;
+    const ref = (req.query.ref as string) || 'HEAD';
     const { default: axios } = await import('axios');
 
-    // Hit GitHub zipball endpoint — capture the 302 without following it.
-    // Include the branch ref so CDN URL is valid (without ref → 404 on CDN)
-    const ref = encodeURIComponent((req.query.ref as string) || 'HEAD');
+    // Follow ALL redirects server-side (including GitHub CDN redirect).
+    // The Authorization header is sent to api.github.com only; CDN redirects
+    // include a pre-signed token in the URL so no auth header needed there.
     const ghRes = await axios.get(
-      `https://api.github.com/repos/${owner}/${repo}/zipball/${ref}`,
+      `https://api.github.com/repos/${owner}/${repo}/zipball/${encodeURIComponent(ref)}`,
       {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/vnd.github.v3+json',
           'User-Agent': 'SentinelAI-Admin/1.0',
         },
-        maxRedirects: 0,
-        validateStatus: (s) => s === 302 || s === 301 || s < 400,
+        responseType: 'arraybuffer',   // buffer entire ZIP in memory
+        maxRedirects: 10,              // follow GitHub → CDN redirects
+        timeout: 60_000,              // 60s timeout for large repos
       }
     );
 
-    const downloadUrl = ghRes.headers['location'];
-    if (!downloadUrl) {
-      res.status(500).json({ error: 'GitHub did not return a download URL. Check token validity.' });
-      return;
-    }
+    const filename = `${owner}-${repo}.zip`;
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', ghRes.data.byteLength.toString());
+    res.send(Buffer.from(ghRes.data));
 
-    // Return as JSON — frontend will open this directly (no CORS for navigations)
-    res.json({ downloadUrl, filename: `${owner}-${repo}.zip` });
   } catch (err: any) {
-    if (!res.headersSent) res.status(500).json({ error: err.message });
+    if (!res.headersSent) {
+      const status = err.response?.status || 500;
+      const msg = status === 404 ? 'Repository or branch not found on GitHub.'
+                : status === 401 ? 'GitHub token expired. User needs to re-login.'
+                : err.message;
+      res.status(status === 404 || status === 401 ? status : 500).json({ error: msg });
+    }
   }
 });
 
