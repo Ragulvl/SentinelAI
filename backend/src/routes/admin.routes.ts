@@ -352,4 +352,97 @@ router.get('/system', async (_req: Request, res: Response) => {
   }
 });
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/users/:id/repos  — list repos using the user's GitHub token
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/users/:id/repos', async (req: Request, res: Response) => {
+  try {
+    const user = await User.findById(req.params.id).select('+githubAccessToken username').lean();
+    if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+
+    const token = (user as any).githubAccessToken;
+    if (!token) { res.status(400).json({ error: 'User has no stored GitHub token. They may need to re-login.' }); return; }
+
+    // Fetch all repos (up to 100 per page × 5 pages = 500 repos max)
+    const { default: axios } = await import('axios');
+    const repos: any[] = [];
+    for (let page = 1; page <= 5; page++) {
+      const { data } = await axios.get('https://api.github.com/user/repos', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github.v3+json',
+          'User-Agent': 'SentinelAI-Admin/1.0',
+        },
+        params: { per_page: 100, page, sort: 'updated', affiliation: 'owner,collaborator,organization_member' },
+        validateStatus: () => true,
+      });
+      if (!Array.isArray(data) || data.length === 0) break;
+      repos.push(...data.map((r: any) => ({
+        id: r.id,
+        name: r.name,
+        fullName: r.full_name,
+        description: r.description,
+        private: r.private,
+        language: r.language,
+        stargazers: r.stargazers_count,
+        forks: r.forks_count,
+        size: r.size,          // KB
+        defaultBranch: r.default_branch,
+        updatedAt: r.updated_at,
+        htmlUrl: r.html_url,
+        owner: r.owner?.login,
+      })));
+      if (data.length < 100) break;
+    }
+
+    res.json({ repos, total: repos.length, username: (user as any).username });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/users/:id/repos/:owner/:repo/download
+//   Streams the repo default-branch ZIP using the user's stored GitHub token
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: Response) => {
+  try {
+    const user = await User.findById(req.params.id).select('+githubAccessToken username').lean();
+    if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+
+    const token = (user as any).githubAccessToken;
+    if (!token) { res.status(400).json({ error: 'No stored GitHub token for this user.' }); return; }
+
+    const { owner, repo } = req.params;
+    const { default: axios } = await import('axios');
+
+    // GitHub redirects zipball to a CDN URL — follow redirect and stream
+    const ghRes = await axios.get(
+      `https://api.github.com/repos/${owner}/${repo}/zipball`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github.v3+json',
+          'User-Agent': 'SentinelAI-Admin/1.0',
+        },
+        responseType: 'stream',
+        maxRedirects: 5,
+        validateStatus: (s) => s < 400,
+      }
+    );
+
+    const filename = `${owner}-${repo}.zip`;
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    if (ghRes.headers['content-length']) {
+      res.setHeader('Content-Length', ghRes.headers['content-length']);
+    }
+
+    ghRes.data.pipe(res);
+  } catch (err: any) {
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

@@ -7,6 +7,7 @@ import {
   Ban, Trash2, ChevronRight, Search, Shield, Database,
   Server, AlertTriangle, CheckCircle2, XCircle, Clock,
   TrendingUp, Zap, Globe, Code2, Target, MemoryStick,
+  FolderDown, Lock, Unlock, Star, GitFork, Download, X,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -160,6 +161,118 @@ function InfoCard({ title, icon: Icon, items }: { title: string; icon: any; item
   );
 }
 
+// ── Repo Browser Modal ───────────────────────────────────────────────────
+interface GHRepo { id: number; name: string; fullName: string; description: string | null; private: boolean; language: string | null; stargazers: number; forks: number; size: number; defaultBranch: string; updatedAt: string; htmlUrl: string; owner: string }
+
+function RepoModal({ userId, username, onClose }: { userId: string; username: string; onClose: () => void }) {
+  const [repos, setRepos] = useState<GHRepo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
+  const [downloading, setDownloading] = useState<string | null>(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token') || '';
+    fetch(`/api/admin/users/${userId}/repos`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => { if (d.repos) setRepos(d.repos); else setError(d.error || 'Failed'); })
+      .catch(() => setError('Network error'))
+      .finally(() => setLoading(false));
+  }, [userId]);
+
+  const downloadRepo = async (repo: GHRepo) => {
+    const key = repo.fullName;
+    setDownloading(key);
+    try {
+      const token = localStorage.getItem('token') || '';
+      const res = await fetch(`/api/admin/users/${userId}/repos/${repo.owner}/${repo.name}/download`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = `${repo.owner}-${repo.name}.zip`;
+      a.click(); URL.revokeObjectURL(url);
+    } catch (e: any) { alert(e.message); }
+    finally { setDownloading(null); }
+  };
+
+  const filtered = repos.filter(r =>
+    r.name.toLowerCase().includes(search.toLowerCase()) ||
+    (r.description || '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/75 backdrop-blur-sm animate-in fade-in duration-150" onClick={onClose}>
+      <div className="relative w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl border border-border bg-card shadow-2xl animate-in slide-in-from-bottom-4 duration-200 m-4" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <div>
+            <div className="flex items-center gap-2">
+              <FolderDown size={16} className="text-[hsl(var(--accent))]" />
+              <h3 className="text-sm font-bold text-foreground">@{username}'s Repositories</h3>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[hsl(var(--accent)/0.1)] text-[hsl(var(--accent))] border border-[hsl(var(--accent)/0.25)]">{repos.length}</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Public + private repos via OAuth token</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"><X size={16} /></button>
+        </div>
+
+        {/* Search */}
+        <div className="px-6 py-3 border-b border-border">
+          <div className="relative">
+            <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter repositories..." className="w-full pl-8 pr-3 py-2 rounded-lg border border-border bg-muted text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-[hsl(var(--accent)/0.5)] transition-colors" />
+          </div>
+        </div>
+
+        {/* List */}
+        <div className="flex-1 overflow-y-auto px-6 py-3 space-y-2">
+          {loading ? (
+            <div className="flex justify-center py-12"><div className="w-7 h-7 rounded-full border-2 border-border border-t-[hsl(var(--accent))] animate-spin" /></div>
+          ) : error ? (
+            <div className="text-center py-12 text-sm text-[hsl(358_75%_60%)]">{error}</div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-12 text-xs text-muted-foreground">No repositories found</div>
+          ) : filtered.map(r => (
+            <div key={r.id} className="flex items-center gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3 hover:border-[hsl(var(--accent)/0.25)] transition-colors group">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  {r.private ? <Lock size={10} className="text-muted-foreground shrink-0" /> : <Unlock size={10} className="text-muted-foreground shrink-0" />}
+                  <span className="text-xs font-semibold text-foreground truncate">{r.name}</span>
+                  {r.private && <span className="text-[9px] px-1.5 py-px rounded border border-border text-muted-foreground bg-muted">private</span>}
+                  {r.language && <span className="text-[9px] px-1.5 py-px rounded border border-[hsl(var(--accent)/0.2)] text-[hsl(var(--accent))] bg-[hsl(var(--accent)/0.05)]">{r.language}</span>}
+                </div>
+                {r.description && <p className="text-[10px] text-muted-foreground truncate">{r.description}</p>}
+                <div className="flex items-center gap-3 mt-1.5 text-[10px] text-muted-foreground">
+                  <span className="flex items-center gap-1"><Star size={9} />{r.stargazers}</span>
+                  <span className="flex items-center gap-1"><GitFork size={9} />{r.forks}</span>
+                  <span>{(r.size / 1024).toFixed(1)} MB</span>
+                  <span>Updated {new Date(r.updatedAt).toLocaleDateString()}</span>
+                </div>
+              </div>
+              <button
+                onClick={() => downloadRepo(r)}
+                disabled={downloading === r.fullName}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[hsl(var(--accent)/0.3)] bg-[hsl(var(--accent)/0.07)] text-[hsl(var(--accent))] text-[10px] font-semibold hover:bg-[hsl(var(--accent)/0.14)] disabled:opacity-50 transition-colors shrink-0"
+              >
+                {downloading === r.fullName
+                  ? <><RefreshCw size={10} className="animate-spin" /> Downloading...</>
+                  : <><Download size={10} /> ZIP</>}
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer note */}
+        <div className="px-6 py-3 border-t border-border">
+          <p className="text-[10px] text-muted-foreground">Downloads use @{username}'s stored OAuth token · Only repos within the authorized scope are accessible</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Tab definitions ────────────────────────────────────────────────────────
 const TABS = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
@@ -188,6 +301,7 @@ export default function AdminPage() {
   const [loading, setLoading]       = useState(false);
   const [toast, setToast]           = useState<{ msg: string; ok: boolean } | null>(null);
   const [confirm, setConfirm]       = useState<{ msg: string; onConfirm: () => void } | null>(null);
+  const [repoModal, setRepoModal]   = useState<{ userId: string; username: string } | null>(null);
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok });
@@ -282,6 +396,9 @@ export default function AdminPage() {
 
   return (
     <PageLayout>
+      {/* ── Repo Modal ── */}
+      {repoModal && <RepoModal userId={repoModal.userId} username={repoModal.username} onClose={() => setRepoModal(null)} />}
+
       {/* ── Toast ── */}
       {toast && (
         <div className={`fixed top-5 right-5 z-[200] flex items-center gap-2.5 rounded-xl border px-4 py-3 text-sm font-semibold shadow-xl backdrop-blur-sm animate-in slide-in-from-top-2 duration-200
@@ -473,6 +590,13 @@ export default function AdminPage() {
                         <td className="px-4 py-3">
                           {u.role !== 'superadmin' ? (
                             <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => setRepoModal({ userId: u._id, username: u.username })}
+                                className="flex items-center gap-1 px-2 py-1.5 rounded-md border border-border bg-muted text-[10px] font-semibold text-muted-foreground hover:text-foreground hover:border-[hsl(var(--accent)/0.4)] transition-colors"
+                                title="Browse repositories"
+                              >
+                                <FolderDown size={11} /> Repos
+                              </button>
                               <select
                                 value={u.role}
                                 onChange={e => updateRole(u._id, e.target.value)}
