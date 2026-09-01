@@ -404,9 +404,10 @@ router.get('/users/:id/repos', async (req: Request, res: Response) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/admin/users/:id/repos/:owner/:repo/download
-//   1. Re-fetches repo metadata from GitHub to get current default branch
-//   2. Downloads ZIP server-side (arraybuffer, follows all redirects)
-//   3. Streams ZIP directly to admin browser — no CDN CORS issues
+//   Two-phase download to avoid Authorization header forwarding to CDN:
+//   Phase 1: Call GitHub API (with token) → get pre-signed CDN URL (302)
+//   Phase 2: Download from CDN URL (NO auth) → buffer → send to admin
+//   This avoids CDN rejecting Authorization headers it doesn't expect.
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: Response) => {
   try {
@@ -425,60 +426,66 @@ router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: R
       'User-Agent': 'SentinelAI-Admin/1.0',
     };
 
-    // ── Step 1: Re-fetch repo metadata to get the live default branch ──────
-    let defaultBranch = (req.query.ref as string) || '';
-    try {
-      const meta = await axios.get(
-        `https://api.github.com/repos/${owner}/${repo}`,
-        { headers: ghHeaders, timeout: 15_000, validateStatus: s => s < 500 }
-      );
-      if (meta.status === 404) {
-        res.status(404).json({ error: `Repo ${owner}/${repo} not found or inaccessible with this token.` });
-        return;
-      }
-      if (meta.data?.default_branch) {
-        defaultBranch = meta.data.default_branch;  // always use live value
-      }
-      if (meta.data?.empty) {
-        res.status(400).json({ error: `Repo ${owner}/${repo} is empty — nothing to download.` });
-        return;
-      }
-    } catch { /* if meta fetch fails, fall back to provided ref */ }
+    // ── Phase 1a: Get live default branch ─────────────────────────────────
+    let branch = (req.query.ref as string) || '';
+    const meta = await axios.get(
+      `https://api.github.com/repos/${owner}/${repo}`,
+      { headers: ghHeaders, timeout: 15_000, validateStatus: s => s < 500 }
+    );
+    if (meta.status === 404) {
+      res.status(404).json({ error: `Repo ${owner}/${repo} not found or inaccessible.` }); return;
+    }
+    if (meta.data?.default_branch) branch = meta.data.default_branch;
+    if (!branch) branch = 'HEAD';
 
-    if (!defaultBranch) defaultBranch = 'HEAD';
+    // ── Phase 1b: Hit GitHub zipball endpoint — capture CDN redirect URL ──
+    // maxRedirects:0 captures the 302 Location without following it.
+    // This keeps Authorization ONLY on api.github.com (not forwarded to CDN).
+    const zipReq = await axios.get(
+      `https://api.github.com/repos/${owner}/${repo}/zipball/${encodeURIComponent(branch)}`,
+      {
+        headers: ghHeaders,
+        maxRedirects: 0,
+        validateStatus: s => s === 301 || s === 302 || (s >= 200 && s < 400),
+        timeout: 15_000,
+      }
+    );
 
-    // ── Step 2: Download the ZIP ───────────────────────────────────────────
-    const zipUrl = `https://api.github.com/repos/${owner}/${repo}/zipball/${encodeURIComponent(defaultBranch)}`;
-    const ghRes = await axios.get(zipUrl, {
-      headers: ghHeaders,
+    if (zipReq.status === 404) {
+      res.status(404).json({ error: `Branch "${branch}" has no content in ${owner}/${repo}.` }); return;
+    }
+    if (zipReq.status === 401 || zipReq.status === 403) {
+      res.status(zipReq.status).json({ error: 'GitHub token expired or lacks repo access.' }); return;
+    }
+
+    const cdnUrl = zipReq.headers['location'];
+    if (!cdnUrl) {
+      res.status(500).json({ error: 'GitHub did not return a CDN URL.' }); return;
+    }
+
+    // ── Phase 2: Download ZIP from CDN — NO Authorization header ──────────
+    // GitHub CDN URL is pre-signed (token in query string) — sending an
+    // Authorization header causes CDN to reject the request.
+    const cdnRes = await axios.get(cdnUrl, {
       responseType: 'arraybuffer',
-      maxRedirects: 10,
-      timeout: 60_000,
+      maxRedirects: 5,
+      timeout: 120_000,
       validateStatus: s => s < 500,
+      // Explicitly NO Authorization header
     });
 
-    if (ghRes.status === 404) {
-      res.status(404).json({
-        error: `Branch "${defaultBranch}" not found in ${owner}/${repo}.`,
-        debug: { branch: defaultBranch, url: zipUrl },
-      });
-      return;
-    }
-    if (ghRes.status === 401 || ghRes.status === 403) {
-      res.status(ghRes.status).json({ error: 'GitHub token expired or lacks repo access. User must re-login.' });
-      return;
+    if (cdnRes.status === 404) {
+      res.status(404).json({ error: `CDN could not serve the archive. Branch "${branch}" may be empty.` }); return;
     }
 
-    const filename = `${owner}-${repo}-${defaultBranch}.zip`;
+    const filename = `${owner}-${repo}-${branch}.zip`;
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Content-Length', ghRes.data.byteLength.toString());
-    res.send(Buffer.from(ghRes.data));
+    res.setHeader('Content-Length', cdnRes.data.byteLength.toString());
+    res.send(Buffer.from(cdnRes.data));
 
   } catch (err: any) {
-    if (!res.headersSent) {
-      res.status(500).json({ error: err.message });
-    }
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
