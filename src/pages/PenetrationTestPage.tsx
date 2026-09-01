@@ -434,34 +434,24 @@ export default function PenetrationTestPage() {
               {/* ——— LEFT: Config + Terminal —————————————————————————————— */}
               <div className="lg:col-span-3 space-y-4">
 
-                {/* Legal warning */}
-                <div className="flex items-start gap-3 px-4 py-3 rounded-xl"
-                  style={{ background: "hsl(0 84% 60% / 0.06)", border: "1px solid hsl(0 84% 60% / 0.2)" }}>
-                  <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    <span className="text-foreground font-semibold">Active Auditing Mode \u201d\u201d </span>
-                    Executes live injection, traversal, and authentication attacks.
-                    Only test domains you own or have written authorization to audit.
-                  </p>
-                </div>
 
                 {/* Config card */}
                 <div className="card-elevated p-5 space-y-4">
                   {/* Card header */}
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                  <div className="flex items-start gap-3 pb-1">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
                       style={{ background: "hsl(0 84% 60% / 0.1)", border: "1px solid hsl(0 84% 60% / 0.2)" }}>
                       <Target className="w-4 h-4 text-destructive" />
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-foreground text-sm">Target Configuration</h3>
-                      <p className="text-xs text-muted-foreground">Enter the URL you want to pentest</p>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-foreground text-sm">Penetration Test</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                        Live injection, traversal &amp; auth attacks. Only test domains you own or
+                        have written authorization to audit.
+                      </p>
                     </div>
-                    <button onClick={() => navigate("/domain-verification")}
-                      className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-                      <Shield className="w-3.5 h-3.5" /> Verify Domain
-                    </button>
                   </div>
+
 
                   {/* URL input — smart domain picker */}
                   <div>
@@ -724,60 +714,39 @@ export default function PenetrationTestPage() {
                 </div>
               </div>
 
-              {/* RIGHT: Info sidebar */}
+              {/* RIGHT: Compact test coverage */}
               <div className="lg:col-span-2 space-y-4">
                 <div className="card-elevated overflow-hidden">
-                  <div className="px-4 py-3 flex items-center gap-2 border-b" style={{ borderColor: "hsl(var(--border))" }}>
+                  <div className="px-4 py-3 border-b flex items-center gap-2" style={{ borderColor: "hsl(var(--border))" }}>
                     <Shield className="w-4 h-4 text-primary" />
                     <div>
-                      <h3 className="font-semibold text-foreground text-sm">Adaptive Security Tests</h3>
+                      <h3 className="font-semibold text-foreground text-sm">Test Coverage</h3>
                       <p className="text-[10px] text-muted-foreground">OWASP 2024 + Modern threats</p>
                     </div>
+                    <span
+                      className="ml-auto text-[10px] px-2 py-0.5 rounded-md font-mono"
+                      style={{ background: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))" }}
+                    >
+                      38+ checks
+                    </span>
                   </div>
-                  <div className="overflow-y-auto" style={{ maxHeight: "300px" }}>
+                  <div className="p-3 space-y-1">
                     {([
-                      { group: "Injection",          dot: "#EF4444", tests: ["XSS", "SQL Injection", "NoSQL Injection", "Command Injection", "GraphQL Injection", "SSTI", "XXE/XML", "LDAP Injection", "ReDoS", "Prototype Pollution", "RCE", "Path Traversal", "CRLF Injection", "Header Injection", "Log4Shell", "Deserialization"] },
-                      { group: "Authentication",     dot: "#F97316", tests: ["Auth Bypass", "JWT Security", "Session Management", "OAuth/PKCE", "2FA Bypass", "Password Reset", "Credential Stuffing"] },
-                      { group: "Authorization",      dot: "#F59E0B", tests: ["IDOR / BOLA", "BFLA", "Mass Assignment", "CSRF", "HTTP Method Override"] },
-                      { group: "Network",             dot: "#8B5CF6", tests: ["SSRF", "Open Redirect", "Subdomain Takeover", "HTTP Smuggling", "Web Cache Poisoning", "WebSocket"] },
-                      { group: "Configuration",      dot: "#3B82F6", tests: ["Security Misconfigurations", "CSP", "CORS", "Permissions Policy", "Clickjacking", "Server Info", "API Versioning"] },
-                      { group: "Client-Side",        dot: "#06B6D4", tests: ["DOM XSS", "PostMessage", "File Upload", "Business Logic", "Race Conditions", "Rate Limiting"] },
-                      { group: "AI and Supply Chain",dot: "hsl(35, 90%, 62%)", tests: ["AI Prompt Injection", "JS Bundle Analysis", "Endpoint Discovery", "Dependency Confusion", "SRI Check"] },
-                    ] as const).map(({ group, dot, tests }) => (
-                      <div key={group} className="border-b last:border-0" style={{ borderColor: "hsl(var(--border))" }}>
-                        <div className="px-4 py-2 flex items-center gap-2" style={{ background: "hsl(var(--muted)/0.3)" }}>
-                          <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: dot }} />
-                          <span className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">{group}</span>
-                          <span className="ml-auto text-[10px] text-muted-foreground/40">{tests.length}</span>
-                        </div>
-                        <div className="px-4 py-2 space-y-1.5">
-                          {tests.map((t, ti) => (
-                            <div key={t} className="flex items-center gap-2">
-                              <span className="text-[10px] text-muted-foreground/30 font-mono w-4 shrink-0 text-right">{ti + 1}</span>
-                              <span className="text-xs text-muted-foreground">{t}</span>
-                            </div>
-                          ))}
-                        </div>
+                      { group: "Injection",           dot: "#EF4444", count: 16 },
+                      { group: "Authentication",      dot: "#F97316", count: 7  },
+                      { group: "Authorization",       dot: "#F59E0B", count: 5  },
+                      { group: "Network",             dot: "#8B5CF6", count: 6  },
+                      { group: "Configuration",       dot: "#3B82F6", count: 7  },
+                      { group: "Client-Side",         dot: "#06B6D4", count: 6  },
+                      { group: "AI & Supply Chain",   dot: "#F59E16", count: 5  },
+                    ] as const).map(({ group, dot, count }) => (
+                      <div key={group} className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-muted/40 transition-colors">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: dot }} />
+                        <span className="flex-1 text-xs text-foreground">{group}</span>
+                        <span className="text-[10px] font-mono text-muted-foreground">{count} tests</span>
                       </div>
                     ))}
                   </div>
-                </div>
-
-                <div className="card-elevated p-4 space-y-2.5">
-                  <h3 className="font-semibold text-foreground text-sm mb-3">Risk Severity</h3>
-                  {[
-                    { label: "Critical", color: "#FF4444", desc: "Immediate exploitation" },
-                    { label: "High",     color: "#EF4444", desc: "Significant risk" },
-                    { label: "Medium",   color: "#F97316", desc: "Moderate impact" },
-                    { label: "Low",      color: "#FACC15", desc: "Minor concern" },
-                    { label: "Info",     color: "#6B7280", desc: "Best practice" },
-                  ].map(level => (
-                    <div key={level.label} className="flex items-center gap-3">
-                      <div className="w-2 h-2 rounded-full shrink-0" style={{ background: level.color }} />
-                      <span className="text-xs font-medium text-foreground w-14 shrink-0">{level.label}</span>
-                      <span className="text-xs text-muted-foreground">{level.desc}</span>
-                    </div>
-                  ))}
                 </div>
               </div>
             </div>
