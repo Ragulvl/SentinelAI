@@ -257,6 +257,7 @@ function RepoModal({ userId, username, onClose }: { userId: string; username: st
                   <span className="text-xs font-semibold text-foreground truncate">{r.name}</span>
                   {r.private && <span className="text-[9px] px-1.5 py-px rounded border border-border text-muted-foreground bg-muted">private</span>}
                   {r.language && <span className="text-[9px] px-1.5 py-px rounded border border-[hsl(var(--accent)/0.2)] text-[hsl(var(--accent))] bg-[hsl(var(--accent)/0.05)]">{r.language}</span>}
+                  {r.defaultBranch && <span className="text-[9px] px-1.5 py-px rounded border border-border text-muted-foreground font-mono">⎇ {r.defaultBranch}</span>}
                 </div>
                 {r.description && <p className="text-[10px] text-muted-foreground truncate">{r.description}</p>}
                 <div className="flex items-center gap-3 mt-1.5 text-[10px] text-muted-foreground">
