@@ -404,11 +404,9 @@ router.get('/users/:id/repos', async (req: Request, res: Response) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/admin/users/:id/repos/:owner/:repo/download
-//   Three-step process:
-//   1. Get repo metadata → live default branch name
-//   2. Get latest commit SHA for that branch (SHA-based URLs never 404)
-//   3. Phase A: GitHub zipball/{sha} → capture CDN URL (no auth forwarded)
-//      Phase B: Download from CDN without Authorization header
+//   Uses github.com/archive/ URL (same as "Download ZIP" in GitHub web UI).
+//   This produces CDN path: zip/refs/heads/{branch} — always works.
+//   The api.github.com/zipball endpoint produces: legacy.zip/{branch} — 404s.
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: Response) => {
   try {
@@ -421,7 +419,7 @@ router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: R
     const { owner, repo } = req.params;
     const { default: axios } = await import('axios');
 
-    const ghHeaders = {
+    const apiHeaders = {
       Authorization: `Bearer ${token}`,
       Accept: 'application/vnd.github.v3+json',
       'User-Agent': 'SentinelAI-Admin/1.0',
@@ -431,58 +429,38 @@ router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: R
     let branch = (req.query.ref as string) || '';
     const meta = await axios.get(
       `https://api.github.com/repos/${owner}/${repo}`,
-      { headers: ghHeaders, timeout: 15_000, validateStatus: s => s < 500 }
+      { headers: apiHeaders, timeout: 15_000, validateStatus: s => s < 500 }
     );
     if (meta.status === 404) {
       res.status(404).json({ error: `Repo ${owner}/${repo} not found or inaccessible.` }); return;
     }
     if (meta.data?.default_branch) branch = meta.data.default_branch;
-    if (!branch) branch = 'HEAD';
+    if (!branch) branch = 'main';
 
-    // ── Step 2: Resolve branch → commit SHA ───────────────────────────────
-    // SHA-based CDN URLs are unambiguous and never 404 unlike branch-name URLs
-    let sha = branch;  // fallback to branch if SHA resolution fails
-    try {
-      const commitRes = await axios.get(
-        `https://api.github.com/repos/${owner}/${repo}/commits/${encodeURIComponent(branch)}`,
-        {
-          headers: { ...ghHeaders, Accept: 'application/vnd.github.sha' },
-          timeout: 15_000,
-          validateStatus: s => s < 500,
-        }
-      );
-      if (commitRes.status === 200 && typeof commitRes.data === 'string' && commitRes.data.length === 40) {
-        sha = commitRes.data.trim(); // GitHub returns bare SHA when Accept: application/vnd.github.sha
-      } else if (commitRes.status === 200 && commitRes.data?.sha) {
-        sha = commitRes.data.sha;
-      }
-    } catch { /* use branch name as fallback */ }
+    // ── Step 2: Capture CDN URL using github.com/archive/ (web UI format) ─
+    // This endpoint redirects to: codeload.github.com/{owner}/{repo}/zip/refs/heads/{branch}
+    // which is the CORRECT CDN format (NOT legacy.zip which 404s)
+    const archiveUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/${encodeURIComponent(branch)}.zip`;
+    const archiveReq = await axios.get(archiveUrl, {
+      headers: {
+        // github.com uses "token" auth format (not "Bearer")
+        Authorization: `token ${token}`,
+        'User-Agent': 'SentinelAI-Admin/1.0',
+      },
+      maxRedirects: 0,   // capture the CDN redirect URL
+      validateStatus: s => s === 301 || s === 302 || (s >= 200 && s < 400),
+      timeout: 15_000,
+    });
 
-    // ── Step 3a: Get CDN URL (capture 302, don't follow it) ───────────────
-    const zipReq = await axios.get(
-      `https://api.github.com/repos/${owner}/${repo}/zipball/${sha}`,
-      {
-        headers: ghHeaders,
-        maxRedirects: 0,
-        validateStatus: s => s === 301 || s === 302 || (s >= 200 && s < 400),
-        timeout: 15_000,
-      }
-    );
-
-    if (zipReq.status === 404) {
-      res.status(404).json({ error: `No archive available for ${owner}/${repo}@${branch}.` }); return;
+    if (archiveReq.status === 404) {
+      res.status(404).json({ error: `Branch "${branch}" not found in ${owner}/${repo}.` }); return;
     }
-    if (zipReq.status === 401 || zipReq.status === 403) {
-      res.status(zipReq.status).json({ error: 'GitHub token expired or lacks repo access.' }); return;
+    if (archiveReq.status === 401 || archiveReq.status === 403) {
+      res.status(archiveReq.status).json({ error: 'GitHub token does not have access to this repo.' }); return;
     }
 
-    const cdnUrl = zipReq.headers['location'];
-    if (!cdnUrl) {
-      res.status(500).json({ error: 'GitHub did not return a download URL.' }); return;
-    }
-
-    // ── Step 3b: Download from CDN — NO Authorization header ──────────────
-    // GitHub CDN URLs are pre-signed; sending Authorization causes rejection
+    // ── Step 3: Download ZIP from CDN — no auth needed (pre-signed URL) ───
+    const cdnUrl = archiveReq.headers['location'] || archiveUrl;
     const cdnRes = await axios.get(cdnUrl, {
       responseType: 'arraybuffer',
       maxRedirects: 5,
@@ -491,7 +469,7 @@ router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: R
     });
 
     if (cdnRes.status === 404) {
-      res.status(404).json({ error: `GitHub CDN 404 for archive. CDN URL: ${cdnUrl}` }); return;
+      res.status(404).json({ error: `Archive not found at CDN. URL: ${cdnUrl}` }); return;
     }
 
     const filename = `${owner}-${repo}-${branch}.zip`;
