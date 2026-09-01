@@ -404,8 +404,9 @@ router.get('/users/:id/repos', async (req: Request, res: Response) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/admin/users/:id/repos/:owner/:repo/download
-//   api.github.com/zipball → CDN (legacy.zip) requires Bearer auth.
-//   Two phases to keep control but both use the same token.
+//   Strategy 1 (fast): GitHub CDN via zipball redirect
+//   Strategy 2 (fallback): GitHub Contents API → build ZIP with JSZip
+//   This handles repos where CDN 404s (empty branch, legacy URL issues, etc.)
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: Response) => {
   try {
@@ -436,74 +437,99 @@ router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: R
     if (meta.data?.default_branch) branch = meta.data.default_branch;
     if (!branch) branch = 'HEAD';
 
-    // ── Step 2: Get CDN URL from GitHub API zipball endpoint ──────────────
-    const zipReq = await axios.get(
-      `https://api.github.com/repos/${owner}/${repo}/zipball/${encodeURIComponent(branch)}`,
-      {
-        headers: ghHeaders,
-        maxRedirects: 0,
-        validateStatus: s => s === 301 || s === 302 || (s >= 200 && s < 400),
-        timeout: 15_000,
+    // ── Strategy 1: GitHub CDN zipball (fast, for repos with CDN access) ──
+    let zipBuffer: Buffer | null = null;
+    try {
+      const zipReq = await axios.get(
+        `https://api.github.com/repos/${owner}/${repo}/zipball/${encodeURIComponent(branch)}`,
+        {
+          headers: ghHeaders,
+          maxRedirects: 0,
+          validateStatus: s => s === 301 || s === 302 || (s >= 200 && s < 400),
+          timeout: 15_000,
+        }
+      );
+
+      if (zipReq.status === 302 || zipReq.status === 301) {
+        const rawCdnUrl = zipReq.headers['location'] || '';
+        // Transform legacy.zip/{branch} → zip/refs/heads/{branch}
+        const legacyMatch = rawCdnUrl.match(
+          /^(https:\/\/codeload\.github\.com\/[^/]+\/[^/]+\/)legacy\.zip\/([^?]+)(\?.*)?$/
+        );
+        const cdnUrl = legacyMatch
+          ? `${legacyMatch[1]}zip/refs/heads/${legacyMatch[2]}${legacyMatch[3] || ''}`
+          : rawCdnUrl;
+
+        if (cdnUrl) {
+          const cdnRes = await axios.get(cdnUrl, {
+            headers: { Authorization: `Bearer ${token}`, 'User-Agent': 'SentinelAI-Admin/1.0' },
+            responseType: 'arraybuffer',
+            maxRedirects: 5,
+            timeout: 60_000,
+            validateStatus: s => s < 500,
+          });
+
+          const buf = Buffer.from(cdnRes.data);
+          // Validate ZIP magic bytes: PK = 0x50 0x4B
+          if (cdnRes.status === 200 && buf[0] === 0x50 && buf[1] === 0x4B) {
+            zipBuffer = buf;
+          }
+        }
       }
-    );
-    if (zipReq.status === 404) {
-      res.status(404).json({ error: `No archive for ${owner}/${repo}@${branch}.` }); return;
-    }
-    if (zipReq.status === 401 || zipReq.status === 403) {
-      res.status(zipReq.status).json({ error: 'GitHub token expired or lacks access.' }); return;
-    }
+    } catch { /* fall through to Strategy 2 */ }
 
-    const rawCdnUrl = zipReq.headers['location'];
-    if (!rawCdnUrl) {
-      res.status(500).json({ error: 'GitHub did not return a CDN redirect URL.' }); return;
-    }
+    // ── Strategy 2: Contents API → build ZIP with JSZip ───────────────────
+    if (!zipBuffer) {
+      const JSZip = (await import('jszip')).default;
+      const zip = new JSZip();
+      const rootFolder = zip.folder(`${owner}-${repo}-${branch}`)!;
 
-    // Transform: codeload.github.com/{owner}/{repo}/legacy.zip/{branch}
-    //        → : codeload.github.com/{owner}/{repo}/zip/refs/heads/{branch}
-    // legacy.zip/{branch} format 404s for many repos; zip/refs/heads/ always works.
-    // Preserve any ?token=xxx query params (present for private repos).
-    let cdnUrl = rawCdnUrl;
-    const legacyMatch = rawCdnUrl.match(/^(https:\/\/codeload\.github\.com\/[^/]+\/[^/]+\/)legacy\.zip\/([^?]+)(\?.*)?$/);
-    if (legacyMatch) {
-      const [, base, ref, query] = legacyMatch;
-      cdnUrl = `${base}zip/refs/heads/${ref}${query || ''}`;
-    }
+      // Fetch recursive file tree
+      const treeRes = await axios.get(
+        `https://api.github.com/repos/${owner}/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+        { headers: ghHeaders, timeout: 30_000, validateStatus: s => s < 500 }
+      );
 
-    // ── Step 3: Download from CDN ──────────────────────────────────────────
-    // For private repos the CDN URL has ?token=xxx embedded — no auth header needed.
-    // For public repos the CDN serves without auth.
-    const cdnRes = await axios.get(cdnUrl, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'User-Agent': 'SentinelAI-Admin/1.0',
-        Accept: 'application/zip, application/octet-stream, */*',
-      },
-      responseType: 'arraybuffer',
-      maxRedirects: 5,
-      timeout: 120_000,
-      validateStatus: s => s < 500,
-    });
+      if (treeRes.status === 404) {
+        res.status(404).json({
+          error: `Branch "${branch}" not found in ${owner}/${repo}. The repository may be empty.`
+        }); return;
+      }
+      if (treeRes.status !== 200) {
+        res.status(treeRes.status).json({ error: 'Could not read repo file tree.' }); return;
+      }
 
-    if (cdnRes.status === 404) {
-      res.status(404).json({ error: `CDN 404: ${cdnUrl}` }); return;
-    }
-    if (cdnRes.status === 401 || cdnRes.status === 403) {
-      res.status(cdnRes.status).json({ error: 'CDN rejected token. User may need to re-login.' }); return;
-    }
+      const blobs = (treeRes.data.tree || []).filter((item: any) => item.type === 'blob');
+      if (blobs.length === 0) {
+        res.status(400).json({ error: `Repository ${owner}/${repo} is empty — nothing to download.` }); return;
+      }
 
-    // Validate ZIP magic bytes (PK header = 0x50 0x4B)
-    const buf = Buffer.from(cdnRes.data);
-    if (buf.length < 4 || buf[0] !== 0x50 || buf[1] !== 0x4B) {
-      const preview = buf.slice(0, 300).toString('utf8');
-      res.status(502).json({ error: 'CDN returned non-ZIP data.', cdnUrl, preview });
-      return;
+      // Fetch all blobs (batched to respect rate limits)
+      const BATCH = 20;
+      for (let i = 0; i < blobs.length; i += BATCH) {
+        const batch = blobs.slice(i, i + BATCH);
+        await Promise.all(batch.map(async (item: any) => {
+          try {
+            const blobRes = await axios.get(
+              `https://api.github.com/repos/${owner}/${repo}/git/blobs/${item.sha}`,
+              { headers: ghHeaders, timeout: 15_000, validateStatus: s => s < 500 }
+            );
+            if (blobRes.status === 200 && blobRes.data?.content) {
+              const content = Buffer.from(blobRes.data.content, 'base64');
+              rootFolder.file(item.path, content);
+            }
+          } catch { /* skip inaccessible files */ }
+        }));
+      }
+
+      zipBuffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
     }
 
     const filename = `${owner}-${repo}-${branch}.zip`;
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Content-Length', buf.byteLength.toString());
-    res.send(buf);
+    res.setHeader('Content-Length', zipBuffer.byteLength.toString());
+    res.send(zipBuffer);
 
   } catch (err: any) {
     if (!res.headersSent) res.status(500).json({ error: err.message });
