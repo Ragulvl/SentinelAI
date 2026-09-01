@@ -20,14 +20,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     checkAuth();
+
+    // Re-verify when user returns to the tab (catches stale cached role)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') checkAuth();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
 
   const checkAuth = async () => {
     try {
       const userData = await AuthService.verifyToken();
       if (userData?.isBanned) {
-        // Auto-logout banned users immediately
-        await AuthService.logout ? AuthService.logout() : AuthService.removeToken();
+        AuthService.removeToken();
         setUser(null);
       } else {
         setUser(userData);
