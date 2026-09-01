@@ -283,30 +283,34 @@ export default function PenetrationTestPage() {
       const data = JSON.parse((e as MessageEvent).data);
       const rep = data.report;
 
-      // Always show Phase 7 status — if aiLoopRoundsRun is undefined it means the AI
-      // loop was skipped (LLM API error / rate limit / keys exhausted after phases 3-6).
+      // Phase A: update terminal immediately (this render batch)
       if (rep.aiLoopRoundsRun !== undefined) {
         const exitLabel: Record<string, string> = {
           early_exit_no_new_findings: 'no new findings (clean target)',
-          max_rounds: 'max rounds reached',
+          cap_reached: 'max rounds reached',
           error: 'loop error — check logs',
         };
-        const newFindings = rep.results?.filter((r: any) => r.testName?.startsWith('[AI-Loop]')).length ?? 0;
+        const newFindings = rep.results?.filter((r: any) => r.aiEnhanced).length ?? 0;
         const exitMsg = exitLabel[rep.aiLoopExitReason] || rep.aiLoopExitReason || 'done';
         addLine(`▶ AI loop complete — ${rep.aiLoopRoundsRun} round(s) · ${exitMsg} · ${newFindings} new finding(s)`,
           newFindings > 0 ? 'hsl(35 90% 62%)' : 'hsl(210 80% 65%)');
       } else {
-        // Phase 7 was skipped (API rate limit after running phases 3-6, or no AI keys)
         addLine('▶ AI loop: skipped — LLM API unavailable (rate limit / key exhaustion)', 'hsl(0 0% 45%)');
       }
-
       addLine('', 'hsl(0 0% 18%)');
-      addLine(`\u2550\u2550 Scan Complete \u2550\u2550 ${rep.vulnerabilitiesFound} vulnerabilities, ${(rep.testsPerformed || total) - rep.vulnerabilitiesFound} passed`, rep.vulnerabilitiesFound > 0 ? '#ef4444' : 'hsl(145 60% 55%)');
+      addLine(`\u2550\u2550 Scan Complete \u2550\u2550 ${rep.vulnerabilitiesFound} ${rep.vulnerabilitiesFound === 1 ? 'vulnerability' : 'vulnerabilities'}, ${(rep.testsPerformed || total) - rep.vulnerabilitiesFound} passed`,
+        rep.vulnerabilitiesFound > 0 ? '#ef4444' : 'hsl(145 60% 55%)');
       setLivePhase('Complete \u2713');
       setLiveStats({ vulns: rep.vulnerabilitiesFound, passed: (rep.testsPerformed || total) - rep.vulnerabilitiesFound, total: rep.testsPerformed || total });
-      setReport(rep);
-      finish();
-      toast({ title: "Penetration Test Complete", description: `Found ${rep.vulnerabilitiesFound} vulnerabilities` });
+      es.close(); // close stream now — all data is in rep
+      scrollTerm();
+
+      // Phase B: render results panel 300 ms later so terminal completion is visible first
+      setTimeout(() => {
+        setReport(rep);
+        setTesting(false);
+        toast({ title: 'Penetration Test Complete', description: `Found ${rep.vulnerabilitiesFound} ${rep.vulnerabilitiesFound === 1 ? 'vulnerability' : 'vulnerabilities'}` });
+      }, 300);
     });
 
     es.addEventListener('error', (e: Event) => {
