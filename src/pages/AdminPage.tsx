@@ -186,9 +186,12 @@ function RepoModal({ userId, username, onClose }: { userId: string; username: st
     try {
       const token = localStorage.getItem('token') || '';
       // Step 1: Ask backend for the pre-signed GitHub CDN URL
-      const res = await fetch(`/api/admin/users/${userId}/repos/${repo.owner}/${repo.name}/download`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      // Include the default branch so GitHub's CDN URL contains a valid ref
+      const ref = encodeURIComponent(repo.defaultBranch || 'HEAD');
+      const res = await fetch(
+        `/api/admin/users/${userId}/repos/${repo.owner}/${repo.name}/download?ref=${ref}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `Failed (${res.status})`);
 

@@ -421,9 +421,10 @@ router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: R
     const { default: axios } = await import('axios');
 
     // Hit GitHub zipball endpoint — capture the 302 without following it.
-    // The Location header contains a pre-signed CDN URL that works without auth.
+    // Include the branch ref so CDN URL is valid (without ref → 404 on CDN)
+    const ref = encodeURIComponent((req.query.ref as string) || 'HEAD');
     const ghRes = await axios.get(
-      `https://api.github.com/repos/${owner}/${repo}/zipball`,
+      `https://api.github.com/repos/${owner}/${repo}/zipball/${ref}`,
       {
         headers: {
           Authorization: `Bearer ${token}`,
