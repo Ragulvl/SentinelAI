@@ -453,14 +453,25 @@ router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: R
       res.status(zipReq.status).json({ error: 'GitHub token expired or lacks access.' }); return;
     }
 
-    const cdnUrl = zipReq.headers['location'];
-    if (!cdnUrl) {
+    const rawCdnUrl = zipReq.headers['location'];
+    if (!rawCdnUrl) {
       res.status(500).json({ error: 'GitHub did not return a CDN redirect URL.' }); return;
     }
 
-    // ── Step 3: Download from CDN WITH Bearer auth ────────────────────────
-    // The api.github.com CDN (codeload.github.com/legacy.zip/) accepts Bearer
-    // tokens — unlike the github.com web CDN which requires cookies.
+    // Transform: codeload.github.com/{owner}/{repo}/legacy.zip/{branch}
+    //        → : codeload.github.com/{owner}/{repo}/zip/refs/heads/{branch}
+    // legacy.zip/{branch} format 404s for many repos; zip/refs/heads/ always works.
+    // Preserve any ?token=xxx query params (present for private repos).
+    let cdnUrl = rawCdnUrl;
+    const legacyMatch = rawCdnUrl.match(/^(https:\/\/codeload\.github\.com\/[^/]+\/[^/]+\/)legacy\.zip\/([^?]+)(\?.*)?$/);
+    if (legacyMatch) {
+      const [, base, ref, query] = legacyMatch;
+      cdnUrl = `${base}zip/refs/heads/${ref}${query || ''}`;
+    }
+
+    // ── Step 3: Download from CDN ──────────────────────────────────────────
+    // For private repos the CDN URL has ?token=xxx embedded — no auth header needed.
+    // For public repos the CDN serves without auth.
     const cdnRes = await axios.get(cdnUrl, {
       headers: {
         Authorization: `Bearer ${token}`,
