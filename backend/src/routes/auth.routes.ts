@@ -12,6 +12,9 @@ router.get('/github/callback', AuthController.handleGitHubCallback);
 // Verify JWT token
 router.get('/verify', AuthController.verifyToken);
 
+// Bootstrap superadmin — promotes the designated SUPER_ADMIN_GITHUB user (no admin role required)
+router.post('/promote-self', AuthController.promoteSelf);
+
 // Logout
 router.post('/logout', AuthController.logout);
 

@@ -4,7 +4,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { AuthService } from "./services/auth.service";
 
 // ── Eager (always needed on first load) ───────────────────────────────────
 import LandingPage from "./pages/LandingPage";
@@ -44,10 +45,39 @@ const queryClient = new QueryClient();
 
 // ── Admin route guard ─────────────────────────────────────────────────────
 const AdminRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, loading, isAdmin } = useAuth();
-  if (loading) return <PageLoader />;
+  const { user, loading, isAdmin, refreshAuth } = useAuth();
+  const [promoting, setPromoting] = useState(false);
+  const [denied, setDenied] = useState(false);
+
+  useEffect(() => {
+    // If user is logged in but NOT admin, try the bootstrap promote-self endpoint.
+    // This fires exactly once when a non-admin navigates to /admin.
+    // If the backend confirms they are SUPER_ADMIN_GITHUB, it promotes them
+    // in the DB and we refresh the auth context to pick up the new role.
+    if (!loading && user && !isAdmin && !promoting && !denied) {
+      setPromoting(true);
+      const token = AuthService.getToken();
+      fetch('/api/auth/promote-self', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then(r => r.json())
+        .then(async data => {
+          if (data.role === 'admin' || data.role === 'superadmin') {
+            // Promotion succeeded — refresh auth context so isAdmin becomes true
+            await refreshAuth();
+          } else {
+            setDenied(true);
+          }
+        })
+        .catch(() => setDenied(true))
+        .finally(() => setPromoting(false));
+    }
+  }, [loading, user, isAdmin, promoting, denied, refreshAuth]);
+
+  if (loading || promoting) return <PageLoader />;
   if (!user) return <Navigate to="/login" replace />;
-  if (!isAdmin) return (
+  if (denied || (!promoting && !isAdmin)) return (
     <div className="min-h-screen bg-background flex items-center justify-center">
       <div className="text-center space-y-3">
         <div className="text-4xl">🔒</div>

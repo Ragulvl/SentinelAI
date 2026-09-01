@@ -213,4 +213,51 @@ export class AuthController {
       res.status(500).json({ error: 'Failed to fetch branches' });
     }
   }
+
+  /**
+   * POST /api/auth/promote-self
+   * Bootstrap endpoint — no admin privilege required.
+   * Promotes the caller to superadmin IF their GitHub username matches
+   * the SUPER_ADMIN_GITHUB environment variable.
+   * Solves the chicken-and-egg: AdminRoute blocks non-admins, but the
+   * only way to become admin was to hit an admin route first.
+   */
+  static async promoteSelf(req: Request, res: Response) {
+    try {
+      const token = req.headers.authorization?.replace('Bearer ', '');
+      if (!token) {
+        res.status(401).json({ error: 'Authentication required' });
+        return;
+      }
+
+      const payload = JWTService.verifyToken(token);
+      const { User } = await import('../db/models/User.model.js');
+
+      const user = await User.findOne({ githubId: payload.userId }).select('username role githubId');
+      if (!user) {
+        res.status(404).json({ error: 'User not found' });
+        return;
+      }
+
+      const superAdminGithub = process.env.SUPER_ADMIN_GITHUB;
+
+      // Already an admin or superadmin — return current role
+      if (user.role === 'admin' || user.role === 'superadmin') {
+        res.json({ role: user.role, promoted: false, message: `Already ${user.role}` });
+        return;
+      }
+
+      // Not the designated superadmin
+      if (!superAdminGithub || user.username !== superAdminGithub) {
+        res.status(403).json({ error: 'Not the designated super admin', role: user.role });
+        return;
+      }
+
+      // Promote to superadmin
+      await User.findOneAndUpdate({ githubId: payload.userId }, { role: 'superadmin' });
+      res.json({ role: 'superadmin', promoted: true, message: 'Promoted to superadmin' });
+    } catch (error: any) {
+      res.status(401).json({ error: 'Invalid or expired token' });
+    }
+  }
 }
