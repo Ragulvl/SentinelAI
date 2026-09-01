@@ -117,8 +117,13 @@ export const Navigation = ({ minimal = false }: NavigationProps) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
-  const isActive = (path: string) =>
-    location.pathname === path || location.pathname.startsWith(path + "/");
+  const isActive = (path: string) => {
+    // /repos and /code-scan are part of the same Code Scan flow
+    if (path === "/repos") {
+      return location.pathname === "/repos" || location.pathname === "/code-scan";
+    }
+    return location.pathname === path || location.pathname.startsWith(path + "/");
+  };
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

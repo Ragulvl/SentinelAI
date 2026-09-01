@@ -13,6 +13,7 @@ import AuthCallback from "./pages/AuthCallback";
 
 // ── Lazy (loaded only when the route is visited) ──────────────────────────
 const RepoSelectPage             = lazy(() => import("./pages/RepoSelectPage"));
+const CodeScanPage               = lazy(() => import("./pages/CodeScanPage"));
 const ScanProgressPage           = lazy(() => import("./pages/ScanProgressPage"));
 const ResultsPage                = lazy(() => import("./pages/ResultsPage"));
 const EditorPage                 = lazy(() => import("./pages/EditorPage"));
@@ -56,6 +57,7 @@ const App = () => (
               <Route path="/login"              element={<LoginPage />} />
               <Route path="/auth/callback"      element={<AuthCallback />} />
               <Route path="/repos"              element={<RepoSelectPage />} />
+              <Route path="/code-scan"          element={<CodeScanPage />} />
               <Route path="/scan"               element={<ScanProgressPage />} />
               <Route path="/results"            element={<ResultsPage />} />
               <Route path="/editor"             element={<EditorPage />} />

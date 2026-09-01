@@ -10,7 +10,7 @@ export class GitHubAuthService {
     const params = new URLSearchParams({
       client_id: config.github.clientId,
       redirect_uri: config.github.callbackUrl,
-      scope: 'read:user user:email repo',
+      scope: 'read:user user:email repo read:org',
       state,
     });
 
@@ -84,19 +84,37 @@ export class GitHubAuthService {
 
   static async getUserRepositories(accessToken: string): Promise<any[]> {
     try {
-      const response = await axios.get(`${this.GITHUB_API_URL}/user/repos`, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          Accept: 'application/vnd.github.v3+json',
-        },
-        params: {
-          sort: 'updated',
-          per_page: 100,
-          affiliation: 'owner,collaborator,organization_member',
-        },
-      });
+      const allRepos: any[] = [];
+      let page = 1;
+      const PER_PAGE = 100;
 
-      return response.data.map((repo: any) => ({
+      // Paginate through all pages until GitHub returns < PER_PAGE results
+      while (true) {
+        const response = await axios.get(`${this.GITHUB_API_URL}/user/repos`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: 'application/vnd.github.v3+json',
+          },
+          params: {
+            sort: 'updated',
+            per_page: PER_PAGE,
+            page,
+            affiliation: 'owner,collaborator,organization_member',
+          },
+        });
+
+        const repos: any[] = response.data;
+        allRepos.push(...repos);
+
+        // If we got fewer than PER_PAGE results, this was the last page
+        if (repos.length < PER_PAGE) break;
+        page++;
+
+        // Safety cap — 2000 repos max (20 pages × 100)
+        if (page > 20) break;
+      }
+
+      return allRepos.map((repo: any) => ({
         id: repo.id.toString(),
         name: repo.name,
         fullName: repo.full_name,
