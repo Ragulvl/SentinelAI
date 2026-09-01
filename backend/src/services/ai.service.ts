@@ -1067,27 +1067,51 @@ Rules:
 
   // ── Private helpers ─────────────────────────────────────────────────────────
 
+  /** Returns true when every key across every provider has been rate-limited this session. */
+  static isRateLimited(): boolean {
+    const allExhausted = (rotator: APIKeyRotator) =>
+      rotator.keys.length > 0 &&
+      rotator.keys.every(k => (rotator.failureCount.get(k) ?? 0) >= this.MAX_FAILURES_BEFORE_SKIP);
+    return allExhausted(this.groqRotator) && allExhausted(this.geminiRotator);
+  }
+
   private static async callWithFallback(system: string, prompt: string): Promise<string> {
     const providers = [
       { name: 'Groq',   rotator: this.groqRotator,   call: (key: string) => this.callGroqRaw(system, prompt, key) },
       { name: 'Gemini', rotator: this.geminiRotator, call: (key: string) => this.callGeminiRaw(system, prompt, key) },
     ];
-    for (const provider of providers) {
-      if (provider.rotator.keys.length === 0) continue;
-      const maxAttempts = Math.min(provider.rotator.keys.length * 2, 3);
-      for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        const apiKey = this.getNextKey(provider.rotator);
-        if (!apiKey) break;
-        try {
-          const raw = await provider.call(apiKey);
-          this.markKeyAsSuccess(provider.rotator, apiKey);
-          return raw;
-        } catch (err: any) {
-          this.markKeyAsFailed(provider.rotator, apiKey);
-          if (err.response?.status !== 429) await this.sleep(500);
+
+    const tryProviders = async (): Promise<string | null> => {
+      for (const provider of providers) {
+        if (provider.rotator.keys.length === 0) continue;
+        const maxAttempts = Math.min(provider.rotator.keys.length * 2, 3);
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          const apiKey = this.getNextKey(provider.rotator);
+          if (!apiKey) break;
+          try {
+            const raw = await provider.call(apiKey);
+            this.markKeyAsSuccess(provider.rotator, apiKey);
+            return raw;
+          } catch (err: any) {
+            this.markKeyAsFailed(provider.rotator, apiKey);
+            if (err.response?.status !== 429) await this.sleep(500);
+          }
         }
       }
-    }
+      return null;
+    };
+
+    const result = await tryProviders();
+    if (result !== null) return result;
+
+    // All attempts failed — if they were rate-limit (429) errors, wait 5s and retry once.
+    // This handles the common case where phases 3-6 burn the per-minute quota and phase 7
+    // arrives just as the rate-limit window resets.
+    logger.warn('[AI] All providers failed on first pass — waiting 5s for rate-limit reset...');
+    await this.sleep(5000);
+    const retry = await tryProviders();
+    if (retry !== null) return retry;
+
     throw new Error('All AI providers failed');
   }
 

@@ -283,34 +283,26 @@ export default function PenetrationTestPage() {
       const data = JSON.parse((e as MessageEvent).data);
       const rep = data.report;
 
-      // Phase A: update terminal immediately (this render batch)
-      if (rep.aiLoopRoundsRun !== undefined) {
-        const exitLabel: Record<string, string> = {
-          early_exit_no_new_findings: 'no new findings (clean target)',
-          cap_reached: 'max rounds reached',
-          error: 'loop error — check logs',
-        };
-        const newFindings = rep.results?.filter((r: any) => r.aiEnhanced).length ?? 0;
-        const exitMsg = exitLabel[rep.aiLoopExitReason] || rep.aiLoopExitReason || 'done';
-        addLine(`▶ AI loop complete — ${rep.aiLoopRoundsRun} round(s) · ${exitMsg} · ${newFindings} new finding(s)`,
-          newFindings > 0 ? 'hsl(35 90% 62%)' : 'hsl(210 80% 65%)');
-      } else {
-        addLine('▶ AI loop: skipped — LLM API unavailable (rate limit / key exhaustion)', 'hsl(0 0% 45%)');
-      }
+      // Phase A: terminal completion (immediate render)
+      // NOTE: the backend sends a 'phase' event for AI loop status just before 'done',
+      // so we do NOT add another "AI loop complete" line here to avoid duplicates.
+      // We only add the final scan summary line.
       addLine('', 'hsl(0 0% 18%)');
-      addLine(`\u2550\u2550 Scan Complete \u2550\u2550 ${rep.vulnerabilitiesFound} ${rep.vulnerabilitiesFound === 1 ? 'vulnerability' : 'vulnerabilities'}, ${(rep.testsPerformed || total) - rep.vulnerabilitiesFound} passed`,
-        rep.vulnerabilitiesFound > 0 ? '#ef4444' : 'hsl(145 60% 55%)');
+      addLine(
+        `\u2550\u2550 Scan Complete \u2550\u2550 ${rep.vulnerabilitiesFound} ${rep.vulnerabilitiesFound === 1 ? 'vulnerability' : 'vulnerabilities'}, ${(rep.testsPerformed || total) - rep.vulnerabilitiesFound} passed`,
+        rep.vulnerabilitiesFound > 0 ? '#ef4444' : 'hsl(145 60% 55%)'
+      );
       setLivePhase('Complete \u2713');
       setLiveStats({ vulns: rep.vulnerabilitiesFound, passed: (rep.testsPerformed || total) - rep.vulnerabilitiesFound, total: rep.testsPerformed || total });
-      es.close(); // close stream now — all data is in rep
+      es.close();
       scrollTerm();
 
-      // Phase B: render results panel 300 ms later so terminal completion is visible first
+      // Phase B: render results panel 100ms later — just enough for terminal to paint first
       setTimeout(() => {
         setReport(rep);
         setTesting(false);
         toast({ title: 'Penetration Test Complete', description: `Found ${rep.vulnerabilitiesFound} ${rep.vulnerabilitiesFound === 1 ? 'vulnerability' : 'vulnerabilities'}` });
-      }, 300);
+      }, 100);
     });
 
     es.addEventListener('error', (e: Event) => {
