@@ -5,8 +5,7 @@
   "outputDirectory": "dist",
   "functions": {
     "dist/index.js": {
-      "maxDuration": 300,
-      "memory": 1024
+      "maxDuration": 300
     }
   },
   "rewrites": [
