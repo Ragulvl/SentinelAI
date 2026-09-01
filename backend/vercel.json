@@ -2,14 +2,14 @@
   "version": 2,
   "buildCommand": "npm run build",
   "installCommand": "npm ci",
-  "builds": [
-    {
-      "src": "dist/index.js",
-      "use": "@vercel/node",
-      "config": { "maxDuration": 300 }
+  "outputDirectory": "dist",
+  "functions": {
+    "dist/index.js": {
+      "maxDuration": 300,
+      "memory": 1024
     }
-  ],
-  "routes": [
-    { "src": "(.*)", "dest": "dist/index.js" }
+  },
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/dist/index.js" }
   ]
 }
