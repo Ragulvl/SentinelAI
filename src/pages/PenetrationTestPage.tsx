@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -53,6 +53,8 @@ export default function PenetrationTestPage() {
   const [checkingDomain, setCheckingDomain] = useState(true);
   const [verifiedDomainsList, setVerifiedDomainsList] = useState<string[]>([]);
   const [expandedFixes, setExpandedFixes] = useState<Set<number>>(new Set());
+  const [showDomainDropdown, setShowDomainDropdown] = useState(false);
+  const domainDropdownRef = useRef<HTMLDivElement>(null);
   const toggleFix = (i: number) => setExpandedFixes(prev => { const s = new Set(prev); s.has(i) ? s.delete(i) : s.add(i); return s; });
 
   // Live terminal state
@@ -87,6 +89,17 @@ export default function PenetrationTestPage() {
       })
       .catch(() => { setVerifiedDomainsList([]); })
       .finally(() => { setCheckingDomain(false); });
+  }, []);
+
+  // Close domain dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (domainDropdownRef.current && !domainDropdownRef.current.contains(e.target as Node)) {
+        setShowDomainDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
   }, []);
 
   // When URL changes, check synchronously against the cached list
@@ -418,7 +431,7 @@ export default function PenetrationTestPage() {
           {viewMode === "new" && !report && (
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
 
-              {/* â”€â”€ LEFT: Config + Terminal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+              {/* ——— LEFT: Config + Terminal —————————————————————————————— */}
               <div className="lg:col-span-3 space-y-4">
 
                 {/* Legal warning */}
@@ -426,7 +439,7 @@ export default function PenetrationTestPage() {
                   style={{ background: "hsl(0 84% 60% / 0.06)", border: "1px solid hsl(0 84% 60% / 0.2)" }}>
                   <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    <span className="text-foreground font-semibold">Active Auditing Mode ”” </span>
+                    <span className="text-foreground font-semibold">Active Auditing Mode \u201d\u201d </span>
                     Executes live injection, traversal, and authentication attacks.
                     Only test domains you own or have written authorization to audit.
                   </p>
@@ -450,9 +463,79 @@ export default function PenetrationTestPage() {
                     </button>
                   </div>
 
-                  {/* URL input */}
+                  {/* URL input — smart domain picker */}
                   <div>
-                    <label className="section-label block mb-2">Target URL</label>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="section-label">Target URL</label>
+                      {verifiedDomainsList.length > 0 && (
+                        <div className="relative" ref={domainDropdownRef}>
+                          <button
+                            onClick={() => setShowDomainDropdown(v => !v)}
+                            disabled={testing}
+                            className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md transition-all"
+                            style={{
+                              background: 'hsl(142 70% 45% / 0.08)',
+                              border: '1px solid hsl(142 70% 45% / 0.25)',
+                              color: 'hsl(142 70% 45%)',
+                            }}
+                          >
+                            <CheckCircle className="w-3 h-3" />
+                            <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                              {verifiedDomainsList.length} verified {verifiedDomainsList.length === 1 ? 'domain' : 'domains'}
+                            </span>
+                            <ChevronDown className={`w-3 h-3 transition-transform duration-150 ${showDomainDropdown ? 'rotate-180' : ''}`} />
+                          </button>
+
+                          {showDomainDropdown && (
+                            <div
+                              className="absolute right-0 top-full mt-1.5 z-50 overflow-hidden"
+                              style={{
+                                minWidth: 240,
+                                borderRadius: 'var(--radius-lg)',
+                                background: 'hsl(var(--popover))',
+                                border: '1px solid hsl(var(--border-active))',
+                                boxShadow: 'var(--shadow-xl)',
+                              }}
+                            >
+                              <div className="px-3 pt-2.5 pb-1">
+                                <span
+                                  className="text-[10px] uppercase tracking-widest"
+                                  style={{ fontFamily: "'JetBrains Mono', monospace", color: 'hsl(var(--muted-foreground))' }}
+                                >
+                                  Your verified domains
+                                </span>
+                              </div>
+                              <div className="p-1">
+                                {verifiedDomainsList.map(domain => (
+                                  <button
+                                    key={domain}
+                                    onClick={() => {
+                                      setUrl(`https://${domain}`);
+                                      setDomainVerified(true);
+                                      setShowDomainDropdown(false);
+                                    }}
+                                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors hover:bg-muted"
+                                  >
+                                    <span
+                                      className="w-1.5 h-1.5 rounded-full shrink-0"
+                                      style={{ background: 'hsl(142 70% 45%)' }}
+                                    />
+                                    <span
+                                      className="flex-1 text-xs truncate"
+                                      style={{ fontFamily: "'JetBrains Mono', monospace", color: 'hsl(var(--foreground))' }}
+                                    >
+                                      {domain}
+                                    </span>
+                                    <span className="text-[10px] shrink-0" style={{ color: 'hsl(142 70% 45%)' }}>&#x2713; verified</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
                     <div className="relative">
                       <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                       <input
@@ -473,7 +556,7 @@ export default function PenetrationTestPage() {
                       <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-lg"
                         style={{ background: "hsl(142 70% 45% / 0.08)", border: "1px solid hsl(142 70% 45% / 0.2)" }}>
                         <CheckCircle className="w-3.5 h-3.5 shrink-0" style={{ color: "hsl(142 70% 45%)" }} />
-                        <p className="text-xs font-medium" style={{ color: "hsl(142 70% 45%)" }}>Domain verified ”” ready to test</p>
+                        <p className="text-xs font-medium" style={{ color: "hsl(142 70% 45%)" }}>Domain verified &mdash; ready to test</p>
                       </div>
                     )}
                     {url.trim() && !checkingDomain && domainVerified === false && (
@@ -484,7 +567,7 @@ export default function PenetrationTestPage() {
                         <button onClick={() => navigate("/domain-verification")}
                           className="text-xs font-medium px-2 py-1 rounded-md transition-colors"
                           style={{ background: "hsl(0 84% 60% / 0.12)", color: "hsl(0 84% 60%)" }}>
-                          Verify â†’
+                          Verify &#x2192;
                         </button>
                       </div>
                     )}
