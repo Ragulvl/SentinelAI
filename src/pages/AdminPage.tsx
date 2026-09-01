@@ -1,6 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { PageLayout } from '@/components/PageLayout';
+import {
+  Users, ShieldCheck, BarChart3, Activity, Cpu, RefreshCw,
+  Ban, Trash2, ChevronRight, Search, Shield, Database,
+  Server, AlertTriangle, CheckCircle2, XCircle, Clock,
+  TrendingUp, Zap, Globe, Code2, Target, MemoryStick,
+} from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface AdminStats {
@@ -18,13 +25,10 @@ interface AdminUser {
 }
 interface Activity { type: string; icon: string; message: string; time: string; meta: any }
 
-const API = import.meta.env.VITE_API_URL || '';
-// Uses relative /api path — Vercel rewrites /api/* → sentinel-api-sigma.vercel.app/api/*
-
+// ── API Helper ─────────────────────────────────────────────────────────────
 const getToken = () => localStorage.getItem('token') || '';
-
 const apiFetch = async (path: string, opts?: RequestInit) => {
-  const r = await fetch(`${API}${path}`, {
+  const r = await fetch(path, {
     ...opts,
     headers: {
       'Content-Type': 'application/json',
@@ -32,59 +36,169 @@ const apiFetch = async (path: string, opts?: RequestInit) => {
       ...(opts?.headers || {}),
     },
   });
-  if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
   return r.json();
 };
 
-// ── Mini Components ─────────────────────────────────────────────────────────
-const KPICard = ({ label, value, sub, icon, color }: { label: string; value: string | number; sub?: string; icon: string; color: string }) => (
-  <div style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid rgba(255,255,255,0.08)`, borderRadius: 16, padding: '20px 24px', position: 'relative', overflow: 'hidden' }}>
-    <div style={{ position: 'absolute', top: 16, right: 16, fontSize: 28, opacity: 0.4 }}>{icon}</div>
-    <div style={{ color: '#94a3b8', fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>{label}</div>
-    <div style={{ fontSize: 32, fontWeight: 700, color: color, lineHeight: 1 }}>{typeof value === 'number' ? value.toLocaleString() : value}</div>
-    {sub && <div style={{ color: '#64748b', fontSize: 12, marginTop: 6 }}>{sub}</div>}
-  </div>
-);
+// ── Tiny helpers ───────────────────────────────────────────────────────────
+function timeSince(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+function fmtUptime(sec: number) {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  return `${h}h ${m}m`;
+}
 
-const Badge = ({ text, color }: { text: string; color: string }) => (
-  <span style={{ background: `${color}22`, color, border: `1px solid ${color}44`, borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>{text}</span>
-);
+// ── Sub-components ─────────────────────────────────────────────────────────
+const Pill = ({ label, color }: { label: string; color: 'lime' | 'red' | 'amber' | 'violet' | 'muted' }) => {
+  const map = {
+    lime:   'bg-[hsl(72_100%_50%/0.1)]   text-[hsl(72_100%_50%)]   border-[hsl(72_100%_50%/0.25)]',
+    red:    'bg-[hsl(358_75%_55%/0.1)]   text-[hsl(358_75%_60%)]   border-[hsl(358_75%_55%/0.25)]',
+    amber:  'bg-[hsl(35_80%_45%/0.12)]   text-[hsl(35_80%_60%)]    border-[hsl(35_80%_45%/0.25)]',
+    violet: 'bg-[hsl(258_90%_66%/0.1)]   text-[hsl(258_90%_70%)]   border-[hsl(258_90%_66%/0.25)]',
+    muted:  'bg-[hsl(240_4%_11%)]        text-muted-foreground      border-border',
+  };
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-widest uppercase border ${map[color]}`}>
+      {label}
+    </span>
+  );
+};
 
-const Spinner = () => (
-  <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
-    <div style={{ width: 36, height: 36, borderRadius: '50%', border: '3px solid rgba(99,102,241,0.2)', borderTopColor: '#6366f1', animation: 'spin 0.8s linear infinite' }} />
-  </div>
-);
+const RolePill = ({ role }: { role: string }) => {
+  if (role === 'superadmin') return <Pill label="SUPER" color="lime" />;
+  if (role === 'admin')      return <Pill label="ADMIN" color="violet" />;
+  return <Pill label="USER" color="muted" />;
+};
 
-// ── Main Admin Page ─────────────────────────────────────────────────────────
+function KPICard({ icon: Icon, label, value, sub, accent = false }: {
+  icon: any; label: string; value: string | number; sub?: string; accent?: boolean;
+}) {
+  return (
+    <div className="relative rounded-xl border border-border bg-card p-5 overflow-hidden group hover:border-[hsl(var(--accent)/0.35)] transition-colors duration-200">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-[11px] font-semibold tracking-widest uppercase text-muted-foreground mb-2">{label}</p>
+          <p className={`text-3xl font-black tabular-nums ${accent ? 'text-[hsl(var(--accent))]' : 'text-foreground'}`}>
+            {typeof value === 'number' ? value.toLocaleString() : value}
+          </p>
+          {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
+        </div>
+        <div className={`p-2.5 rounded-lg ${accent ? 'bg-[hsl(var(--accent)/0.1)]' : 'bg-muted'}`}>
+          <Icon size={18} className={accent ? 'text-[hsl(var(--accent))]' : 'text-muted-foreground'} />
+        </div>
+      </div>
+      {accent && (
+        <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[hsl(var(--accent)/0.4)] to-transparent" />
+      )}
+    </div>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 mb-3">
+      <div className="h-px flex-1 bg-border" />
+      <span className="text-[10px] font-bold tracking-[0.15em] uppercase text-muted-foreground px-2">{children}</span>
+      <div className="h-px flex-1 bg-border" />
+    </div>
+  );
+}
+
+function MiniChart({ title, data, color }: { title: string; data: { _id: string; count: number }[]; color: string }) {
+  const max = Math.max(...data.map(d => d.count), 1);
+  return (
+    <div className="rounded-xl border border-border bg-card p-5">
+      <p className="text-xs font-semibold text-muted-foreground mb-4">{title}</p>
+      {data.length === 0 ? (
+        <div className="text-center text-muted-foreground text-xs py-6">No data this week</div>
+      ) : (
+        <div className="flex items-end gap-1.5 h-16">
+          {data.map(d => (
+            <div key={d._id} className="flex-1 flex flex-col items-center gap-1">
+              <span className="text-[9px] text-muted-foreground">{d.count}</span>
+              <div
+                className="w-full rounded-sm transition-all"
+                style={{
+                  height: Math.max(3, (d.count / max) * 44),
+                  background: `${color}`,
+                  opacity: 0.7 + (d.count / max) * 0.3,
+                }}
+              />
+              <span className="text-[9px] text-muted-foreground/60 truncate w-full text-center">{d._id.slice(5)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InfoCard({ title, icon: Icon, items }: { title: string; icon: any; items: [string, React.ReactNode][] }) {
+  return (
+    <div className="rounded-xl border border-border bg-card p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <Icon size={15} className="text-[hsl(var(--accent))]" />
+        <span className="text-sm font-semibold text-foreground">{title}</span>
+      </div>
+      <div className="space-y-2.5">
+        {items.map(([k, v]) => (
+          <div key={k} className="flex justify-between items-center py-1.5 border-b border-border/50 last:border-0">
+            <span className="text-xs text-muted-foreground">{k}</span>
+            <span className="text-xs font-medium text-foreground text-right max-w-[55%] break-all">{v}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Tab definitions ────────────────────────────────────────────────────────
+const TABS = [
+  { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+  { id: 'users',     label: 'Users',     icon: Users },
+  { id: 'scans',     label: 'Scans',     icon: ShieldCheck },
+  { id: 'activity',  label: 'Activity',  icon: Activity },
+  { id: 'system',    label: 'System',    icon: Cpu },
+] as const;
+type TabId = typeof TABS[number]['id'];
+
+// ── Main Component ─────────────────────────────────────────────────────────
 export default function AdminPage() {
-  const { user, loading: authLoading, isAdmin, isSuperAdmin } = useAuth();
+  const { user, loading: authLoading, isSuperAdmin } = useAuth();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<'dashboard' | 'users' | 'scans' | 'activity' | 'system'>('dashboard');
-  const [stats, setStats] = useState<AdminStats | null>(null);
-  const [users, setUsers] = useState<AdminUser[]>([]);
-  const [userTotal, setUserTotal] = useState(0);
-  const [userPage, setUserPage] = useState(1);
+
+  const [tab, setTab]               = useState<TabId>('dashboard');
+  const [stats, setStats]           = useState<AdminStats | null>(null);
+  const [users, setUsers]           = useState<AdminUser[]>([]);
+  const [userTotal, setUserTotal]   = useState(0);
+  const [userPage, setUserPage]     = useState(1);
   const [userSearch, setUserSearch] = useState('');
-  const [activity, setActivity] = useState<Activity[]>([]);
-  const [system, setSystem] = useState<any>(null);
-  const [scans, setScans] = useState<any[]>([]);
-  const [scanTotal, setScanTotal] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
-  const [confirmModal, setConfirmModal] = useState<{ msg: string; onConfirm: () => void } | null>(null);
+  const [activity, setActivity]     = useState<Activity[]>([]);
+  const [system, setSystem]         = useState<any>(null);
+  const [scans, setScans]           = useState<any[]>([]);
+  const [scanTotal, setScanTotal]   = useState(0);
+  const [loading, setLoading]       = useState(false);
+  const [toast, setToast]           = useState<{ msg: string; ok: boolean } | null>(null);
+  const [confirm, setConfirm]       = useState<{ msg: string; onConfirm: () => void } | null>(null);
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok });
     setTimeout(() => setToast(null), 3500);
   };
 
-  // Note: AdminRoute in App.tsx handles all role-based access control.
-  // This guard only handles unauthenticated users (token expired etc.)
   useEffect(() => {
     if (!authLoading && !user) navigate('/login');
   }, [authLoading, user, navigate]);
 
+  // ── Loaders ──
   const loadStats = useCallback(async () => {
     setLoading(true);
     try { setStats(await apiFetch('/api/admin/stats')); }
@@ -95,8 +209,8 @@ export default function AdminPage() {
   const loadUsers = useCallback(async (page = 1, search = '') => {
     setLoading(true);
     try {
-      const data = await apiFetch(`/api/admin/users?page=${page}&limit=20&search=${encodeURIComponent(search)}`);
-      setUsers(data.users); setUserTotal(data.total); setUserPage(page);
+      const d = await apiFetch(`/api/admin/users?page=${page}&limit=20&search=${encodeURIComponent(search)}`);
+      setUsers(d.users); setUserTotal(d.total); setUserPage(page);
     } catch (e: any) { showToast(e.message, false); }
     finally { setLoading(false); }
   }, []);
@@ -126,16 +240,17 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (tab === 'dashboard') loadStats();
-    else if (tab === 'users') loadUsers();
+    else if (tab === 'users')    loadUsers();
     else if (tab === 'activity') loadActivity();
-    else if (tab === 'system') loadSystem();
-    else if (tab === 'scans') loadScans();
+    else if (tab === 'system')   loadSystem();
+    else if (tab === 'scans')    loadScans();
   }, [tab]);
 
+  // ── Actions ──
   const updateRole = async (userId: string, role: string) => {
     try {
       await apiFetch(`/api/admin/users/${userId}/role`, { method: 'PATCH', body: JSON.stringify({ role }) });
-      showToast(`Role updated to ${role}`);
+      showToast(`Role updated → ${role}`);
       loadUsers(userPage, userSearch);
     } catch (e: any) { showToast(e.message, false); }
   };
@@ -149,354 +264,412 @@ export default function AdminPage() {
   };
 
   const deleteUser = (userId: string, username: string) => {
-    setConfirmModal({
-      msg: `Permanently delete user @${username} and ALL their data? This cannot be undone.`,
+    setConfirm({
+      msg: `Permanently delete @${username} and ALL their data? This cannot be undone.`,
       onConfirm: async () => {
-        setConfirmModal(null);
+        setConfirm(null);
         try {
           await apiFetch(`/api/admin/users/${userId}`, { method: 'DELETE' });
-          showToast(`User @${username} deleted`);
+          showToast(`@${username} deleted`);
           loadUsers(userPage, userSearch);
         } catch (e: any) { showToast(e.message, false); }
-      }
+      },
     });
   };
 
-  const roleColor = (r: string) => r === 'superadmin' ? '#f59e0b' : r === 'admin' ? '#6366f1' : '#64748b';
-  const fmtTime = (t: number) => { const h = Math.floor(t / 3600); const m = Math.floor((t % 3600) / 60); return `${h}h ${m}m`; };
-
-  const TABS = [
-    { id: 'dashboard', label: '📊 Dashboard' },
-    { id: 'users', label: '👥 Users' },
-    { id: 'scans', label: '🔍 Scans' },
-    { id: 'activity', label: '📋 Activity' },
-    { id: 'system', label: '⚙️ System' },
-  ] as const;
+  const scanTypeColor = (t: string) =>
+    t === 'pentest' ? 'amber' : t === 'loadtest' ? 'red' : t === 'website' ? 'violet' : 'lime';
 
   return (
-    <div style={{ minHeight: '100vh', background: 'hsl(224 71% 4%)', color: '#e2e8f0', fontFamily: "'Inter', sans-serif" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes slideIn { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
-        button { cursor: pointer; border: none; outline: none; font-family: inherit; }
-        input { font-family: inherit; outline: none; }
-        table { border-collapse: collapse; width: 100%; }
-        th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.06); }
-        th { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #64748b; }
-        td { font-size: 13px; color: #94a3b8; }
-        tr:hover td { background: rgba(255,255,255,0.02); }
-        .card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); border-radius: 16px; padding: 24px; }
-      `}</style>
-
-      {/* Confirm Modal */}
-      {confirmModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fadeIn 0.2s' }}>
-          <div style={{ background: 'hsl(224 50% 8%)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 20, padding: 32, maxWidth: 420, width: '90%', animation: 'slideIn 0.2s' }}>
-            <div style={{ fontSize: 40, marginBottom: 16 }}>⚠️</div>
-            <p style={{ color: '#e2e8f0', marginBottom: 24, lineHeight: 1.6 }}>{confirmModal.msg}</p>
-            <div style={{ display: 'flex', gap: 12 }}>
-              <button onClick={() => setConfirmModal(null)} style={{ flex: 1, padding: '10px', background: 'rgba(255,255,255,0.06)', color: '#94a3b8', borderRadius: 10, fontWeight: 600 }}>Cancel</button>
-              <button onClick={confirmModal.onConfirm} style={{ flex: 1, padding: '10px', background: 'rgba(239,68,68,0.2)', color: '#f87171', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 10, fontWeight: 600 }}>Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Toast */}
+    <PageLayout>
+      {/* ── Toast ── */}
       {toast && (
-        <div style={{ position: 'fixed', top: 24, right: 24, zIndex: 200, background: toast.ok ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)', border: `1px solid ${toast.ok ? 'rgba(16,185,129,0.4)' : 'rgba(239,68,68,0.4)'}`, borderRadius: 12, padding: '12px 20px', color: toast.ok ? '#34d399' : '#f87171', fontSize: 14, fontWeight: 600, animation: 'slideIn 0.3s', backdropFilter: 'blur(12px)' }}>
-          {toast.ok ? '✅' : '❌'} {toast.msg}
+        <div className={`fixed top-5 right-5 z-[200] flex items-center gap-2.5 rounded-xl border px-4 py-3 text-sm font-semibold shadow-xl backdrop-blur-sm animate-in slide-in-from-top-2 duration-200
+          ${toast.ok
+            ? 'border-[hsl(142_45%_38%/0.4)] bg-[hsl(142_45%_38%/0.12)] text-[hsl(142_45%_55%)]'
+            : 'border-[hsl(358_75%_55%/0.4)] bg-[hsl(358_75%_55%/0.12)] text-[hsl(358_75%_60%)]'}`}>
+          {toast.ok ? <CheckCircle2 size={15} /> : <XCircle size={15} />}
+          {toast.msg}
         </div>
       )}
 
-      {/* Header */}
-      <div style={{ background: 'rgba(99,102,241,0.04)', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '0 32px' }}>
-        <div style={{ maxWidth: 1400, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 64 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🛡️</div>
+      {/* ── Confirm modal ── */}
+      {confirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="rounded-2xl border border-[hsl(358_75%_55%/0.3)] bg-card p-8 max-w-sm w-[90%] shadow-2xl animate-in slide-in-from-bottom-4 duration-200">
+            <AlertTriangle size={32} className="text-[hsl(358_75%_60%)] mb-4" />
+            <p className="text-sm text-foreground/90 leading-relaxed mb-6">{confirm.msg}</p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirm(null)}
+                className="flex-1 py-2.5 rounded-lg bg-muted text-muted-foreground text-sm font-semibold hover:bg-muted/80 transition-colors">
+                Cancel
+              </button>
+              <button onClick={confirm.onConfirm}
+                className="flex-1 py-2.5 rounded-lg border border-[hsl(358_75%_55%/0.4)] bg-[hsl(358_75%_55%/0.1)] text-[hsl(358_75%_60%)] text-sm font-semibold hover:bg-[hsl(358_75%_55%/0.18)] transition-colors">
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Page header ── */}
+      <div className="mb-6">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
+          <span>Platform</span>
+          <ChevronRight size={12} />
+          <span className="text-[hsl(var(--accent))] font-semibold">Admin Console</span>
+          {isSuperAdmin && (
+            <span className="ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-[hsl(var(--accent)/0.3)] bg-[hsl(var(--accent)/0.07)] text-[10px] font-bold tracking-widest text-[hsl(var(--accent))] uppercase">
+              <Shield size={9} /> SUPER
+            </span>
+          )}
+        </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-black text-foreground tracking-tight">Admin Console</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Platform control — logged in as <span className="text-foreground font-medium">@{user?.username}</span>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Tabs ── */}
+      <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto pb-px">
+        {TABS.map(t => {
+          const Icon = t.icon;
+          const active = tab === t.id;
+          return (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold whitespace-nowrap border-b-2 transition-all duration-150 -mb-px
+                ${active
+                  ? 'border-[hsl(var(--accent))] text-[hsl(var(--accent))]'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'}`}>
+              <Icon size={13} />
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── DASHBOARD ─────────────────────────────────────────────────── */}
+      {tab === 'dashboard' && (
+        <div className="animate-in fade-in duration-200">
+          <div className="flex items-center justify-between mb-5">
             <div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#e2e8f0' }}>SentinelAI</div>
-              <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600, letterSpacing: '0.1em' }}>SUPER ADMIN</div>
+              <h2 className="text-base font-bold text-foreground">Platform Overview</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Real-time statistics and health</p>
             </div>
+            <button onClick={loadStats}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-lg border border-border bg-muted text-xs font-semibold text-muted-foreground hover:text-foreground hover:border-[hsl(var(--accent)/0.4)] transition-colors">
+              <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Refresh
+            </button>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <Badge text={`@${user?.username || '...'}`} color="#6366f1" />
-            <button onClick={() => navigate('/')} style={{ background: 'rgba(255,255,255,0.05)', color: '#94a3b8', padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, border: '1px solid rgba(255,255,255,0.08)' }}>← Back to App</button>
-          </div>
-        </div>
-      </div>
 
-      {/* Tabs */}
-      <div style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '0 32px', background: 'rgba(0,0,0,0.2)' }}>
-        <div style={{ maxWidth: 1400, margin: '0 auto', display: 'flex', gap: 4 }}>
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: '14px 18px', fontSize: 13, fontWeight: 600, color: tab === t.id ? '#6366f1' : '#64748b', background: 'transparent', borderBottom: `2px solid ${tab === t.id ? '#6366f1' : 'transparent'}`, transition: 'all 0.15s', marginBottom: -1 }}>{t.label}</button>
-          ))}
-        </div>
-      </div>
-
-      {/* Content */}
-      <div style={{ maxWidth: 1400, margin: '0 auto', padding: '32px' }}>
-
-        {/* ── DASHBOARD ─────────────────────────────────────────────────────── */}
-        {tab === 'dashboard' && (
-          <div style={{ animation: 'fadeIn 0.3s' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
+          {loading && !stats ? (
+            <div className="flex justify-center py-20">
+              <div className="w-8 h-8 rounded-full border-2 border-border border-t-[hsl(var(--accent))] animate-spin" />
+            </div>
+          ) : stats ? (
+            <div className="space-y-6">
               <div>
-                <h1 style={{ fontSize: 26, fontWeight: 800, color: '#f1f5f9' }}>Dashboard Overview</h1>
-                <p style={{ color: '#64748b', fontSize: 14, marginTop: 4 }}>Platform statistics and real-time health</p>
+                <SectionLabel>Users</SectionLabel>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <KPICard icon={Users}      label="Total Users"        value={stats.users.total}       sub={`+${stats.users.today} today`}  accent />
+                  <KPICard icon={TrendingUp} label="Active This Month"  value={stats.users.activeMonth} sub={`+${stats.users.week} this week`} />
+                  <KPICard icon={ShieldCheck} label="Admins"            value={stats.users.admins} />
+                  <KPICard icon={Ban}         label="Banned"            value={stats.users.banned} />
+                </div>
               </div>
-              <button onClick={loadStats} style={{ background: 'rgba(99,102,241,0.15)', color: '#6366f1', padding: '9px 18px', borderRadius: 10, fontSize: 13, fontWeight: 600, border: '1px solid rgba(99,102,241,0.3)' }}>↻ Refresh</button>
+              <div>
+                <SectionLabel>Scan Activity</SectionLabel>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <KPICard icon={Code2}   label="Code Scans"   value={stats.scans.code.total}    sub={`+${stats.scans.code.today} today`}    accent />
+                  <KPICard icon={Target}  label="Pen Tests"    value={stats.scans.pentest.total} sub={`+${stats.scans.pentest.today} today`} />
+                  <KPICard icon={Globe}   label="Web Scans"    value={stats.scans.website.total} sub={`+${stats.scans.website.today} today`} />
+                  <KPICard icon={Zap}     label="Load Tests"   value={stats.scans.loadtest.total} />
+                </div>
+              </div>
+              <div>
+                <SectionLabel>Infrastructure</SectionLabel>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <KPICard icon={Database}    label="DB Status"  value={stats.system.dbStatus.toUpperCase()} accent={stats.system.dbStatus === 'connected'} />
+                  <KPICard icon={MemoryStick} label="Memory"     value={`${stats.system.memoryMB} MB`} />
+                  <KPICard icon={Clock}       label="Uptime"     value={fmtUptime(stats.system.uptime)} />
+                  <KPICard icon={Activity}    label="Monitors"   value={stats.monitoring.activeSites} />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <MiniChart title="User Growth — 7 days" data={stats.charts.userGrowth}  color="hsl(72,100%,50%)" />
+                <MiniChart title="Scan Activity — 7 days" data={stats.charts.scanActivity} color="hsl(142,45%,45%)" />
+              </div>
             </div>
+          ) : (
+            <div className="rounded-xl border border-border bg-card p-10 text-center">
+              <p className="text-muted-foreground text-sm">Failed to load stats.</p>
+              <button onClick={loadStats} className="mt-3 text-xs text-[hsl(var(--accent))] font-semibold hover:underline">Retry</button>
+            </div>
+          )}
+        </div>
+      )}
 
-            {loading ? <Spinner /> : stats ? (
-              <>
-                {/* User KPIs */}
-                <div style={{ marginBottom: 12, fontSize: 12, fontWeight: 700, color: '#6366f1', letterSpacing: '0.1em', textTransform: 'uppercase' }}>👥 Users</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16, marginBottom: 28 }}>
-                  <KPICard label="Total Users" value={stats.users.total} sub={`+${stats.users.today} today`} icon="👥" color="#6366f1" />
-                  <KPICard label="Active This Month" value={stats.users.activeMonth} sub={`+${stats.users.week} this week`} icon="🔥" color="#f59e0b" />
-                  <KPICard label="Admins" value={stats.users.admins} icon="🛡️" color="#8b5cf6" />
-                  <KPICard label="Banned" value={stats.users.banned} icon="🚫" color="#ef4444" />
-                </div>
+      {/* ── USERS ─────────────────────────────────────────────────────── */}
+      {tab === 'users' && (
+        <div className="animate-in fade-in duration-200">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h2 className="text-base font-bold text-foreground">User Management</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">{userTotal.toLocaleString()} total users</p>
+            </div>
+            <div className="relative">
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={userSearch}
+                onChange={e => { setUserSearch(e.target.value); loadUsers(1, e.target.value); }}
+                placeholder="Search users..."
+                className="pl-8 pr-3 py-2 rounded-lg border border-border bg-muted text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-[hsl(var(--accent)/0.5)] w-48 transition-colors"
+              />
+            </div>
+          </div>
 
-                {/* Scan KPIs */}
-                <div style={{ marginBottom: 12, fontSize: 12, fontWeight: 700, color: '#10b981', letterSpacing: '0.1em', textTransform: 'uppercase' }}>🔍 Scans</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16, marginBottom: 28 }}>
-                  <KPICard label="Code Scans" value={stats.scans.code.total} sub={`+${stats.scans.code.today} today`} icon="💻" color="#10b981" />
-                  <KPICard label="Pen Tests" value={stats.scans.pentest.total} sub={`+${stats.scans.pentest.today} today`} icon="🔓" color="#f59e0b" />
-                  <KPICard label="Website Scans" value={stats.scans.website.total} sub={`+${stats.scans.website.today} today`} icon="🌐" color="#6366f1" />
-                  <KPICard label="Load Tests" value={stats.scans.loadtest.total} icon="⚡" color="#ec4899" />
-                </div>
-
-                {/* System / DB */}
-                <div style={{ marginBottom: 12, fontSize: 12, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.1em', textTransform: 'uppercase' }}>⚙️ System</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16, marginBottom: 28 }}>
-                  <KPICard label="DB Status" value={stats.system.dbStatus.toUpperCase()} icon="🗄️" color={stats.system.dbStatus === 'connected' ? '#10b981' : '#ef4444'} />
-                  <KPICard label="Memory" value={`${stats.system.memoryMB} MB`} icon="🧠" color="#8b5cf6" />
-                  <KPICard label="Uptime" value={fmtTime(stats.system.uptime)} icon="⏱️" color="#f59e0b" />
-                  <KPICard label="Active Monitors" value={stats.monitoring.activeSites} icon="📡" color="#10b981" />
-                </div>
-
-                {/* Charts */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-                  <MiniChart title="User Growth (7 days)" data={stats.charts.userGrowth} color="#6366f1" />
-                  <MiniChart title="Scan Activity (7 days)" data={stats.charts.scanActivity} color="#10b981" />
-                </div>
-              </>
+          <div className="rounded-xl border border-border bg-card overflow-hidden">
+            {loading ? (
+              <div className="flex justify-center py-16">
+                <div className="w-8 h-8 rounded-full border-2 border-border border-t-[hsl(var(--accent))] animate-spin" />
+              </div>
             ) : (
-              <div className="card" style={{ textAlign: 'center', color: '#64748b' }}>Failed to load stats. <button onClick={loadStats} style={{ color: '#6366f1', background: 'none', fontWeight: 600 }}>Retry</button></div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border">
+                      {['User', 'Role', 'Status', 'Scans', 'Logins', 'Joined', 'Last Active', 'Actions'].map(h => (
+                        <th key={h} className="px-4 py-3 text-left text-[10px] font-bold tracking-widest uppercase text-muted-foreground">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.map(u => (
+                      <tr key={u._id} className="border-b border-border/50 last:border-0 hover:bg-muted/40 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2.5">
+                            <img src={u.avatarUrl} alt="" className="w-7 h-7 rounded-full border border-border" />
+                            <div>
+                              <div className="font-semibold text-foreground text-xs">{u.name}</div>
+                              <div className="text-muted-foreground text-[10px]">@{u.username}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3"><RolePill role={u.role} /></td>
+                        <td className="px-4 py-3">
+                          {u.isBanned
+                            ? <Pill label="Banned" color="red" />
+                            : <Pill label="Active" color="lime" />}
+                        </td>
+                        <td className="px-4 py-3 font-semibold text-foreground">{u.scanCount}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{u.loginCount}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{new Date(u.createdAt).toLocaleDateString()}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{timeSince(u.lastActive)}</td>
+                        <td className="px-4 py-3">
+                          {u.role !== 'superadmin' ? (
+                            <div className="flex items-center gap-2">
+                              <select
+                                value={u.role}
+                                onChange={e => updateRole(u._id, e.target.value)}
+                                className="rounded-md border border-border bg-muted text-[10px] font-semibold text-foreground px-2 py-1 focus:outline-none focus:border-[hsl(var(--accent)/0.5)] cursor-pointer"
+                              >
+                                <option value="user">user</option>
+                                <option value="admin">admin</option>
+                                <option value="superadmin">superadmin</option>
+                              </select>
+                              <button
+                                onClick={() => banUser(u._id, !u.isBanned)}
+                                className={`p-1.5 rounded-md border transition-colors ${u.isBanned
+                                  ? 'border-[hsl(142_45%_38%/0.4)] bg-[hsl(142_45%_38%/0.1)] text-[hsl(142_45%_55%)] hover:bg-[hsl(142_45%_38%/0.18)]'
+                                  : 'border-[hsl(35_80%_45%/0.4)] bg-[hsl(35_80%_45%/0.1)] text-[hsl(35_80%_60%)] hover:bg-[hsl(35_80%_45%/0.18)]'}`}
+                                title={u.isBanned ? 'Unban user' : 'Ban user'}
+                              >
+                                <Ban size={12} />
+                              </button>
+                              <button
+                                onClick={() => deleteUser(u._id, u.username)}
+                                className="p-1.5 rounded-md border border-[hsl(358_75%_55%/0.3)] bg-[hsl(358_75%_55%/0.08)] text-[hsl(358_75%_60%)] hover:bg-[hsl(358_75%_55%/0.15)] transition-colors"
+                                title="Delete user"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-[10px]">Protected</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {users.length === 0 && !loading && (
+                      <tr><td colSpan={8} className="text-center py-12 text-muted-foreground text-xs">No users found</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
-        )}
 
-        {/* ── USERS ─────────────────────────────────────────────────────────── */}
-        {tab === 'users' && (
-          <div style={{ animation: 'fadeIn 0.3s' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-              <div>
-                <h1 style={{ fontSize: 24, fontWeight: 800, color: '#f1f5f9' }}>User Management</h1>
-                <p style={{ color: '#64748b', fontSize: 14, marginTop: 4 }}>{userTotal.toLocaleString()} total users</p>
-              </div>
-              <div style={{ display: 'flex', gap: 12 }}>
-                <input value={userSearch} onChange={e => { setUserSearch(e.target.value); loadUsers(1, e.target.value); }} placeholder="Search users..." style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '9px 16px', color: '#e2e8f0', fontSize: 13, width: 220 }} />
-              </div>
-            </div>
-
-            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-              {loading ? <Spinner /> : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>User</th><th>Role</th><th>Status</th><th>Scans</th><th>Logins</th><th>Joined</th><th>Last Active</th><th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {users.map(u => (
-                        <tr key={u._id}>
-                          <td>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                              <img src={u.avatarUrl} alt="" style={{ width: 32, height: 32, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.1)' }} />
-                              <div>
-                                <div style={{ color: '#e2e8f0', fontWeight: 600, fontSize: 13 }}>{u.name}</div>
-                                <div style={{ color: '#64748b', fontSize: 12 }}>@{u.username}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td><Badge text={u.role} color={roleColor(u.role)} /></td>
-                          <td><Badge text={u.isBanned ? 'Banned' : 'Active'} color={u.isBanned ? '#ef4444' : '#10b981'} /></td>
-                          <td style={{ color: '#e2e8f0', fontWeight: 600 }}>{u.scanCount}</td>
-                          <td>{u.loginCount}</td>
-                          <td>{new Date(u.createdAt).toLocaleDateString()}</td>
-                          <td style={{ color: '#475569' }}>{timeSince(u.lastActive)}</td>
-                          <td>
-                            <div style={{ display: 'flex', gap: 6 }}>
-                              {u.role !== 'superadmin' && (
-                                <>
-                                  <select value={u.role} onChange={e => updateRole(u._id, e.target.value)} style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 6, color: '#818cf8', padding: '4px 8px', fontSize: 12 }}>
-                                    <option value="user">user</option>
-                                    <option value="admin">admin</option>
-                                    <option value="superadmin">superadmin</option>
-                                  </select>
-                                  <button onClick={() => banUser(u._id, !u.isBanned)} style={{ background: u.isBanned ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)', color: u.isBanned ? '#34d399' : '#f59e0b', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 600 }}>
-                                    {u.isBanned ? 'Unban' : 'Ban'}
-                                  </button>
-                                  <button onClick={() => deleteUser(u._id, u.username)} style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 600 }}>Del</button>
-                                </>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            {/* Pagination */}
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 20 }}>
-              {Array.from({ length: Math.ceil(userTotal / 20) }, (_, i) => i + 1).slice(0, 10).map(p => (
-                <button key={p} onClick={() => loadUsers(p, userSearch)} style={{ padding: '7px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, background: p === userPage ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.04)', color: p === userPage ? '#6366f1' : '#64748b', border: `1px solid ${p === userPage ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.06)'}` }}>{p}</button>
+          {/* Pagination */}
+          {userTotal > 20 && (
+            <div className="flex justify-center gap-1.5 mt-4">
+              {Array.from({ length: Math.min(Math.ceil(userTotal / 20), 10) }, (_, i) => i + 1).map(p => (
+                <button key={p} onClick={() => loadUsers(p, userSearch)}
+                  className={`w-8 h-8 rounded-lg text-xs font-semibold border transition-colors
+                    ${p === userPage
+                      ? 'border-[hsl(var(--accent)/0.4)] bg-[hsl(var(--accent)/0.1)] text-[hsl(var(--accent))]'
+                      : 'border-border bg-muted text-muted-foreground hover:text-foreground'}`}>
+                  {p}
+                </button>
               ))}
             </div>
-          </div>
-        )}
-
-        {/* ── SCANS ─────────────────────────────────────────────────────────── */}
-        {tab === 'scans' && (
-          <div style={{ animation: 'fadeIn 0.3s' }}>
-            <div style={{ marginBottom: 24 }}>
-              <h1 style={{ fontSize: 24, fontWeight: 800, color: '#f1f5f9' }}>All Scans</h1>
-              <p style={{ color: '#64748b', fontSize: 14, marginTop: 4 }}>{scanTotal} total scans across all users</p>
-            </div>
-            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-              {loading ? <Spinner /> : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table>
-                    <thead><tr><th>Type</th><th>Target / Repo</th><th>Date</th><th>Details</th></tr></thead>
-                    <tbody>
-                      {scans.map((s, i) => (
-                        <tr key={i}>
-                          <td><Badge text={s._type} color={s._type === 'pentest' ? '#f59e0b' : s._type === 'website' ? '#6366f1' : s._type === 'loadtest' ? '#ec4899' : '#10b981'} /></td>
-                          <td style={{ color: '#e2e8f0', maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.url || s.repoFullName || s.targetUrl || '—'}</td>
-                          <td>{new Date(s.createdAt).toLocaleString()}</td>
-                          <td style={{ color: '#475569', fontSize: 12 }}>
-                            {s.vulnerabilitiesFound !== undefined && `${s.vulnerabilitiesFound} vulns`}
-                            {s.status && ` · ${s.status}`}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ── ACTIVITY ──────────────────────────────────────────────────────── */}
-        {tab === 'activity' && (
-          <div style={{ animation: 'fadeIn 0.3s' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-              <div>
-                <h1 style={{ fontSize: 24, fontWeight: 800, color: '#f1f5f9' }}>Activity Feed</h1>
-                <p style={{ color: '#64748b', fontSize: 14, marginTop: 4 }}>Last 7 days of platform activity</p>
-              </div>
-              <button onClick={loadActivity} style={{ background: 'rgba(99,102,241,0.15)', color: '#6366f1', padding: '9px 18px', borderRadius: 10, fontSize: 13, fontWeight: 600, border: '1px solid rgba(99,102,241,0.3)' }}>↻ Refresh</button>
-            </div>
-            {loading ? <Spinner /> : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {activity.map((a, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 20px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, animation: `slideIn 0.2s ${i * 0.03}s both` }}>
-                    <span style={{ fontSize: 22, flexShrink: 0 }}>{a.icon}</span>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ color: '#e2e8f0', fontSize: 13, fontWeight: 500 }}>{a.message}</div>
-                      {a.meta?.vulnerabilities !== undefined && <div style={{ color: '#f59e0b', fontSize: 12, marginTop: 2 }}>{a.meta.vulnerabilities} vulnerabilities found</div>}
-                    </div>
-                    <div style={{ color: '#475569', fontSize: 12, flexShrink: 0 }}>{timeSince(a.time)}</div>
-                  </div>
-                ))}
-                {activity.length === 0 && <div style={{ textAlign: 'center', color: '#64748b', padding: 60 }}>No recent activity</div>}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── SYSTEM ────────────────────────────────────────────────────────── */}
-        {tab === 'system' && (
-          <div style={{ animation: 'fadeIn 0.3s' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-              <div>
-                <h1 style={{ fontSize: 24, fontWeight: 800, color: '#f1f5f9' }}>System Health</h1>
-                <p style={{ color: '#64748b', fontSize: 14, marginTop: 4 }}>Server, database, and environment status</p>
-              </div>
-              <button onClick={loadSystem} style={{ background: 'rgba(99,102,241,0.15)', color: '#6366f1', padding: '9px 18px', borderRadius: 10, fontSize: 13, fontWeight: 600, border: '1px solid rgba(99,102,241,0.3)' }}>↻ Refresh</button>
-            </div>
-            {loading ? <Spinner /> : system && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 20 }}>
-                <InfoCard title="🟢 Node.js" items={[['Version', system.node.version], ['Uptime', fmtTime(system.node.uptime)], ['PID', system.node.pid]]} />
-                <InfoCard title="🧠 Memory" items={[['Heap Used', `${system.memory.heapUsedMB} MB`], ['Heap Total', `${system.memory.heapTotalMB} MB`], ['RSS', `${system.memory.rssMB} MB`], ['External', `${system.memory.externalMB} MB`]]} />
-                <InfoCard title="🗄️ Database" items={[['Status', system.database.state], ['Host', system.database.host || '—'], ['Name', system.database.name || '—'], ['Collections', system.database.collections ?? '—'], ['Data Size', system.database.dataGB ? `${system.database.dataGB} GB` : '—']]} />
-                <InfoCard title="⚙️ Environment" items={[['Node Env', system.env.nodeEnv || '—'], ['JWT Secret', system.env.hasJwtSecret ? '✅ Set' : '❌ Missing'], ['GitHub OAuth', system.env.hasGithubOAuth ? '✅ Set' : '❌ Missing'], ['Gemini API', system.env.hasGeminiKey ? '✅ Set' : '❌ Missing'], ['Telegram Bot', system.env.hasTelegramBot ? '✅ Set' : '⚠️ Not set'], ['Super Admin', system.env.superAdminGithub]]} />
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Helper Components ────────────────────────────────────────────────────────
-function InfoCard({ title, items }: { title: string; items: [string, string | number][] }) {
-  return (
-    <div className="card">
-      <div style={{ fontSize: 15, fontWeight: 700, color: '#e2e8f0', marginBottom: 16 }}>{title}</div>
-      {items.map(([k, v]) => (
-        <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-          <span style={{ color: '#64748b', fontSize: 13 }}>{k}</span>
-          <span style={{ color: '#e2e8f0', fontSize: 13, fontWeight: 500, maxWidth: '55%', textAlign: 'right', wordBreak: 'break-all' }}>{v}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function MiniChart({ title, data, color }: { title: string; data: { _id: string; count: number }[]; color: string }) {
-  const max = Math.max(...data.map(d => d.count), 1);
-  return (
-    <div className="card">
-      <div style={{ fontSize: 14, fontWeight: 600, color: '#94a3b8', marginBottom: 20 }}>{title}</div>
-      {data.length === 0 ? (
-        <div style={{ textAlign: 'center', color: '#475569', padding: '20px 0' }}>No data this week</div>
-      ) : (
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 80 }}>
-          {data.map(d => (
-            <div key={d._id} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-              <div style={{ fontSize: 10, color: '#64748b' }}>{d.count}</div>
-              <div style={{ width: '100%', background: `${color}22`, borderRadius: 4, position: 'relative', height: Math.max(4, (d.count / max) * 60), background: `linear-gradient(to top, ${color}44, ${color}22)`, border: `1px solid ${color}44` }} />
-              <div style={{ fontSize: 9, color: '#475569', whiteSpace: 'nowrap' }}>{d._id.slice(5)}</div>
-            </div>
-          ))}
+          )}
         </div>
       )}
-    </div>
-  );
-}
 
-function timeSince(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
+      {/* ── SCANS ─────────────────────────────────────────────────────── */}
+      {tab === 'scans' && (
+        <div className="animate-in fade-in duration-200">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h2 className="text-base font-bold text-foreground">All Scans</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">{scanTotal} total scans across all users</p>
+            </div>
+            <button onClick={() => loadScans()}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-lg border border-border bg-muted text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">
+              <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Refresh
+            </button>
+          </div>
+          <div className="rounded-xl border border-border bg-card overflow-hidden">
+            {loading ? (
+              <div className="flex justify-center py-16">
+                <div className="w-8 h-8 rounded-full border-2 border-border border-t-[hsl(var(--accent))] animate-spin" />
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border">
+                      {['Type', 'Target / Repo', 'Date', 'Details'].map(h => (
+                        <th key={h} className="px-4 py-3 text-left text-[10px] font-bold tracking-widest uppercase text-muted-foreground">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scans.map((s, i) => (
+                      <tr key={i} className="border-b border-border/50 last:border-0 hover:bg-muted/40 transition-colors">
+                        <td className="px-4 py-3"><Pill label={s._type} color={scanTypeColor(s._type) as any} /></td>
+                        <td className="px-4 py-3 text-foreground font-medium max-w-xs truncate">{s.url || s.repoFullName || s.targetUrl || '—'}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{new Date(s.createdAt).toLocaleString()}</td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {s.vulnerabilitiesFound !== undefined && `${s.vulnerabilitiesFound} vulns`}
+                          {s.status && ` · ${s.status}`}
+                        </td>
+                      </tr>
+                    ))}
+                    {scans.length === 0 && !loading && (
+                      <tr><td colSpan={4} className="text-center py-12 text-muted-foreground text-xs">No scans found</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── ACTIVITY ──────────────────────────────────────────────────── */}
+      {tab === 'activity' && (
+        <div className="animate-in fade-in duration-200">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h2 className="text-base font-bold text-foreground">Activity Feed</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Last 7 days of platform activity</p>
+            </div>
+            <button onClick={loadActivity}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-lg border border-border bg-muted text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">
+              <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Refresh
+            </button>
+          </div>
+          {loading ? (
+            <div className="flex justify-center py-16">
+              <div className="w-8 h-8 rounded-full border-2 border-border border-t-[hsl(var(--accent))] animate-spin" />
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {activity.map((a, i) => (
+                <div key={i} className="flex items-center gap-4 rounded-xl border border-border bg-card px-5 py-3.5 hover:border-[hsl(var(--accent)/0.2)] transition-colors">
+                  <span className="text-xl shrink-0">{a.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-foreground font-medium truncate">{a.message}</p>
+                    {a.meta?.vulnerabilities !== undefined && (
+                      <p className="text-[10px] text-[hsl(var(--accent))] mt-0.5">{a.meta.vulnerabilities} vulnerabilities found</p>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-muted-foreground shrink-0">{timeSince(a.time)}</span>
+                </div>
+              ))}
+              {activity.length === 0 && (
+                <div className="rounded-xl border border-border bg-card py-16 text-center text-muted-foreground text-xs">No recent activity</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── SYSTEM ────────────────────────────────────────────────────── */}
+      {tab === 'system' && (
+        <div className="animate-in fade-in duration-200">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h2 className="text-base font-bold text-foreground">System Health</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Server, database, and environment status</p>
+            </div>
+            <button onClick={loadSystem}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-lg border border-border bg-muted text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">
+              <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Refresh
+            </button>
+          </div>
+          {loading && !system ? (
+            <div className="flex justify-center py-16">
+              <div className="w-8 h-8 rounded-full border-2 border-border border-t-[hsl(var(--accent))] animate-spin" />
+            </div>
+          ) : system && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <InfoCard icon={Server} title="Node.js Runtime" items={[
+                ['Version', system.node?.version ?? '—'],
+                ['Uptime', fmtUptime(system.node?.uptime ?? 0)],
+                ['PID', system.node?.pid ?? '—'],
+              ]} />
+              <InfoCard icon={MemoryStick} title="Memory" items={[
+                ['Heap Used', `${system.memory?.heapUsedMB ?? '—'} MB`],
+                ['Heap Total', `${system.memory?.heapTotalMB ?? '—'} MB`],
+                ['RSS', `${system.memory?.rssMB ?? '—'} MB`],
+                ['External', `${system.memory?.externalMB ?? '—'} MB`],
+              ]} />
+              <InfoCard icon={Database} title="Database" items={[
+                ['Status', system.database?.state ?? '—'],
+                ['Host', system.database?.host ?? '—'],
+                ['Name', system.database?.name ?? '—'],
+                ['Collections', system.database?.collections ?? '—'],
+                ['Data Size', system.database?.dataGB ? `${system.database.dataGB} GB` : '—'],
+              ]} />
+              <InfoCard icon={ShieldCheck} title="Environment" items={[
+                ['Node Env', system.env?.nodeEnv ?? '—'],
+                ['JWT Secret', system.env?.hasJwtSecret ? '✅ Set' : '❌ Missing'],
+                ['GitHub OAuth', system.env?.hasGithubOAuth ? '✅ Set' : '❌ Missing'],
+                ['Gemini API', system.env?.hasGeminiKey ? '✅ Set' : '❌ Missing'],
+                ['Telegram Bot', system.env?.hasTelegramBot ? '✅ Set' : '⚠️ Not set'],
+                ['Super Admin', system.env?.superAdminGithub ?? '—'],
+              ]} />
+            </div>
+          )}
+        </div>
+      )}
+    </PageLayout>
+  );
 }
