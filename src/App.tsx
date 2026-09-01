@@ -44,43 +44,41 @@ const PageLoader = () => (
 const queryClient = new QueryClient();
 
 // ── Admin route guard ─────────────────────────────────────────────────────
+// Simplified: just re-verify auth on mount (gets fresh role from DB), then
+// try promote-self if needed. No complex state machine.
 const AdminRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading, isAdmin, refreshAuth } = useAuth();
-  const [promoting, setPromoting] = useState(false);
-  const [denied, setDenied] = useState(false);
+  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    // If user is logged in but NOT admin, try the bootstrap promote-self endpoint.
-    // This fires exactly once when a non-admin navigates to /admin.
-    // If the backend confirms they are SUPER_ADMIN_GITHUB, it promotes them
-    // in the DB and we refresh the auth context to pick up the new role.
-    if (!loading && user && !isAdmin && !promoting && !denied) {
-      setPromoting(true);
-      const token = AuthService.getToken();
-      fetch('/api/auth/promote-self', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then(r => r.json())
-        .then(async data => {
-          if (data.role === 'admin' || data.role === 'superadmin') {
-            // Promotion succeeded — refresh auth context so isAdmin becomes true
-            await refreshAuth();
-          } else {
-            setDenied(true);
-          }
-        })
-        .catch(() => setDenied(true))
-        .finally(() => setPromoting(false));
-    }
-  }, [loading, user, isAdmin, promoting, denied, refreshAuth]);
+    const bootstrap = async () => {
+      // 1. Always re-fetch role from DB on mount (clears any stale cache)
+      await refreshAuth();
 
-  if (loading || promoting) return <PageLoader />;
+      // 2. If still not admin after re-fetch, try promote-self
+      const token = AuthService.getToken();
+      if (token) {
+        const res = await fetch('/api/auth/promote-self', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        }).then(r => r.json()).catch(() => null);
+
+        // If promotion happened or user is already admin, re-fetch role
+        if (res?.role === 'admin' || res?.role === 'superadmin') {
+          await refreshAuth();
+        }
+      }
+      setChecking(false);
+    };
+    bootstrap();
+  }, []); // run once on mount
+
+  if (loading || checking) return <PageLoader />;
   if (!user) return <Navigate to="/login" replace />;
-  if (denied || (!promoting && !isAdmin)) return (
+  if (!isAdmin) return (
     <div className="min-h-screen bg-background flex items-center justify-center">
-      <div className="text-center space-y-3">
-        <div className="text-4xl">🔒</div>
+      <div className="text-center space-y-4">
+        <div className="text-5xl">🔒</div>
         <h1 className="text-lg font-semibold">Access Denied</h1>
         <p className="text-sm text-muted-foreground">You don't have admin privileges.</p>
         <a href="/" className="text-xs text-primary underline">Go back home</a>

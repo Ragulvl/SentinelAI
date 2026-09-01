@@ -79,11 +79,11 @@ export default function AdminPage() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  // Guard: redirect non-admins — AdminRoute in App.tsx handles this but keep as safety net
+  // Note: AdminRoute in App.tsx handles all role-based access control.
+  // This guard only handles unauthenticated users (token expired etc.)
   useEffect(() => {
     if (!authLoading && !user) navigate('/login');
-    if (!authLoading && user && !isAdmin) navigate('/');
-  }, [authLoading, user, isAdmin, navigate]);
+  }, [authLoading, user, navigate]);
 
   const loadStats = useCallback(async () => {
     setLoading(true);
