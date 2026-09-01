@@ -404,10 +404,11 @@ router.get('/users/:id/repos', async (req: Request, res: Response) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/admin/users/:id/repos/:owner/:repo/download
-//   Two-phase download to avoid Authorization header forwarding to CDN:
-//   Phase 1: Call GitHub API (with token) → get pre-signed CDN URL (302)
-//   Phase 2: Download from CDN URL (NO auth) → buffer → send to admin
-//   This avoids CDN rejecting Authorization headers it doesn't expect.
+//   Three-step process:
+//   1. Get repo metadata → live default branch name
+//   2. Get latest commit SHA for that branch (SHA-based URLs never 404)
+//   3. Phase A: GitHub zipball/{sha} → capture CDN URL (no auth forwarded)
+//      Phase B: Download from CDN without Authorization header
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: Response) => {
   try {
@@ -426,7 +427,7 @@ router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: R
       'User-Agent': 'SentinelAI-Admin/1.0',
     };
 
-    // ── Phase 1a: Get live default branch ─────────────────────────────────
+    // ── Step 1: Get live default branch ───────────────────────────────────
     let branch = (req.query.ref as string) || '';
     const meta = await axios.get(
       `https://api.github.com/repos/${owner}/${repo}`,
@@ -438,11 +439,28 @@ router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: R
     if (meta.data?.default_branch) branch = meta.data.default_branch;
     if (!branch) branch = 'HEAD';
 
-    // ── Phase 1b: Hit GitHub zipball endpoint — capture CDN redirect URL ──
-    // maxRedirects:0 captures the 302 Location without following it.
-    // This keeps Authorization ONLY on api.github.com (not forwarded to CDN).
+    // ── Step 2: Resolve branch → commit SHA ───────────────────────────────
+    // SHA-based CDN URLs are unambiguous and never 404 unlike branch-name URLs
+    let sha = branch;  // fallback to branch if SHA resolution fails
+    try {
+      const commitRes = await axios.get(
+        `https://api.github.com/repos/${owner}/${repo}/commits/${encodeURIComponent(branch)}`,
+        {
+          headers: { ...ghHeaders, Accept: 'application/vnd.github.sha' },
+          timeout: 15_000,
+          validateStatus: s => s < 500,
+        }
+      );
+      if (commitRes.status === 200 && typeof commitRes.data === 'string' && commitRes.data.length === 40) {
+        sha = commitRes.data.trim(); // GitHub returns bare SHA when Accept: application/vnd.github.sha
+      } else if (commitRes.status === 200 && commitRes.data?.sha) {
+        sha = commitRes.data.sha;
+      }
+    } catch { /* use branch name as fallback */ }
+
+    // ── Step 3a: Get CDN URL (capture 302, don't follow it) ───────────────
     const zipReq = await axios.get(
-      `https://api.github.com/repos/${owner}/${repo}/zipball/${encodeURIComponent(branch)}`,
+      `https://api.github.com/repos/${owner}/${repo}/zipball/${sha}`,
       {
         headers: ghHeaders,
         maxRedirects: 0,
@@ -452,7 +470,7 @@ router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: R
     );
 
     if (zipReq.status === 404) {
-      res.status(404).json({ error: `Branch "${branch}" has no content in ${owner}/${repo}.` }); return;
+      res.status(404).json({ error: `No archive available for ${owner}/${repo}@${branch}.` }); return;
     }
     if (zipReq.status === 401 || zipReq.status === 403) {
       res.status(zipReq.status).json({ error: 'GitHub token expired or lacks repo access.' }); return;
@@ -460,22 +478,20 @@ router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: R
 
     const cdnUrl = zipReq.headers['location'];
     if (!cdnUrl) {
-      res.status(500).json({ error: 'GitHub did not return a CDN URL.' }); return;
+      res.status(500).json({ error: 'GitHub did not return a download URL.' }); return;
     }
 
-    // ── Phase 2: Download ZIP from CDN — NO Authorization header ──────────
-    // GitHub CDN URL is pre-signed (token in query string) — sending an
-    // Authorization header causes CDN to reject the request.
+    // ── Step 3b: Download from CDN — NO Authorization header ──────────────
+    // GitHub CDN URLs are pre-signed; sending Authorization causes rejection
     const cdnRes = await axios.get(cdnUrl, {
       responseType: 'arraybuffer',
       maxRedirects: 5,
       timeout: 120_000,
       validateStatus: s => s < 500,
-      // Explicitly NO Authorization header
     });
 
     if (cdnRes.status === 404) {
-      res.status(404).json({ error: `CDN could not serve the archive. Branch "${branch}" may be empty.` }); return;
+      res.status(404).json({ error: `GitHub CDN 404 for archive. CDN URL: ${cdnUrl}` }); return;
     }
 
     const filename = `${owner}-${repo}-${branch}.zip`;
