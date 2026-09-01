@@ -404,9 +404,9 @@ router.get('/users/:id/repos', async (req: Request, res: Response) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/admin/users/:id/repos/:owner/:repo/download
-//   Uses github.com/archive/ URL (same as "Download ZIP" in GitHub web UI).
-//   This produces CDN path: zip/refs/heads/{branch} — always works.
-//   The api.github.com/zipball endpoint produces: legacy.zip/{branch} — 404s.
+//   Uses github.com/archive/refs/heads/{branch}.zip  (same as "Download ZIP")
+//   Follows all redirects with auth — github.com CDN does NOT pre-sign URLs
+//   like api.github.com/zipball does, so auth must carry through to CDN.
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: Response) => {
   try {
@@ -437,46 +437,46 @@ router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: R
     if (meta.data?.default_branch) branch = meta.data.default_branch;
     if (!branch) branch = 'main';
 
-    // ── Step 2: Capture CDN URL using github.com/archive/ (web UI format) ─
-    // This endpoint redirects to: codeload.github.com/{owner}/{repo}/zip/refs/heads/{branch}
-    // which is the CORRECT CDN format (NOT legacy.zip which 404s)
+    // ── Step 2: Download ZIP following all redirects ───────────────────────
+    // github.com/archive CDN does NOT embed auth tokens in the redirect URL
+    // (unlike api.github.com/zipball). So we must carry auth through the full
+    // redirect chain (github.com → codeload.github.com).
+    // axios sends the same headers to all redirect targets by default.
     const archiveUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/${encodeURIComponent(branch)}.zip`;
-    const archiveReq = await axios.get(archiveUrl, {
+
+    const archiveRes = await axios.get(archiveUrl, {
       headers: {
-        // github.com uses "token" auth format (not "Bearer")
-        Authorization: `token ${token}`,
+        Authorization: `token ${token}`,    // github.com web token format
         'User-Agent': 'SentinelAI-Admin/1.0',
+        Accept: 'application/zip, application/octet-stream, */*',
       },
-      maxRedirects: 0,   // capture the CDN redirect URL
-      validateStatus: s => s === 301 || s === 302 || (s >= 200 && s < 400),
-      timeout: 15_000,
-    });
-
-    if (archiveReq.status === 404) {
-      res.status(404).json({ error: `Branch "${branch}" not found in ${owner}/${repo}.` }); return;
-    }
-    if (archiveReq.status === 401 || archiveReq.status === 403) {
-      res.status(archiveReq.status).json({ error: 'GitHub token does not have access to this repo.' }); return;
-    }
-
-    // ── Step 3: Download ZIP from CDN — no auth needed (pre-signed URL) ───
-    const cdnUrl = archiveReq.headers['location'] || archiveUrl;
-    const cdnRes = await axios.get(cdnUrl, {
       responseType: 'arraybuffer',
-      maxRedirects: 5,
+      maxRedirects: 10,                     // follow all: github.com → CDN
       timeout: 120_000,
       validateStatus: s => s < 500,
     });
 
-    if (cdnRes.status === 404) {
-      res.status(404).json({ error: `Archive not found at CDN. URL: ${cdnUrl}` }); return;
+    if (archiveRes.status === 404) {
+      res.status(404).json({ error: `Branch "${branch}" not found in ${owner}/${repo}.` }); return;
+    }
+    if (archiveRes.status === 401 || archiveRes.status === 403) {
+      res.status(archiveRes.status).json({ error: 'GitHub token lacks access to this repo.' }); return;
+    }
+
+    // Verify we got actual ZIP bytes (first 2 bytes are 'PK' for valid ZIPs)
+    const buf = Buffer.from(archiveRes.data);
+    if (buf.length < 4 || buf[0] !== 0x50 || buf[1] !== 0x4B) {
+      // Not a valid ZIP — likely got HTML (login page). Log first 200 chars.
+      const preview = buf.slice(0, 200).toString('utf8');
+      res.status(502).json({ error: 'GitHub returned non-ZIP content. Token may lack access.', preview });
+      return;
     }
 
     const filename = `${owner}-${repo}-${branch}.zip`;
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Content-Length', cdnRes.data.byteLength.toString());
-    res.send(Buffer.from(cdnRes.data));
+    res.setHeader('Content-Length', buf.byteLength.toString());
+    res.send(buf);
 
   } catch (err: any) {
     if (!res.headersSent) res.status(500).json({ error: err.message });
