@@ -7,6 +7,8 @@ interface AuthContextType {
   login: () => Promise<void>;
   logout: () => Promise<void>;
   isAuthenticated: boolean;
+  isAdmin: boolean;
+  isSuperAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -22,7 +24,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const checkAuth = async () => {
     try {
       const userData = await AuthService.verifyToken();
-      setUser(userData);
+      if (userData?.isBanned) {
+        // Auto-logout banned users immediately
+        await AuthService.logout ? AuthService.logout() : AuthService.removeToken();
+        setUser(null);
+      } else {
+        setUser(userData);
+      }
     } catch (error) {
       console.error('Auth check failed:', error);
       setUser(null);
@@ -40,6 +48,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(null);
   };
 
+  const isAdmin      = user?.role === 'admin' || user?.role === 'superadmin';
+  const isSuperAdmin = user?.role === 'superadmin';
+
   return (
     <AuthContext.Provider
       value={{
@@ -48,6 +59,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         login,
         logout,
         isAuthenticated: !!user,
+        isAdmin,
+        isSuperAdmin,
       }}
     >
       {children}

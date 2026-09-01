@@ -13,6 +13,8 @@ export interface User {
   lastLogin?: string;
   lastActive?: string;
   loginCount?: number;
+  role?: 'user' | 'admin' | 'superadmin';
+  isBanned?: boolean;
 }
 
 export class AuthService {

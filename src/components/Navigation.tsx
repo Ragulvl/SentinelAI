@@ -111,7 +111,7 @@ interface NavigationProps {
 export const Navigation = ({ minimal = false }: NavigationProps) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, logout, isAdmin, isSuperAdmin } = useAuth();
   const [cmdOpen, setCmdOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -294,8 +294,14 @@ export const Navigation = ({ minimal = false }: NavigationProps) => {
               >
                 {user?.name || user?.username || "User"}
               </div>
-              <div className="text-[10px] truncate" style={{ color: "hsl(var(--muted-foreground))" }}>
-                {user?.email ? user.email.split("@")[0] + "@…" : "sentinalsec.vercel.app"}
+              <div className="text-[10px] truncate flex items-center gap-1.5" style={{ color: "hsl(var(--muted-foreground))" }}>
+                {user?.email ? user.email.split("@")[0] + "@\u2026" : "sentinalsec.vercel.app"}
+                {isSuperAdmin && (
+                  <span className="text-[8px] font-bold px-1 py-0 rounded" style={{ background: "#f59e0b22", color: "#f59e0b", border: "1px solid #f59e0b44" }}>SUPER</span>
+                )}
+                {!isSuperAdmin && isAdmin && (
+                  <span className="text-[8px] font-bold px-1 py-0 rounded" style={{ background: "#6366f122", color: "#6366f1", border: "1px solid #6366f144" }}>ADMIN</span>
+                )}
               </div>
             </div>
             <ChevronDown
@@ -326,8 +332,23 @@ export const Navigation = ({ minimal = false }: NavigationProps) => {
                     className="w-full flex items-center gap-2.5 px-3 py-2 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                   >
                     <User className="w-3.5 h-3.5" strokeWidth={1.5} />
-                    <span>Profile & Settings</span>
+                    <span>Profile &amp; Settings</span>
                   </button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => { navigate("/admin"); setUserMenuOpen(false); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded text-sm transition-colors"
+                      style={{ color: isSuperAdmin ? "#f59e0b" : "#6366f1" }}
+                      onMouseEnter={e => (e.currentTarget.style.background = "hsl(var(--muted))")}
+                      onMouseLeave={e => (e.currentTarget.style.background = "")}
+                    >
+                      <Shield className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      <span>Admin Panel</span>
+                      <span className="text-[8px] font-bold px-1 ml-auto rounded" style={{ background: isSuperAdmin ? "#f59e0b22" : "#6366f122", color: isSuperAdmin ? "#f59e0b" : "#6366f1" }}>
+                        {isSuperAdmin ? "SUPER" : "ADMIN"}
+                      </span>
+                    </button>
+                  )}
                 </div>
                 <div className="h-px mx-1" style={{ background: "hsl(var(--border))" }} />
                 <div className="p-1">

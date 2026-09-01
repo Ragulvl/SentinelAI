@@ -58,7 +58,7 @@ const Spinner = () => (
 
 // ── Main Admin Page ─────────────────────────────────────────────────────────
 export default function AdminPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, isAdmin, isSuperAdmin } = useAuth();
   const navigate = useNavigate();
   const [tab, setTab] = useState<'dashboard' | 'users' | 'scans' | 'activity' | 'system'>('dashboard');
   const [stats, setStats] = useState<AdminStats | null>(null);
@@ -79,10 +79,11 @@ export default function AdminPage() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  // Guard: redirect non-admins
+  // Guard: redirect non-admins — AdminRoute in App.tsx handles this but keep as safety net
   useEffect(() => {
     if (!authLoading && !user) navigate('/login');
-  }, [authLoading, user, navigate]);
+    if (!authLoading && user && !isAdmin) navigate('/');
+  }, [authLoading, user, isAdmin, navigate]);
 
   const loadStats = useCallback(async () => {
     setLoading(true);

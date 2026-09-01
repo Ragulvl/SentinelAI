@@ -2,8 +2,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "./contexts/AuthContext";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { lazy, Suspense } from "react";
 
 // ── Eager (always needed on first load) ───────────────────────────────────
@@ -42,6 +42,24 @@ const PageLoader = () => (
 
 const queryClient = new QueryClient();
 
+// ── Admin route guard ─────────────────────────────────────────────────────
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading, isAdmin } = useAuth();
+  if (loading) return <PageLoader />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!isAdmin) return (
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="text-center space-y-3">
+        <div className="text-4xl">🔒</div>
+        <h1 className="text-lg font-semibold">Access Denied</h1>
+        <p className="text-sm text-muted-foreground">You don't have admin privileges.</p>
+        <a href="/" className="text-xs text-primary underline">Go back home</a>
+      </div>
+    </div>
+  );
+  return <>{children}</>;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
@@ -66,7 +84,7 @@ const App = () => (
               <Route path="/scan-history"       element={<UnifiedHistoryPage />} />
               <Route path="/sandbox"            element={<SandboxScanPage />} />
               <Route path="/profile"            element={<ProfilePage />} />
-              <Route path="/admin"              element={<AdminPage />} />
+              <Route path="/admin"              element={<AdminRoute><AdminPage /></AdminRoute>} />
               <Route path="*"                   element={<NotFound />} />
             </Routes>
           </Suspense>

@@ -113,6 +113,8 @@ export class AuthController {
             lastLogin: user.lastLogin,
             lastActive: user.lastActive,
             loginCount: user.loginCount,
+            role: user.role,           // ← ADDED: required for role-based access control
+            isBanned: user.isBanned,   // ← ADDED: required to block banned users
           }
         });
       } else {
