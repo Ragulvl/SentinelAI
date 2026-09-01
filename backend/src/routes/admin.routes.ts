@@ -404,9 +404,9 @@ router.get('/users/:id/repos', async (req: Request, res: Response) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/admin/users/:id/repos/:owner/:repo/download
-//   Strategy 1 (fast): GitHub CDN via zipball redirect
-//   Strategy 2 (fallback): GitHub Contents API → build ZIP with JSZip
-//   This handles repos where CDN 404s (empty branch, legacy URL issues, etc.)
+//   Uses @octokit/rest — the official GitHub API client.
+//   Octokit handles the 302 redirect to CDN automatically and correctly.
+//   Falls back to git trees + JSZip if the repo has no CDN archive (empty).
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: Response) => {
   try {
@@ -417,118 +417,118 @@ router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: R
     if (!token) { res.status(400).json({ error: 'No stored GitHub token for this user.' }); return; }
 
     const { owner, repo } = req.params;
-    const { default: axios } = await import('axios');
-
-    const ghHeaders = {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/vnd.github.v3+json',
-      'User-Agent': 'SentinelAI-Admin/1.0',
-    };
+    const { Octokit } = await import('@octokit/rest');
+    const octokit = new Octokit({ auth: token });
 
     // ── Step 1: Get live default branch ───────────────────────────────────
-    let branch = (req.query.ref as string) || '';
-    const meta = await axios.get(
-      `https://api.github.com/repos/${owner}/${repo}`,
-      { headers: ghHeaders, timeout: 15_000, validateStatus: s => s < 500 }
-    );
-    if (meta.status === 404) {
-      res.status(404).json({ error: `Repo ${owner}/${repo} not found or inaccessible.` }); return;
+    let ref = (req.query.ref as string) || '';
+    try {
+      const { data: repoData } = await octokit.repos.get({ owner, repo });
+      if (repoData.default_branch) ref = repoData.default_branch;
+    } catch (e: any) {
+      if (e.status === 404) {
+        res.status(404).json({ error: `Repo ${owner}/${repo} not found or token lacks access.` }); return;
+      }
     }
-    if (meta.data?.default_branch) branch = meta.data.default_branch;
-    if (!branch) branch = 'HEAD';
+    if (!ref) ref = 'HEAD';
 
-    // ── Strategy 1: GitHub CDN zipball (fast, for repos with CDN access) ──
+    // ── Step 2: Download archive via Octokit (handles 302 CDN redirect) ───
+    // Octokit's downloadZipballArchive follows the redirect and returns
+    // the actual ZIP data. This is the official, documented approach.
     let zipBuffer: Buffer | null = null;
     try {
-      const zipReq = await axios.get(
-        `https://api.github.com/repos/${owner}/${repo}/zipball/${encodeURIComponent(branch)}`,
-        {
-          headers: ghHeaders,
-          maxRedirects: 0,
-          validateStatus: s => s === 301 || s === 302 || (s >= 200 && s < 400),
-          timeout: 15_000,
-        }
-      );
+      const archiveRes = await octokit.repos.downloadZipballArchive({
+        owner,
+        repo,
+        ref,
+        request: { parseSuccessResponseBody: false }, // get raw response
+      });
 
-      if (zipReq.status === 302 || zipReq.status === 301) {
-        const rawCdnUrl = zipReq.headers['location'] || '';
-        // Transform legacy.zip/{branch} → zip/refs/heads/{branch}
-        const legacyMatch = rawCdnUrl.match(
-          /^(https:\/\/codeload\.github\.com\/[^/]+\/[^/]+\/)legacy\.zip\/([^?]+)(\?.*)?$/
-        );
-        const cdnUrl = legacyMatch
-          ? `${legacyMatch[1]}zip/refs/heads/${legacyMatch[2]}${legacyMatch[3] || ''}`
-          : rawCdnUrl;
-
-        if (cdnUrl) {
-          const cdnRes = await axios.get(cdnUrl, {
-            headers: { Authorization: `Bearer ${token}`, 'User-Agent': 'SentinelAI-Admin/1.0' },
+      // Octokit returns the redirect-followed response; buffer the body
+      const response = archiveRes as any;
+      if (response?.data) {
+        // Data may be ArrayBuffer or a ReadableStream depending on environment
+        if (response.data instanceof ArrayBuffer) {
+          zipBuffer = Buffer.from(response.data);
+        } else if (Buffer.isBuffer(response.data)) {
+          zipBuffer = response.data;
+        } else if (typeof response.data?.arrayBuffer === 'function') {
+          zipBuffer = Buffer.from(await response.data.arrayBuffer());
+        } else if (response.url) {
+          // Octokit returned the redirect URL — fetch it directly
+          const { default: axios } = await import('axios');
+          const cdnRes = await axios.get(response.url, {
             responseType: 'arraybuffer',
+            timeout: 120_000,
             maxRedirects: 5,
-            timeout: 60_000,
-            validateStatus: s => s < 500,
+            // No Authorization — the CDN URL is pre-signed
           });
-
           const buf = Buffer.from(cdnRes.data);
-          // Validate ZIP magic bytes: PK = 0x50 0x4B
-          if (cdnRes.status === 200 && buf[0] === 0x50 && buf[1] === 0x4B) {
-            zipBuffer = buf;
-          }
+          if (buf[0] === 0x50 && buf[1] === 0x4B) zipBuffer = buf;
         }
       }
-    } catch { /* fall through to Strategy 2 */ }
 
-    // ── Strategy 2: Contents API → build ZIP with JSZip ───────────────────
+      // Validate ZIP magic bytes (PK signature)
+      if (zipBuffer && (zipBuffer[0] !== 0x50 || zipBuffer[1] !== 0x4B)) {
+        zipBuffer = null; // not a valid ZIP, try fallback
+      }
+    } catch { /* fall through to JSZip fallback */ }
+
+    // ── Step 3 (fallback): Build ZIP via git trees + blobs API ────────────
+    // Used when CDN has no archive (empty branch or CDN issue)
     if (!zipBuffer) {
-      const JSZip = (await import('jszip')).default;
-      const zip = new JSZip();
-      const rootFolder = zip.folder(`${owner}-${repo}-${branch}`)!;
+      const { default: axios } = await import('axios');
+      const ghHeaders = {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github.v3+json',
+        'User-Agent': 'SentinelAI-Admin/1.0',
+      };
 
-      // Fetch recursive file tree
       const treeRes = await axios.get(
-        `https://api.github.com/repos/${owner}/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+        `https://api.github.com/repos/${owner}/${repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`,
         { headers: ghHeaders, timeout: 30_000, validateStatus: s => s < 500 }
       );
 
       if (treeRes.status === 404) {
         res.status(404).json({
-          error: `Branch "${branch}" not found in ${owner}/${repo}. The repository may be empty.`
+          error: `Branch "${ref}" has no commits in ${owner}/${repo}. The repository may be empty.`
         }); return;
       }
       if (treeRes.status !== 200) {
-        res.status(treeRes.status).json({ error: 'Could not read repo file tree.' }); return;
+        res.status(treeRes.status).json({ error: `GitHub API error: ${treeRes.status}` }); return;
       }
 
       const blobs = (treeRes.data.tree || []).filter((item: any) => item.type === 'blob');
       if (blobs.length === 0) {
-        res.status(400).json({ error: `Repository ${owner}/${repo} is empty — nothing to download.` }); return;
+        res.status(400).json({ error: `Repository ${owner}/${repo} is empty — no files to download.` }); return;
       }
 
-      // Fetch all blobs (batched to respect rate limits)
+      const JSZip = (await import('jszip')).default;
+      const zip = new JSZip();
+      const folder = zip.folder(`${owner}-${repo}-${ref}`)!;
+
       const BATCH = 20;
       for (let i = 0; i < blobs.length; i += BATCH) {
-        const batch = blobs.slice(i, i + BATCH);
-        await Promise.all(batch.map(async (item: any) => {
+        await Promise.all(blobs.slice(i, i + BATCH).map(async (item: any) => {
           try {
             const blobRes = await axios.get(
               `https://api.github.com/repos/${owner}/${repo}/git/blobs/${item.sha}`,
               { headers: ghHeaders, timeout: 15_000, validateStatus: s => s < 500 }
             );
             if (blobRes.status === 200 && blobRes.data?.content) {
-              const content = Buffer.from(blobRes.data.content, 'base64');
-              rootFolder.file(item.path, content);
+              folder.file(item.path, Buffer.from(blobRes.data.content, 'base64'));
             }
-          } catch { /* skip inaccessible files */ }
+          } catch { /* skip */ }
         }));
       }
 
       zipBuffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
     }
 
-    const filename = `${owner}-${repo}-${branch}.zip`;
+    const filename = `${owner}-${repo}-${ref}.zip`;
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Content-Length', zipBuffer.byteLength.toString());
+    res.setHeader('Content-Length', zipBuffer!.byteLength.toString());
     res.send(zipBuffer);
 
   } catch (err: any) {

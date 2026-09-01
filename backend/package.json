@@ -19,6 +19,7 @@
     "set:github-token": "tsx scripts/set-github-token.ts"
   },
   "dependencies": {
+    "@octokit/rest": "^22.0.1",
     "@vercel/sandbox": "^3.2.1",
     "archiver": "^7.0.1",
     "axios": "^1.6.2",
