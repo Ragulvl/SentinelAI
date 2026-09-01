@@ -29,7 +29,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: "Security",
     items: [
-      { label: "Penetration Test", path: "/pentest", icon: Target, description: "Active testing" },
+      { label: "Penetration Test", path: "/pentest", icon: Target, badge: "adaptive", description: "Active testing" },
       { label: "Load Test", path: "/loadtest", icon: Zap, description: "Performance analysis" },
       { label: "Sandbox", path: "/sandbox", icon: Box, description: "Isolated scanning" },
       { label: "Domain Verify", path: "/domain-verification", icon: Shield, description: "Domain validation" },
@@ -291,7 +291,7 @@ export const Navigation = ({ minimal = false }: NavigationProps) => {
                 {user?.name || user?.username || "User"}
               </div>
               <div className="text-[10px] truncate" style={{ color: "hsl(var(--muted-foreground))" }}>
-                Free plan
+                {user?.email ? user.email.split("@")[0] + "@…" : "sentinalsec.vercel.app"}
               </div>
             </div>
             <ChevronDown

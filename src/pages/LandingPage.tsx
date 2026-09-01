@@ -3,7 +3,7 @@ import { useRef, useState, useEffect } from "react";
 import {
   Scan, Bot, GitPullRequest, Code2, Lock, Zap, ArrowRight,
   Shield, Activity, Globe, Target, Check,
-  Cpu, Layers,
+  Cpu, Layers, Server,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -23,6 +23,18 @@ const FEATURES = [
     title: "AI Remediation",
     desc: "Evaluates vulnerability context, generates secure code patches, and verifies resolution automatically.",
     tag: "ai",
+  },
+  {
+    icon: Target,
+    title: "Penetration Testing",
+    desc: "38+ adaptive security tests — XSS, SQLi, CSRF, SSRF, auth bypass, and more — tailored to your detected tech stack.",
+    tag: "pentest",
+  },
+  {
+    icon: Activity,
+    title: "Uptime Monitoring",
+    desc: "Continuous health checks, anomaly detection, and instant alerts across all your web services.",
+    tag: "monitoring",
   },
   {
     icon: Code2,
@@ -51,18 +63,19 @@ const FEATURES = [
 ];
 
 const STATS = [
-  { value: "50+", label: "Security checks per scan" },
-  { value: "<3m", label: "Average scan time" },
+  { value: "38+", label: "Adaptive tests per pentest" },
+  { value: "7", label: "Security tools in one platform" },
   { value: "95%", label: "AI fix success rate" },
   { value: "0 B", label: "Data retained after scan" },
 ];
 
 const PIPELINE_STEPS = [
-  { step: "01", title: "Connect", desc: "Authorize GitHub access or provide a target web URL.", icon: Layers },
+  { step: "01", title: "Connect", desc: "Authorize GitHub access or provide a target web URL for scanning.", icon: Layers },
   { step: "02", title: "Detect", desc: "Multi-tool parallel scans inside secure sandboxed containers.", icon: Scan },
   { step: "03", title: "Analyze", desc: "AI evaluates severity, exploitability, and business context.", icon: Cpu },
   { step: "04", title: "Patch", desc: "Generates and verifies code fixes or configuration changes.", icon: Bot },
   { step: "05", title: "Deploy", desc: "Review diffs, download archives, or open pull requests instantly.", icon: GitPullRequest },
+  { step: "06", title: "Monitor", desc: "Continuous uptime checks and anomaly alerts keep you protected post-deploy.", icon: Server },
 ];
 
 // ── Terminal mockup lines ─────────────────────────────────────────────────
@@ -334,17 +347,17 @@ const LandingPage = () => {
       <section id="features" className="max-w-5xl mx-auto px-8 py-24">
         {/* Section header — left-aligned */}
         <div className="mb-12">
-          <div className="section-label mb-4">Capabilities</div>
-          <h2 style={{ fontSize: 32, letterSpacing: "-0.03em" }}>
-            Everything you need to ship secure code
-          </h2>
-        </div>
+            <div className="section-label mb-4">Capabilities</div>
+            <h2 style={{ fontSize: 32, letterSpacing: "-0.03em" }}>
+              Everything you need to ship secure code
+            </h2>
+          </div>
 
-        {/* Intentionally varied grid: 2 large + 4 compact */}
-        <div className="space-y-3">
-          {/* Top row: 2 featured cards — wider */}
-          <div className="grid md:grid-cols-2 gap-3">
-            {FEATURES.slice(0, 2).map((f, i) => {
+          {/* 2 featured + 6 compact */}
+          <div className="space-y-3">
+            {/* Top row: 2 featured */}
+            <div className="grid md:grid-cols-2 gap-3">
+              {FEATURES.slice(0, 2).map((f) => {
               const Icon = f.icon;
               return (
                 <div
@@ -385,9 +398,32 @@ const LandingPage = () => {
             })}
           </div>
 
-          {/* Bottom row: 4 compact cards */}
-          <div className="grid md:grid-cols-4 gap-3">
-            {FEATURES.slice(2).map((f, i) => {
+          {/* Bottom rows: 3 + 3 compact cards */}
+          <div className="grid md:grid-cols-3 gap-3">
+            {FEATURES.slice(2, 5).map((f) => {
+              const Icon = f.icon;
+              return (
+                <div
+                  key={f.title}
+                  className="card-interactive p-4 group"
+                >
+                  <Icon className="w-3.5 h-3.5 mb-3" strokeWidth={1.5} style={{ color: "hsl(var(--muted-foreground))" }} />
+                  <div
+                    className="mb-1.5"
+                    style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, fontWeight: 600 }}
+                  >
+                    {f.title}
+                  </div>
+                  <p style={{ fontSize: 12, color: "hsl(var(--muted-foreground))", lineHeight: 1.6 }}>{f.desc}</p>
+                  <div className="mt-3 pt-3" style={{ borderTop: "1px solid hsl(var(--border))" }}>
+                    <span className="badge badge-muted">{f.tag}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="grid md:grid-cols-3 gap-3">
+            {FEATURES.slice(5).map((f) => {
               const Icon = f.icon;
               return (
                 <div
@@ -526,8 +562,11 @@ const LandingPage = () => {
                   "AI-generated, verified code patches",
                   "GitHub pull-request integration",
                   "Website SSL & security-header audit",
-                  "Penetration testing (XSS, SQLi, CSRF…)",
+                  "Penetration testing — 38+ adaptive checks",
                   "Load & resilience testing",
+                  "Uptime monitoring & anomaly alerts",
+                  "Sandbox isolated scanning",
+                  "Domain verification & ownership proof",
                   "Zero data retained after scan",
                 ].map(item => (
                   <div
