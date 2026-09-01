@@ -18,11 +18,11 @@ self.addEventListener('push', (event) => {
   }
 
   const data = event.data.json();
-  const title = data.title || 'Security Scanner';
+  const title = data.title || 'SentinelAI';
   const options = {
     body: data.body || 'You have a new notification',
-    icon: data.icon || '/image.png',
-    badge: data.badge || '/image.png',
+    icon: data.icon || '/icon.jpg',
+    badge: data.badge || '/icon.jpg',
     data: {
       url: data.url || '/',
       ...data.data,

@@ -1,16 +1,16 @@
 {
-  "name": "Security Scanner",
-  "short_name": "SecScanner",
-  "description": "Website Security Monitoring and Vulnerability Scanner",
+  "name": "SentinelAI",
+  "short_name": "SentinelAI",
+  "description": "AI-powered penetration testing and website security scanner",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#00ff88",
+  "background_color": "#0a0e1a",
+  "theme_color": "#00d4ff",
   "icons": [
     {
-      "src": "/image.png",
-      "sizes": "192x192",
-      "type": "image/png",
+      "src": "/icon.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
       "purpose": "any maskable"
     }
   ]
