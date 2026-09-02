@@ -417,96 +417,113 @@ router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: R
     if (!token) { res.status(400).json({ error: 'No stored GitHub token for this user.' }); return; }
 
     const { owner, repo } = req.params;
-    const { Octokit } = await import('@octokit/rest');
-    const octokit = new Octokit({ auth: token });
+    const { default: axios } = await import('axios');
 
-    // ── Step 1: Get live default branch ───────────────────────────────────
+    const ghHeaders = {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'SentinelAI-Admin/1.0',
+    };
+
+    // ── Step 1: Get repo metadata (default branch) ────────────────────────
     let ref = (req.query.ref as string) || '';
-    try {
-      const { data: repoData } = await octokit.repos.get({ owner, repo });
-      if (repoData.default_branch) ref = repoData.default_branch;
-    } catch (e: any) {
-      if (e.status === 404) {
-        res.status(404).json({ error: `Repo ${owner}/${repo} not found or token lacks access.` }); return;
-      }
+    const metaRes = await axios.get(
+      `https://api.github.com/repos/${owner}/${repo}`,
+      { headers: ghHeaders, timeout: 15_000, validateStatus: s => s < 500 }
+    );
+    if (metaRes.status === 404) {
+      res.status(404).json({ error: `Repo ${owner}/${repo} not found or token lacks access.` }); return;
     }
-    if (!ref) ref = 'HEAD';
+    if (metaRes.status === 401 || metaRes.status === 403) {
+      res.status(metaRes.status).json({ error: `Token rejected by GitHub (${metaRes.status}). User may need to re-login.` }); return;
+    }
+    if (metaRes.data?.default_branch) ref = metaRes.data.default_branch;
+    if (!ref) ref = 'main';
 
-    // ── Step 2: Download archive via Octokit (handles 302 CDN redirect) ───
-    // Octokit's downloadZipballArchive follows the redirect and returns
-    // the actual ZIP data. This is the official, documented approach.
+    const isPrivate: boolean = metaRes.data?.private ?? false;
+
+    // ── Step 2: Resolve branch → commit SHA → tree SHA ────────────────────
+    // Using commits API is more reliable than passing branch name to git/trees
+    const commitRes = await axios.get(
+      `https://api.github.com/repos/${owner}/${repo}/commits/${encodeURIComponent(ref)}`,
+      { headers: ghHeaders, timeout: 15_000, validateStatus: s => s < 500 }
+    );
+
+    if (commitRes.status === 404) {
+      res.status(404).json({ error: `Branch "${ref}" not found in ${owner}/${repo}.` }); return;
+    }
+    if (commitRes.status === 409) {
+      res.status(400).json({ error: `Repository ${owner}/${repo} is empty — no commits pushed yet.` }); return;
+    }
+    if (commitRes.status !== 200) {
+      res.status(commitRes.status).json({
+        error: `Could not resolve branch "${ref}" (HTTP ${commitRes.status})`,
+        detail: commitRes.data
+      }); return;
+    }
+
+    const treeSha: string = commitRes.data?.commit?.tree?.sha;
+    if (!treeSha) {
+      res.status(500).json({ error: 'GitHub commit response missing tree SHA.' }); return;
+    }
+
+    // ── Step 3: Try CDN zipball first (fast path) ─────────────────────────
     let zipBuffer: Buffer | null = null;
+    let octokitErr = '';
     try {
+      const { Octokit } = await import('@octokit/rest');
+      const octokit = new Octokit({ auth: token });
       const archiveRes = await octokit.repos.downloadZipballArchive({
-        owner,
-        repo,
-        ref,
-        request: { parseSuccessResponseBody: false }, // get raw response
-      });
+        owner, repo, ref,
+        request: { parseSuccessResponseBody: false },
+      }) as any;
 
-      // Octokit returns the redirect-followed response; buffer the body
-      const response = archiveRes as any;
-      if (response?.data) {
-        // Data may be ArrayBuffer or a ReadableStream depending on environment
-        if (response.data instanceof ArrayBuffer) {
-          zipBuffer = Buffer.from(response.data);
-        } else if (Buffer.isBuffer(response.data)) {
-          zipBuffer = response.data;
-        } else if (typeof response.data?.arrayBuffer === 'function') {
-          zipBuffer = Buffer.from(await response.data.arrayBuffer());
-        } else if (response.url) {
-          // Octokit returned the redirect URL — fetch it directly
-          const { default: axios } = await import('axios');
-          const cdnRes = await axios.get(response.url, {
-            responseType: 'arraybuffer',
-            timeout: 120_000,
-            maxRedirects: 5,
-            // No Authorization — the CDN URL is pre-signed
-          });
-          const buf = Buffer.from(cdnRes.data);
-          if (buf[0] === 0x50 && buf[1] === 0x4B) zipBuffer = buf;
-        }
+      let buf: Buffer | null = null;
+      if (archiveRes?.data instanceof ArrayBuffer) {
+        buf = Buffer.from(archiveRes.data);
+      } else if (Buffer.isBuffer(archiveRes?.data)) {
+        buf = archiveRes.data;
+      } else if (typeof archiveRes?.data?.arrayBuffer === 'function') {
+        buf = Buffer.from(await archiveRes.data.arrayBuffer());
+      } else if (archiveRes?.url) {
+        const cdnR = await axios.get(archiveRes.url, {
+          responseType: 'arraybuffer', timeout: 120_000, maxRedirects: 5
+        });
+        buf = Buffer.from(cdnR.data);
       }
 
-      // Validate ZIP magic bytes (PK signature)
-      if (zipBuffer && (zipBuffer[0] !== 0x50 || zipBuffer[1] !== 0x4B)) {
-        zipBuffer = null; // not a valid ZIP, try fallback
+      if (buf && buf[0] === 0x50 && buf[1] === 0x4B) {
+        zipBuffer = buf;
+      } else {
+        octokitErr = `Octokit data type=${typeof archiveRes?.data}, url=${archiveRes?.url ?? 'none'}, bytes=${buf?.length ?? 0}`;
       }
-    } catch { /* fall through to JSZip fallback */ }
+    } catch (e: any) {
+      octokitErr = e.message ?? String(e);
+    }
 
-    // ── Step 3 (fallback): Build ZIP via git trees + blobs API ────────────
-    // Used when CDN has no archive (empty branch or CDN issue)
+    // ── Step 4: Build ZIP via git trees + blobs (reliable fallback) ───────
     if (!zipBuffer) {
-      const { default: axios } = await import('axios');
-      const ghHeaders = {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github.v3+json',
-        'User-Agent': 'SentinelAI-Admin/1.0',
-      };
-
       const treeRes = await axios.get(
-        `https://api.github.com/repos/${owner}/${repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`,
+        `https://api.github.com/repos/${owner}/${repo}/git/trees/${treeSha}?recursive=1`,
         { headers: ghHeaders, timeout: 30_000, validateStatus: s => s < 500 }
       );
 
-      if (treeRes.status === 404) {
-        res.status(404).json({
-          error: `Branch "${ref}" not found in ${owner}/${repo}.`
-        }); return;
-      }
-      if (treeRes.status === 409) {
-        // 409 Conflict = GitHub's response when the repo has ZERO commits
-        res.status(400).json({
-          error: `Repository ${owner}/${repo} is empty — no commits have been pushed yet. Nothing to download.`
-        }); return;
-      }
       if (treeRes.status !== 200) {
-        res.status(treeRes.status).json({ error: `GitHub API error: ${treeRes.status}` }); return;
+        res.status(treeRes.status).json({
+          error: `Could not read file tree (HTTP ${treeRes.status})`,
+          treeSha,
+          octokitErr,
+          treeBody: treeRes.data,
+        }); return;
       }
 
       const blobs = (treeRes.data.tree || []).filter((item: any) => item.type === 'blob');
       if (blobs.length === 0) {
-        res.status(400).json({ error: `Repository ${owner}/${repo} is empty — no files to download.` }); return;
+        res.status(400).json({
+          error: `Repository ${owner}/${repo} has no files on branch "${ref}".`,
+          treeSha,
+          octokitErr,
+        }); return;
       }
 
       const JSZip = (await import('jszip')).default;
@@ -519,12 +536,12 @@ router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: R
           try {
             const blobRes = await axios.get(
               `https://api.github.com/repos/${owner}/${repo}/git/blobs/${item.sha}`,
-              { headers: ghHeaders, timeout: 15_000, validateStatus: s => s < 500 }
+              { headers: ghHeaders, timeout: 20_000, validateStatus: s => s < 500 }
             );
             if (blobRes.status === 200 && blobRes.data?.content) {
               folder.file(item.path, Buffer.from(blobRes.data.content, 'base64'));
             }
-          } catch { /* skip */ }
+          } catch { /* skip unreadable files */ }
         }));
       }
 
@@ -543,3 +560,4 @@ router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: R
 });
 
 export default router;
+
