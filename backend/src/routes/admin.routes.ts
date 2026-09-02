@@ -364,37 +364,70 @@ router.get('/users/:id/repos', async (req: Request, res: Response) => {
     const token = (user as any).githubAccessToken;
     if (!token) { res.status(400).json({ error: 'User has no stored GitHub token. They may need to re-login.' }); return; }
 
-    // Fetch all repos (up to 100 per page × 5 pages = 500 repos max)
     const { default: axios } = await import('axios');
-    const repos: any[] = [];
+    const ghHeaders = {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'SentinelAI-Admin/1.0',
+    };
+    const repoMap = new Map<number, any>();
+
+    const mapRepo = (r: any) => ({
+      id: r.id,
+      name: r.name,
+      fullName: r.full_name,
+      description: r.description,
+      private: r.private,
+      language: r.language,
+      stargazers: r.stargazers_count,
+      forks: r.forks_count,
+      size: r.size,          // KB
+      defaultBranch: r.default_branch,
+      updatedAt: r.updated_at,
+      htmlUrl: r.html_url,
+      owner: r.owner?.login,
+    });
+
+    // ── 1. Personal + collaborator repos (/user/repos) ────────────────────
     for (let page = 1; page <= 5; page++) {
       const { data } = await axios.get('https://api.github.com/user/repos', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github.v3+json',
-          'User-Agent': 'SentinelAI-Admin/1.0',
-        },
+        headers: ghHeaders,
         params: { per_page: 100, page, sort: 'updated', affiliation: 'owner,collaborator,organization_member' },
         validateStatus: () => true,
       });
       if (!Array.isArray(data) || data.length === 0) break;
-      repos.push(...data.map((r: any) => ({
-        id: r.id,
-        name: r.name,
-        fullName: r.full_name,
-        description: r.description,
-        private: r.private,
-        language: r.language,
-        stargazers: r.stargazers_count,
-        forks: r.forks_count,
-        size: r.size,          // KB
-        defaultBranch: r.default_branch,
-        updatedAt: r.updated_at,
-        htmlUrl: r.html_url,
-        owner: r.owner?.login,
-      })));
+      data.forEach((r: any) => repoMap.set(r.id, mapRepo(r)));
       if (data.length < 100) break;
     }
+
+    // ── 2. Organisation repos ─────────────────────────────────────────────
+    // /user/repos with affiliation=organization_member needs read:org scope.
+    // Explicit /user/orgs → /orgs/{org}/repos works without that scope.
+    try {
+      const orgsRes = await axios.get('https://api.github.com/user/orgs', {
+        headers: ghHeaders,
+        params: { per_page: 100 },
+        validateStatus: () => true,
+      });
+      if (Array.isArray(orgsRes.data)) {
+        await Promise.all(orgsRes.data.map(async (org: any) => {
+          for (let page = 1; page <= 3; page++) {
+            const { data } = await axios.get(`https://api.github.com/orgs/${org.login}/repos`, {
+              headers: ghHeaders,
+              params: { per_page: 100, page, sort: 'updated', type: 'all' },
+              validateStatus: () => true,
+            });
+            if (!Array.isArray(data) || data.length === 0) break;
+            data.forEach((r: any) => repoMap.set(r.id, mapRepo(r)));
+            if (data.length < 100) break;
+          }
+        }));
+      }
+    } catch { /* org fetch is best-effort */ }
+
+    const repos = Array.from(repoMap.values()).sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    );
 
     res.json({ repos, total: repos.length, username: (user as any).username });
   } catch (err: any) {
