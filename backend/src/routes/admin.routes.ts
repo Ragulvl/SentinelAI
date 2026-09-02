@@ -491,7 +491,13 @@ router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: R
 
       if (treeRes.status === 404) {
         res.status(404).json({
-          error: `Branch "${ref}" has no commits in ${owner}/${repo}. The repository may be empty.`
+          error: `Branch "${ref}" not found in ${owner}/${repo}.`
+        }); return;
+      }
+      if (treeRes.status === 409) {
+        // 409 Conflict = GitHub's response when the repo has ZERO commits
+        res.status(400).json({
+          error: `Repository ${owner}/${repo} is empty — no commits have been pushed yet. Nothing to download.`
         }); return;
       }
       if (treeRes.status !== 200) {
