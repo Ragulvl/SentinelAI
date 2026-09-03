@@ -17,7 +17,7 @@ export class ScanController {
         return res.status(401).json({ error: 'No token provided' });
       }
 
-      const payload = JWTService.verifyToken(token);
+      const payload = await JWTService.verifyToken(token);
       const { repoId, repoName, repoFullName, repoUrl, defaultBranch } = req.body;
 
       if (!repoId || !repoName || !repoFullName) {
@@ -89,7 +89,7 @@ export class ScanController {
         return res.status(401).json({ error: 'No token provided' });
       }
 
-      const payload = JWTService.verifyToken(token);
+      const payload = await JWTService.verifyToken(token);
       const { scanId } = req.params;
 
       const scan = await Scan.findOne({ _id: scanId, userId: payload.userId });
@@ -127,7 +127,7 @@ export class ScanController {
         return res.status(401).json({ error: 'No token provided' });
       }
 
-      const payload = JWTService.verifyToken(token);
+      const payload = await JWTService.verifyToken(token);
       const { scanId } = req.params;
 
       const scan = await Scan.findOne({ _id: scanId, userId: payload.userId });
@@ -164,7 +164,7 @@ export class ScanController {
         return res.status(401).json({ error: 'No token provided' });
       }
 
-      const payload = JWTService.verifyToken(token);
+      const payload = await JWTService.verifyToken(token);
       const limit = parseInt(req.query.limit as string) || 50;
 
       const scans = await Scan.find({ userId: payload.userId })
@@ -197,7 +197,7 @@ export class ScanController {
         return res.status(401).json({ error: 'No token provided' });
       }
 
-      const payload = JWTService.verifyToken(token);
+      const payload = await JWTService.verifyToken(token);
       const { scanId } = req.params;
 
       // Get scan
@@ -270,7 +270,7 @@ export class ScanController {
         return res.status(401).json({ error: 'No token provided' });
       }
 
-      const payload = JWTService.verifyToken(token);
+      const payload = await JWTService.verifyToken(token);
       const { scanId, filePath } = req.params;
 
       // Get scan
@@ -310,7 +310,7 @@ export class ScanController {
         return res.status(401).json({ error: 'No token provided' });
       }
 
-      const payload = JWTService.verifyToken(token);
+      const payload = await JWTService.verifyToken(token);
       const { scanId, filePath } = req.params;
       const { content, sha, commitMessage } = req.body;
 
@@ -358,7 +358,7 @@ export class ScanController {
         return res.status(401).json({ error: 'No token provided' });
       }
 
-      const payload = JWTService.verifyToken(token);
+      const payload = await JWTService.verifyToken(token);
       const { scanId } = req.params;
 
       // Get scan

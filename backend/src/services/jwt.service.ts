@@ -1,18 +1,24 @@
-import jwt from 'jsonwebtoken';
+import { SignJWT, jwtVerify } from 'jose';
 import { config } from '../config/env.js';
 import type { JWTPayload } from '../types/auth.js';
 
+// jose requires a Uint8Array secret — encode once
+const getSecret = () => new TextEncoder().encode(config.jwt.secret);
+
 export class JWTService {
-  static generateToken(payload: JWTPayload): string {
-    return jwt.sign(payload, config.jwt.secret, {
-      expiresIn: '7d',
-    });
+  static async generateToken(payload: JWTPayload): Promise<string> {
+    return new SignJWT({ ...payload } as Record<string, unknown>)
+      .setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt()
+      .setExpirationTime('7d')
+      .sign(getSecret());
   }
 
-  static verifyToken(token: string): JWTPayload {
+  static async verifyToken(token: string): Promise<JWTPayload> {
     try {
-      return jwt.verify(token, config.jwt.secret) as JWTPayload;
-    } catch (error) {
+      const { payload } = await jwtVerify(token, getSecret());
+      return payload as unknown as JWTPayload;
+    } catch {
       throw new Error('Invalid or expired token');
     }
   }

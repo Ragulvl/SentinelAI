@@ -15,7 +15,7 @@ export class SandboxScanController {
         return res.status(401).json({ error: 'No token provided' });
       }
 
-      const payload = JWTService.verifyToken(token);
+      const payload = await JWTService.verifyToken(token);
       const { repoUrl, branch } = req.body;
 
       if (!repoUrl) {
@@ -64,7 +64,7 @@ export class SandboxScanController {
 
       // CWE-287: Verify token and handle error properly (removed redundant second call)
       try {
-        JWTService.verifyToken(token);
+        await JWTService.verifyToken(token);
       } catch {
         return res.status(401).json({ error: 'Invalid token' });
       }

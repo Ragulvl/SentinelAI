@@ -23,7 +23,7 @@ export class HistoryController {
 
       let payload;
       try {
-        payload = JWTService.verifyToken(token);
+        payload = await JWTService.verifyToken(token);
         logger.debug('[History] Token verified', { userId: payload.userId });
       } catch (error) {
         logger.warn('[History] Token verification failed');
@@ -168,7 +168,7 @@ export class HistoryController {
 
       let payload;
       try {
-        payload = JWTService.verifyToken(token);
+        payload = await JWTService.verifyToken(token);
       } catch (error) {
         return res.status(401).json({ error: 'Invalid token' });
       }
