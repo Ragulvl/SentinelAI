@@ -1,14 +1,15 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { WebsiteScanController } from '../controllers/websiteScan.controller.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
+import { requireSuperAdmin } from '../middleware/admin.middleware.js';
 
 const router = Router();
 
 // SSE streaming pentest — must be BEFORE authMiddleware because
-// EventSource cannot send Authorization headers; auth is done via ?token= query param
+// EventSource sends cookies (withCredentials:true); auth is via httpOnly cookie or ?token= fallback
 router.get('/pentest/stream', WebsiteScanController.penetrationTestStream);
 
-// All routes below require authentication via Authorization header
+// All routes below require authentication
 router.use(authMiddleware);
 
 // CWE-20: Domain presence validation middleware
@@ -19,7 +20,7 @@ const requireDomain = (req: Request, res: Response, next: NextFunction) => {
   next();
 };
 
-// Domain Verification Routes
+// ─── Domain Verification (any authenticated user) ────────────────────────────
 router.post('/verify/initiate', requireDomain, WebsiteScanController.initiateVerification);
 router.post('/verify/check', WebsiteScanController.verifyDomain);
 router.get('/verify/domains', WebsiteScanController.getVerifiedDomains);
@@ -27,14 +28,15 @@ router.get('/verify/status', WebsiteScanController.checkDomainVerification);
 // CWE-639: Restrict domain param to hostname-safe characters
 router.delete('/verify/domains/:domain([a-zA-Z0-9._-]+)', WebsiteScanController.deleteDomain);
 
-// Add domain as owned (bypass verification)
-router.post('/verify/add-owned', WebsiteScanController.addOwnedDomain);
+// ─── Bypass routes — SUPERADMIN ONLY ────────────────────────────────────────
+// These skip the normal DNS/file/meta ownership challenge.
+// Restricted to SUPERADMIN only — not even regular admins can bypass,
+// because only the app owner (superadmin) can legitimately skip verification.
+router.post('/verify/add-owned', requireSuperAdmin, WebsiteScanController.addOwnedDomain);
+router.post('/verify/self',      requireSuperAdmin, WebsiteScanController.verifySelf);
 
-// Self-app verification — auto-verifies domains matching FRONTEND_URL / BACKEND_URL
-// No DNS/file/meta challenge needed: you own the app, you own the domain.
-router.post('/verify/self', WebsiteScanController.verifySelf);
-
-// Scan a website (requires verified domain)
+// ─── Scan routes (requires verified domain) ──────────────────────────────────
+// Scan a website
 router.post('/scan', WebsiteScanController.scanWebsite);
 
 // Penetration testing (requires verified domain) - ACTIVE ATTACK MODE
@@ -50,7 +52,7 @@ router.post('/test-resilience', WebsiteScanController.testResilience);
 router.get('/api-health', WebsiteScanController.getApiHealth);
 router.post('/api-reset', WebsiteScanController.resetApiKeys);
 
-// Get scan history
+// Scan history
 router.get('/history', WebsiteScanController.getScanHistory);
 
 // CWE-434: Restrict scanId to MongoDB ObjectId hex format

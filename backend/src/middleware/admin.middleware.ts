@@ -54,3 +54,44 @@ export const requireAdmin = async (req: AdminRequest, res: Response, next: NextF
     res.status(401).json({ error: 'Invalid or expired token' });
   }
 };
+
+/**
+ * requireSuperAdmin middleware
+ * Stricter than requireAdmin — only allows role === 'superadmin'.
+ * Use for sensitive bypass operations (e.g. skipping domain verification challenges).
+ */
+export const requireSuperAdmin = async (req: AdminRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const token = req.cookies?.token || req.headers.authorization?.replace('Bearer ', '');
+
+    if (!token) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+
+    const payload = await JWTService.verifyToken(token);
+    const user = await User.findOne({ githubId: payload.userId }).select('username role isBanned githubId');
+
+    if (!user) {
+      res.status(401).json({ error: 'User not found' });
+      return;
+    }
+
+    // Auto-promote the designated superadmin
+    const superAdminGithub = process.env.SUPER_ADMIN_GITHUB;
+    if (superAdminGithub && user.username === superAdminGithub && user.role !== 'superadmin') {
+      await User.findOneAndUpdate({ githubId: payload.userId }, { role: 'superadmin' });
+      user.role = 'superadmin';
+    }
+
+    if (user.role !== 'superadmin') {
+      res.status(403).json({ error: 'Superadmin-only operation. Regular admins cannot bypass domain verification.' });
+      return;
+    }
+
+    req.adminUser = { userId: payload.userId, username: user.username, role: user.role };
+    next();
+  } catch (error: any) {
+    res.status(401).json({ error: 'Invalid or expired token' });
+  }
+};
