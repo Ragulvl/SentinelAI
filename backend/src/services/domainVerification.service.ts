@@ -72,6 +72,72 @@ export class DomainVerificationService {
   }
 
   /**
+   * Check if a domain is the app's own deployment (FRONTEND_URL or BACKEND_URL).
+   * This allows the app owner to pentest their own Vercel/Render deployment
+   * without needing DNS TXT / file / meta verification (impossible on *.vercel.app).
+   */
+  static isSelfHostedApp(domain: string): boolean {
+    const selfDomains: string[] = [];
+    const frontendUrl = process.env.FRONTEND_URL || process.env.VITE_FRONTEND_URL || '';
+    const backendUrl  = process.env.BACKEND_URL  || process.env.RENDER_EXTERNAL_URL || '';
+
+    for (const raw of [frontendUrl, backendUrl]) {
+      try {
+        if (raw) {
+          const h = new URL(raw.startsWith('http') ? raw : `https://${raw}`).hostname;
+          selfDomains.push(h.replace(/^www\./, '').toLowerCase());
+        }
+      } catch { /* ignore malformed */ }
+    }
+
+    const normalized = domain.replace(/^www\./, '').toLowerCase();
+    return selfDomains.includes(normalized);
+  }
+
+  /**
+   * Auto-verify a domain that matches this app's own deployment.
+   * Skips the file / DNS / meta challenge — the owner of the app IS the owner of the domain.
+   */
+  static async verifySelf(
+    userId: number,
+    domain: string
+  ): Promise<{ success: boolean; message: string }> {
+    const normalizedDomain = domain.replace(/^www\./, '').toLowerCase();
+
+    if (!this.isSelfHostedApp(normalizedDomain)) {
+      return {
+        success: false,
+        message: `${normalizedDomain} does not match this app's FRONTEND_URL or BACKEND_URL. Use standard verification instead.`,
+      };
+    }
+
+    const token = this.generateVerificationToken(userId, normalizedDomain);
+    let record = await VerifiedDomain.findOne({ userId, domain: normalizedDomain });
+
+    if (record) {
+      record.verified = true;
+      record.verifiedAt = new Date();
+      record.verificationToken = token;
+      record.verificationMethod = 'file'; // stored method label (not used)
+      await record.save();
+    } else {
+      await VerifiedDomain.create({
+        userId,
+        domain: normalizedDomain,
+        verificationToken: token,
+        verificationMethod: 'file',
+        verified: true,
+        verifiedAt: new Date(),
+      });
+    }
+
+    return {
+      success: true,
+      message: `✅ ${normalizedDomain} verified as self-hosted app. You can now run penetration tests against your own deployment.`,
+    };
+  }
+
+  /**
    * Initiate domain verification.
    * If the domain already has a pending record with the SAME method,
    * we return the existing token (stable) so the user can upload/configure

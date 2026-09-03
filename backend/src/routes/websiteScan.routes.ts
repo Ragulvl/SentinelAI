@@ -30,6 +30,10 @@ router.delete('/verify/domains/:domain([a-zA-Z0-9._-]+)', WebsiteScanController.
 // Add domain as owned (bypass verification)
 router.post('/verify/add-owned', WebsiteScanController.addOwnedDomain);
 
+// Self-app verification — auto-verifies domains matching FRONTEND_URL / BACKEND_URL
+// No DNS/file/meta challenge needed: you own the app, you own the domain.
+router.post('/verify/self', WebsiteScanController.verifySelf);
+
 // Scan a website (requires verified domain)
 router.post('/scan', WebsiteScanController.scanWebsite);
 

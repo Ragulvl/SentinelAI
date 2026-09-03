@@ -123,6 +123,12 @@ export const websiteScanService = {
     return ApiClient.post('/api/website-scan/verify/add-owned', { domain });
   },
 
+  /** Auto-verify a domain that matches this app's own FRONTEND_URL / BACKEND_URL.
+   *  No DNS/file/meta challenge needed — works for Vercel, Render, etc. */
+  async verifySelf(domain: string): Promise<{ success: boolean; message: string }> {
+    return ApiClient.post('/api/website-scan/verify/self', { domain });
+  },
+
   // Penetration Testing
 
   async performPenetrationTest(url: string, credentials?: {

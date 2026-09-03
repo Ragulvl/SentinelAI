@@ -142,8 +142,9 @@ export class WebsiteScanController {
 
   // SSE streaming pentest — sends events as each test completes
   static async penetrationTestStream(req: Request, res: Response) {
-    // Auth via ?token= query param (EventSource can't set Authorization header)
-    const tokenParam = req.query.token as string | undefined;
+    // Auth: httpOnly cookie preferred (browser sends it with withCredentials:true),
+    // fall back to ?token= query param for cross-origin EventSource clients.
+    const tokenParam = (req.cookies?.token as string | undefined) || (req.query.token as string | undefined);
     if (!tokenParam) return res.status(401).end();
 
     let userId: string;
@@ -593,6 +594,34 @@ export class WebsiteScanController {
     } catch (error: any) {
       console.error('Error adding owned domain:', error);
       res.status(500).json({ error: error.message || 'Failed to add owned domain' });
+    }
+  }
+
+  /**
+   * POST /verify/self
+   * Auto-verifies a domain that matches this app's own FRONTEND_URL or BACKEND_URL.
+   * No DNS/file/meta challenge needed — the user is the owner of this deployment.
+   */
+  static async verifySelf(req: Request, res: Response) {
+    try {
+      const { domain } = req.body;
+      const userId = req.user?.userId;
+
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      if (!domain) {
+        return res.status(400).json({ error: 'Domain is required' });
+      }
+
+      const normalizedDomain = DomainVerificationService.extractDomain(domain);
+      const result = await DomainVerificationService.verifySelf(userId, normalizedDomain);
+
+      res.status(result.success ? 200 : 400).json(result);
+    } catch (error: any) {
+      console.error('Error in self-verification:', error);
+      res.status(500).json({ error: error.message || 'Self-verification failed' });
     }
   }
 

@@ -219,12 +219,14 @@ export default function PenetrationTestPage() {
       : undefined;
 
     // Build SSE URL — backend streams each test result as it actually completes
-    const sseParams = new URLSearchParams({ url: baseUrl, token: token || '' });
+    // Cookie is sent automatically by the browser when withCredentials:true is set
+    const sseParams = new URLSearchParams({ url: baseUrl });
     if (credentials) sseParams.set('credentials', encodeURIComponent(JSON.stringify(credentials)));
     const sseUrl = `${API_URL}/api/website-scan/pentest/stream?${sseParams.toString()}`;
 
     let vulns = 0, passed = 0, total = 0;
-    const es = new EventSource(sseUrl);
+    // withCredentials sends the httpOnly auth cookie automatically (XSS-safe)
+    const es = new EventSource(sseUrl, { withCredentials: true });
     // Track whether the backend already sent a Phase 7 completion line as a 'phase' event.
     // If so, the done handler skips its fallback to avoid duplicates.
     // If the phase event was dropped (arrived in the same TCP burst as 'done'), the

@@ -244,6 +244,23 @@ export default function DomainVerificationPage() {
     finally { setVerifying(false); }
   };
 
+  /* Self-app verification — for Vercel/Render deployments that can't do DNS/file/meta */
+  const handleVerifySelf = async () => {
+    const domain = newDomain.trim();
+    if (!domain) { toast({ title: "Enter your app's domain first", variant: "destructive" }); return; }
+    try {
+      setVerifying(true);
+      const result = await websiteScanService.verifySelf(domain);
+      toast({
+        title: result.success ? "✅ App verified!" : "Verification failed",
+        description: result.message,
+        variant: result.success ? "default" : "destructive",
+      });
+      if (result.success) { setNewDomain(""); await load(); }
+    } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
+    finally { setVerifying(false); }
+  };
+
   const instructionTarget = activeInstructionDomain ?? (instructions ? instructions.domain : null);
   const displayDomain = instructionTarget ? domains.find(d => d.domain === instructionTarget) : null;
 
@@ -299,12 +316,17 @@ export default function DomainVerificationPage() {
             <p className="text-[11px] text-muted-foreground -mt-1">{METHODS.find(m => m.key === selectedMethod)?.desc}</p>
 
             {/* Action buttons */}
-            <div className="flex gap-2">
-              <button onClick={handleGetSteps} disabled={verifying || !newDomain.trim()} className="btn-primary flex-1 justify-center py-2.5">
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={handleGetSteps} disabled={verifying || !newDomain.trim()} className="btn-primary flex-1 justify-center py-2.5" style={{minWidth:'160px'}}>
                 {verifying ? <><Loader2 className="w-4 h-4 animate-spin" />Working...</> : <><Shield className="w-4 h-4" />Get Verification Steps</>}
               </button>
+              <button onClick={handleVerifySelf} disabled={verifying || !newDomain.trim()}
+                className="btn-secondary text-xs px-4 shrink-0 flex items-center gap-1.5"
+                title="Instantly verify if this domain matches your app's FRONTEND_URL or BACKEND_URL config">
+                <Zap className="w-3.5 h-3.5" />Verify My App
+              </button>
               <button onClick={handleQuickAdd} disabled={verifying || !newDomain.trim()}
-                className="btn-secondary text-xs px-4 shrink-0" title="Add without verification — dev/localhost only">
+                className="btn-ghost-border text-xs px-4 shrink-0" title="Add without verification — dev/localhost only">
                 Quick Add
               </button>
             </div>
