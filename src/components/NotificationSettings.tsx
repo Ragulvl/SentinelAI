@@ -25,8 +25,7 @@ export const NotificationSettings = () => {
   const loadPreferences = async () => {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem("token");
-      if (!token) {
+            if (!token) {
         setPreferences(null);
         toast({ title: "Login Required", description: "Please login again to configure notifications", variant: "destructive" });
         return;

@@ -18,8 +18,8 @@ export interface AdminRequest extends Request {
  */
 export const requireAdmin = async (req: AdminRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    // Extract token — same pattern as auth.middleware.ts
-    const token = req.headers.authorization?.replace('Bearer ', '');
+    // Cookie-first (httpOnly) with Authorization header fallback
+    const token = req.cookies?.token || req.headers.authorization?.replace('Bearer ', '');
 
     if (!token) {
       res.status(401).json({ error: 'Authentication required' });

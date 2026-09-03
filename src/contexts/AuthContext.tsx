@@ -33,8 +33,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const userData = await AuthService.verifyToken();
       if (userData?.isBanned) {
-        AuthService.removeToken();
-        setUser(null);
+                setUser(null);
       } else {
         setUser(userData);
       }

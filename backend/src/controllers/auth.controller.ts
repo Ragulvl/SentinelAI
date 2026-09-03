@@ -74,9 +74,18 @@ export class AuthController {
         email: githubUser.email,
       });
 
-      // Redirect to frontend with token
-      const redirectUrl = `${config.frontendUrl}/auth/callback?token=${token}`;
-      res.redirect(redirectUrl);
+      // Set httpOnly cookie — XSS-safe (not readable by JS)
+      const isProd = config.nodeEnv === 'production';
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: isProd ? 'none' : 'lax',  // 'none' needed for cross-origin (frontend/backend on different Vercel domains)
+        maxAge: 7 * 24 * 60 * 60 * 1000,   // 7 days in ms
+        path: '/',
+      });
+
+      // Redirect to frontend — NO token in URL (XSS-safe)
+      res.redirect(`${config.frontendUrl}/auth/callback`);
     } catch (error) {
       console.error('Error in GitHub callback:', error);
       const errorUrl = `${config.frontendUrl}/login?error=${encodeURIComponent('Authentication failed')}`;
@@ -86,7 +95,8 @@ export class AuthController {
 
   static async verifyToken(req: Request, res: Response) {
     try {
-      const token = req.headers.authorization?.replace('Bearer ', '');
+      // Read token from httpOnly cookie first, fall back to Authorization header
+      const token = req.cookies?.token || req.headers.authorization?.replace('Bearer ', '');
 
       if (!token) {
         return res.status(401).json({ error: 'No token provided' });
@@ -127,7 +137,8 @@ export class AuthController {
 
   static async logout(req: Request, res: Response) {
     try {
-      const token = req.headers.authorization?.replace('Bearer ', '');
+      // Read token from cookie or header
+      const token = req.cookies?.token || req.headers.authorization?.replace('Bearer ', '');
       if (token) {
         try {
           const payload = await JWTService.verifyToken(token);
@@ -152,6 +163,9 @@ export class AuthController {
       }
     } catch { /* ignore */ }
 
+    // Clear the httpOnly cookie
+    res.clearCookie('token', { path: '/', sameSite: 'none', secure: true });
+    res.clearCookie('token', { path: '/', sameSite: 'lax' }); // dev fallback
     res.json({ success: true, message: 'Logged out successfully' });
   }
 

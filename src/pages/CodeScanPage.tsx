@@ -70,8 +70,7 @@ const CodeScanPage = () => {
     try {
       setLoadingRepo(true);
       setError(null);
-      const token = AuthService.getToken();
-      if (!token) { navigate("/login"); return; }
+            if (!token) { navigate("/login"); return; }
 
       // Load all repos to find this one (same endpoint, cached by browser usually)
       const reposRes = await fetch(API_ENDPOINTS.auth.repositories, {

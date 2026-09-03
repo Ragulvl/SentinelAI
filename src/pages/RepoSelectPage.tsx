@@ -75,8 +75,7 @@ const RepoSelectPage = () => {
     try {
       setLoading(true);
       setError(null);
-      const token = AuthService.getToken();
-      if (!token) { setError("Not authenticated. Please log in again."); return; }
+            if (!token) { setError("Not authenticated. Please log in again."); return; }
 
       const response = await fetch(API_ENDPOINTS.auth.repositories, {
         headers: { Authorization: `Bearer ${token}` },

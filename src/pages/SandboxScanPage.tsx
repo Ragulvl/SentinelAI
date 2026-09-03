@@ -72,8 +72,8 @@ const SandboxScanPage = () => {
       addLog("Starting Vercel Sandbox microVM...", "info");
       addLog(`Target: ${repoUrl}`, "info");
 
-      const token = AuthService.getToken();
-      const response = await fetch(API_ENDPOINTS.scan.sandboxScan, {
+            const response = await fetch(API_ENDPOINTS.scan.sandboxScan, {
+          credentials: 'include',
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ repoUrl: repoUrl.trim(), branch: branch.trim() || "main" }),
@@ -94,8 +94,7 @@ const SandboxScanPage = () => {
   };
 
   const pollSandboxStatus = async (sandboxId: string) => {
-    const token = AuthService.getToken();
-    const poll = async () => {
+        const poll = async () => {
       try {
         const response = await fetch(`${API_ENDPOINTS.scan.sandboxStatus}/${sandboxId}`, {
           headers: { Authorization: `Bearer ${token}` },

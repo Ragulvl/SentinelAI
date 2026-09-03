@@ -2,12 +2,14 @@ import { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AuthService } from '../services/auth.service';
 
+// Auth callback — token is now set as an httpOnly cookie by the backend.
+// The backend redirects here with NO token in the URL (XSS-safe).
+// We just verify the session via the cookie and navigate.
 const AuthCallback = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
-    const token = searchParams.get('token');
     const error = searchParams.get('error');
 
     if (error) {
@@ -16,12 +18,14 @@ const AuthCallback = () => {
       return;
     }
 
-    if (token) {
-      AuthService.saveToken(token);
-      navigate('/repos');
-    } else {
-      navigate('/login?error=No token received');
-    }
+    // Cookie was set by backend — verify session (sends cookie automatically)
+    AuthService.verifyToken().then((user) => {
+      if (user) {
+        navigate('/repos');
+      } else {
+        navigate('/login?error=Authentication failed');
+      }
+    });
   }, [searchParams, navigate]);
 
   return (

@@ -1,165 +1,100 @@
-import { AuthService } from '../services/auth.service';
 import { API_URL } from '../config/api';
 
-export class ApiClient {
-  private static getHeaders(): HeadersInit {
-    const token = AuthService.getToken();
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-    };
+// ── Unified API client ────────────────────────────────────────────────────────
+// All requests send credentials: 'include' so the browser automatically
+// attaches the httpOnly auth cookie. No Authorization header needed.
+// The server's CORS config allows credentials from the frontend origin.
 
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
+function handleUnauthorized() {
+  // Cookie expired / invalid — redirect to login
+  window.location.href = '/login';
+}
 
-    return headers;
+async function parseError(response: Response) {
+  let errorData: any;
+  try {
+    errorData = await response.json();
+  } catch {
+    errorData = { error: response.statusText };
   }
+  const error: any = new Error(
+    errorData.error || errorData.message || `API Error: ${response.statusText}`
+  );
+  error.response = { data: errorData, status: response.status };
+  return error;
+}
 
+const BASE_OPTS: RequestInit = {
+  credentials: 'include',
+  headers: { 'Content-Type': 'application/json' },
+};
+
+export class ApiClient {
   static async get<T>(endpoint: string): Promise<T> {
     const response = await fetch(`${API_URL}${endpoint}`, {
+          credentials: 'include',
       method: 'GET',
-      headers: this.getHeaders(),
+      ...BASE_OPTS,
     });
-
     if (!response.ok) {
-      if (response.status === 401) {
-        AuthService.removeToken();
-        window.location.href = '/login';
-      }
-      
-      // Try to parse error response body
-      let errorData;
-      try {
-        errorData = await response.json();
-      } catch {
-        errorData = { error: response.statusText };
-      }
-      
-      // Create error with response data attached
-      const error: any = new Error(errorData.error || errorData.message || `API Error: ${response.statusText}`);
-      error.response = { data: errorData, status: response.status };
-      throw error;
+      if (response.status === 401) handleUnauthorized();
+      throw await parseError(response);
     }
-
     return response.json();
   }
 
-  static async post<T>(endpoint: string, data?: any): Promise<T> {
+  static async post<T>(endpoint: string, data?: unknown): Promise<T> {
     const response = await fetch(`${API_URL}${endpoint}`, {
+          credentials: 'include',
       method: 'POST',
-      headers: this.getHeaders(),
+      ...BASE_OPTS,
       body: data ? JSON.stringify(data) : undefined,
     });
-
     if (!response.ok) {
-      if (response.status === 401) {
-        AuthService.removeToken();
-        window.location.href = '/login';
-      }
-      
-      // Try to parse error response body
-      let errorData;
-      try {
-        errorData = await response.json();
-      } catch {
-        errorData = { error: response.statusText };
-      }
-      
-      // Create error with response data attached
-      const error: any = new Error(errorData.error || errorData.message || `API Error: ${response.statusText}`);
-      error.response = { data: errorData, status: response.status };
-      throw error;
+      if (response.status === 401) handleUnauthorized();
+      throw await parseError(response);
     }
-
     return response.json();
   }
 
-  static async put<T>(endpoint: string, data?: any): Promise<T> {
+  static async put<T>(endpoint: string, data?: unknown): Promise<T> {
     const response = await fetch(`${API_URL}${endpoint}`, {
+          credentials: 'include',
       method: 'PUT',
-      headers: this.getHeaders(),
+      ...BASE_OPTS,
       body: data ? JSON.stringify(data) : undefined,
     });
-
     if (!response.ok) {
-      if (response.status === 401) {
-        AuthService.removeToken();
-        window.location.href = '/login';
-      }
-      
-      // Try to parse error response body
-      let errorData;
-      try {
-        errorData = await response.json();
-      } catch {
-        errorData = { error: response.statusText };
-      }
-      
-      // Create error with response data attached
-      const error: any = new Error(errorData.error || errorData.message || `API Error: ${response.statusText}`);
-      error.response = { data: errorData, status: response.status };
-      throw error;
+      if (response.status === 401) handleUnauthorized();
+      throw await parseError(response);
     }
-
     return response.json();
   }
 
-  static async patch<T>(endpoint: string, data?: any): Promise<T> {
+  static async patch<T>(endpoint: string, data?: unknown): Promise<T> {
     const response = await fetch(`${API_URL}${endpoint}`, {
+          credentials: 'include',
       method: 'PATCH',
-      headers: this.getHeaders(),
+      ...BASE_OPTS,
       body: data ? JSON.stringify(data) : undefined,
     });
-
     if (!response.ok) {
-      if (response.status === 401) {
-        AuthService.removeToken();
-        window.location.href = '/login';
-      }
-      
-      // Try to parse error response body
-      let errorData;
-      try {
-        errorData = await response.json();
-      } catch {
-        errorData = { error: response.statusText };
-      }
-      
-      // Create error with response data attached
-      const error: any = new Error(errorData.error || errorData.message || `API Error: ${response.statusText}`);
-      error.response = { data: errorData, status: response.status };
-      throw error;
+      if (response.status === 401) handleUnauthorized();
+      throw await parseError(response);
     }
-
     return response.json();
   }
 
   static async delete<T>(endpoint: string): Promise<T> {
     const response = await fetch(`${API_URL}${endpoint}`, {
+          credentials: 'include',
       method: 'DELETE',
-      headers: this.getHeaders(),
+      ...BASE_OPTS,
     });
-
     if (!response.ok) {
-      if (response.status === 401) {
-        AuthService.removeToken();
-        window.location.href = '/login';
-      }
-      
-      // Try to parse error response body
-      let errorData;
-      try {
-        errorData = await response.json();
-      } catch {
-        errorData = { error: response.statusText };
-      }
-      
-      // Create error with response data attached
-      const error: any = new Error(errorData.error || errorData.message || `API Error: ${response.statusText}`);
-      error.response = { data: errorData, status: response.status };
-      throw error;
+      if (response.status === 401) handleUnauthorized();
+      throw await parseError(response);
     }
-
     return response.json();
   }
 }

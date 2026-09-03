@@ -31,14 +31,14 @@ export interface ScanStatusResponse {
 
 export class ScanService {
   static async startScan(request: StartScanRequest): Promise<{ scanId: string; status: string }> {
-    const token = AuthService.getToken();
-    
+        
     if (!token) {
       throw new Error('Not authenticated');
     }
 
     try {
       const response = await fetch(API_ENDPOINTS.scan.start, {
+          credentials: 'include',
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -60,8 +60,7 @@ export class ScanService {
   }
 
   static async getScanStatus(scanId: string): Promise<ScanStatusResponse> {
-    const token = AuthService.getToken();
-    
+        
     if (!token) {
       throw new Error('Not authenticated');
     }
@@ -86,8 +85,7 @@ export class ScanService {
   }
 
   static async getScanResults(scanId: string): Promise<ScanResult> {
-    const token = AuthService.getToken();
-    
+        
     if (!token) {
       throw new Error('Not authenticated');
     }
@@ -112,8 +110,7 @@ export class ScanService {
   }
 
   static async getScanHistory(limit = 50): Promise<ScanResult[]> {
-    const token = AuthService.getToken();
-    
+        
     if (!token) {
       throw new Error('Not authenticated');
     }
@@ -139,14 +136,14 @@ export class ScanService {
   }
 
   static async createFixPR(scanId: string): Promise<{ prUrl: string; prNumber: number; fixedCount: number }> {
-    const token = AuthService.getToken();
-    
+        
     if (!token) {
       throw new Error('Not authenticated');
     }
 
     try {
       const response = await fetch(API_ENDPOINTS.scan.createPR(scanId), {
+          credentials: 'include',
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -166,8 +163,7 @@ export class ScanService {
   }
 
   static async getFileContent(scanId: string, filePath: string): Promise<{ path: string; content: string; sha: string; size: number }> {
-    const token = AuthService.getToken();
-    
+        
     if (!token) {
       throw new Error('Not authenticated');
     }
@@ -198,8 +194,7 @@ export class ScanService {
     sha: string,
     commitMessage: string
   ): Promise<void> {
-    const token = AuthService.getToken();
-    
+        
     if (!token) {
       throw new Error('Not authenticated');
     }

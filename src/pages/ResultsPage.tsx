@@ -263,8 +263,7 @@ const ResultsPage = () => {
 
   const handleDownload = async () => {
     if (!scanId) return;
-    const token = AuthService.getToken();
-    if (!token) return;
+        if (!token) return;
     try {
       // CWE-798: Never put tokens in URLs — use Authorization header via fetch
       const response = await fetch(API_ENDPOINTS.scan.download(scanId), {
@@ -287,8 +286,7 @@ const ResultsPage = () => {
 
   const handleDownloadPdf = async () => {
     if (!scanId) return;
-    const token = AuthService.getToken();
-    if (!token) return;
+        if (!token) return;
     try {
       const response = await fetch(`/api/scan/${scanId}/report.pdf`, {
         headers: { Authorization: `Bearer ${token}` },

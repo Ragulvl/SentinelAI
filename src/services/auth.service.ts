@@ -18,13 +18,11 @@ export interface User {
 }
 
 export class AuthService {
-  private static readonly TOKEN_KEY = 'token'; // Changed from 'auth_token' to match other services
-
   static async initiateGitHubLogin(): Promise<void> {
     try {
       const response = await fetch(API_ENDPOINTS.auth.github);
       const data = await response.json();
-      
+
       if (data.url) {
         window.location.href = data.url;
       } else {
@@ -36,34 +34,19 @@ export class AuthService {
     }
   }
 
-  static saveToken(token: string): void {
-    localStorage.setItem(this.TOKEN_KEY, token);
-  }
-
-  static getToken(): string | null {
-    return localStorage.getItem(this.TOKEN_KEY);
-  }
-
-  static removeToken(): void {
-    localStorage.removeItem(this.TOKEN_KEY);
-  }
+  // ── Token is now an httpOnly cookie — JS cannot read it (XSS-safe) ──────────
+  // saveToken / getToken / removeToken are removed intentionally.
+  // The browser sends the cookie automatically on all same-origin and
+  // credentialed cross-origin requests. The server sets / clears it.
 
   static async verifyToken(): Promise<User | null> {
-    const token = this.getToken();
-    
-    if (!token) {
-      return null;
-    }
-
     try {
       const response = await fetch(API_ENDPOINTS.auth.verify, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        // credentials: 'include' sends the httpOnly cookie automatically
+        credentials: 'include',
       });
 
       if (!response.ok) {
-        this.removeToken();
         return null;
       }
 
@@ -71,31 +54,25 @@ export class AuthService {
       return data.user;
     } catch (error) {
       console.error('Error verifying token:', error);
-      this.removeToken();
       return null;
     }
   }
 
   static async logout(): Promise<void> {
-    const token = this.getToken();
-    
-    if (token) {
-      try {
-        await fetch(API_ENDPOINTS.auth.logout, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-      } catch (error) {
-        console.error('Error during logout:', error);
-      }
+    try {
+      await fetch(API_ENDPOINTS.auth.logout, {
+          credentials: 'include',
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch (error) {
+      console.error('Error during logout:', error);
     }
-
-    this.removeToken();
+    // No localStorage to clear — server cleared the cookie
   }
 
-  static isAuthenticated(): boolean {
-    return !!this.getToken();
+  static async isAuthenticated(): Promise<boolean> {
+    const user = await this.verifyToken();
+    return user !== null;
   }
 }

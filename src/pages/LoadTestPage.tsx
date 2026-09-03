@@ -115,8 +115,7 @@ export default function LoadTestPage() {
   const loadExistingResult = async (id: string) => {
     try {
       setLoading(true);
-      const token = AuthService.getToken();
-      const response = await fetch(API_ENDPOINTS.history.detail("load", id), {
+            const response = await fetch(API_ENDPOINTS.history.detail("load", id), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) throw new Error("Failed to load");

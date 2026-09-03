@@ -28,14 +28,12 @@ interface AdminUser {
 interface Activity { type: string; icon: string; message: string; time: string; meta: any }
 
 // ── API Helper ─────────────────────────────────────────────────────────────
-const getToken = () => localStorage.getItem('token') || '';
 const apiFetch = async (path: string, opts?: RequestInit) => {
   const r = await fetch(path, {
     ...opts,
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${getToken()}`,
-      ...(opts?.headers || {}),
+            ...(opts?.headers || {}),
     },
   });
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
@@ -173,8 +171,7 @@ function RepoModal({ userId, username, onClose }: { userId: string; username: st
   const [downloading, setDownloading] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('token') || '';
-    fetch(`/api/admin/users/${userId}/repos`, { headers: { Authorization: `Bearer ${token}` } })
+        fetch(`/api/admin/users/${userId}/repos`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(d => { if (d.repos) setRepos(d.repos); else setError(d.error || 'Failed'); })
       .catch(() => setError('Network error'))
@@ -185,8 +182,7 @@ function RepoModal({ userId, username, onClose }: { userId: string; username: st
     const key = repo.fullName;
     setDownloading(key);
     try {
-      const token = localStorage.getItem('token') || '';
-      const ref = encodeURIComponent(repo.defaultBranch || 'HEAD');
+            const ref = encodeURIComponent(repo.defaultBranch || 'HEAD');
 
       // Backend proxies the entire download server-side — browser only
       // talks to our API, never directly to GitHub CDN (no CORS, no 404s)
@@ -403,7 +399,8 @@ export default function AdminPage() {
   // ── Actions ──
   const updateRole = async (userId: string, role: string) => {
     try {
-      await apiFetch(`/api/admin/users/${userId}/role`, { method: 'PATCH', body: JSON.stringify({ role }) });
+      await apiFetch(`/api/admin/users/${userId}/role`, {
+          credentials: 'include', method: 'PATCH', body: JSON.stringify({ role }) });
       showToast(`Role updated → ${role}`);
       loadUsers(userPage, userSearch);
     } catch (e: any) { showToast(e.message, false); }
@@ -411,7 +408,8 @@ export default function AdminPage() {
 
   const banUser = async (userId: string, banned: boolean) => {
     try {
-      await apiFetch(`/api/admin/users/${userId}/ban`, { method: 'PATCH', body: JSON.stringify({ banned }) });
+      await apiFetch(`/api/admin/users/${userId}/ban`, {
+          credentials: 'include', method: 'PATCH', body: JSON.stringify({ banned }) });
       showToast(banned ? 'User banned' : 'User unbanned');
       loadUsers(userPage, userSearch);
     } catch (e: any) { showToast(e.message, false); }
@@ -423,7 +421,8 @@ export default function AdminPage() {
       onConfirm: async () => {
         setConfirm(null);
         try {
-          await apiFetch(`/api/admin/users/${userId}`, { method: 'DELETE' });
+          await apiFetch(`/api/admin/users/${userId}`, {
+          credentials: 'include', method: 'DELETE' });
           showToast(`@${username} deleted`);
           loadUsers(userPage, userSearch);
         } catch (e: any) { showToast(e.message, false); }

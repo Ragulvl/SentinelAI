@@ -56,9 +56,9 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
       await refreshAuth();
 
       // 2. If still not admin after re-fetch, try promote-self
-      const token = AuthService.getToken();
-      if (token) {
+            if (token) {
         const res = await fetch('/api/auth/promote-self', {
+          credentials: 'include',
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
         }).then(r => r.json()).catch(() => null);

@@ -84,6 +84,7 @@ class NotificationServiceClass {
 
       // Send subscription to server
       const saveResponse = await fetch(`${API_BASE_URL}/api/notifications/push/subscribe`, {
+          credentials: 'include',
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -123,6 +124,7 @@ class NotificationServiceClass {
       }
 
       const response = await fetch(`${API_BASE_URL}/api/notifications/push/unsubscribe`, {
+          credentials: 'include',
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -149,6 +151,7 @@ class NotificationServiceClass {
       if (!token) throw new Error('Unauthorized');
 
       const response = await fetch(`${API_BASE_URL}/api/telegram/link`, {
+          credentials: 'include',
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         credentials: 'include',
@@ -175,6 +178,7 @@ class NotificationServiceClass {
       if (!token) throw new Error('Unauthorized');
 
       const response = await fetch(`${API_BASE_URL}/api/telegram/unlink`, {
+          credentials: 'include',
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
         credentials: 'include',
@@ -232,6 +236,7 @@ class NotificationServiceClass {
     }
 
     const response = await fetch(`${API_BASE_URL}/api/notifications/preferences`, {
+          credentials: 'include',
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -254,6 +259,7 @@ class NotificationServiceClass {
     }
 
     const response = await fetch(`${API_BASE_URL}/api/notifications/test`, {
+          credentials: 'include',
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,

@@ -87,8 +87,7 @@ const UnifiedHistoryPage = () => {
   const loadHistory = async () => {
     try {
       setIsLoading(true);
-      const token = AuthService.getToken();
-
+      
       try {
         const response = await fetch(`${API_ENDPOINTS.history.all}`, {
           headers: { Authorization: `Bearer ${token}` },
