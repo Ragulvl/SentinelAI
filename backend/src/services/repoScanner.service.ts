@@ -211,10 +211,9 @@ export class RepoScannerService {
           const dep = batch[idx];
           (result.vulns ?? []).forEach((vuln: any) => {
             const cveId = (vuln.aliases ?? []).find((a: string) => a.startsWith('CVE-')) ?? vuln.id;
-            const severity = vuln.database_specific?.severity?.toLowerCase() ||
-              vuln.severity?.[0]?.score > 8 ? 'critical' :
-              vuln.severity?.[0]?.score > 6 ? 'high' :
-              vuln.severity?.[0]?.score > 3 ? 'medium' : 'low';
+            const cvssScore = vuln.severity?.[0]?.score ?? 0;
+            const severity = (vuln.database_specific?.severity?.toLowerCase() as ICveResult['severity'] | undefined)
+              ?? (cvssScore >= 9 ? 'critical' : cvssScore >= 7 ? 'high' : cvssScore >= 4 ? 'medium' : 'low');
             const fixedIn = vuln.affected?.[0]?.ranges?.[0]?.events
               ?.find((e: any) => e.fixed)?.fixed;
             results.push({

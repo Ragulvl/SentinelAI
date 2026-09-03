@@ -198,6 +198,7 @@ router.patch('/users/:id/role', async (req: Request, res: Response) => {
     }
     const user = await User.findByIdAndUpdate(req.params.id, { role }, { new: true }).select('username role');
     if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+    await logAction(req, 'user.role_change', req.params.id, 'user', { newRole: role, username: user.username });
     res.json({ message: `Role updated to ${role}`, user });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -215,6 +216,7 @@ router.patch('/users/:id/ban', async (req: Request, res: Response) => {
       : { isBanned: false, bannedAt: null, bannedReason: null };
     const user = await User.findByIdAndUpdate(req.params.id, update, { new: true }).select('username isBanned bannedReason');
     if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+    await logAction(req, banned ? 'user.ban' : 'user.unban', req.params.id, 'user', { reason, username: user.username });
     res.json({ message: banned ? 'User banned' : 'User unbanned', user });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

@@ -5,6 +5,7 @@ export type AuditAction =
   | 'user.ban'
   | 'user.unban'
   | 'user.delete'
+  | 'user.role_change'
   | 'repo.list'
   | 'repo.download'
   | 'scan.view'
@@ -40,5 +41,7 @@ const AuditLogSchema = new Schema<IAuditLog>(
 
 AuditLogSchema.index({ createdAt: -1 });
 AuditLogSchema.index({ adminId: 1, createdAt: -1 });
+// TTL: auto-delete logs after 90 days (compliance: keep ≥30 days per GDPR baseline)
+AuditLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60 });
 
 export const AuditLog = mongoose.model<IAuditLog>('AuditLog', AuditLogSchema);
