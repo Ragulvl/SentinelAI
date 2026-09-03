@@ -834,3 +834,64 @@
 
   /* NOTE: section-label, metric-number, progress-bar defined above — no duplicates */
 }
+
+/* -- Mobile Responsive Overrides ------------------------------------------- */
+@media (max-width: 640px) {
+
+  /* Tables: make horizontally scrollable */
+  table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Page headers: stack vertically */
+  .page-header-actions { flex-direction: column; gap: 8px; }
+
+  /* KPI grids: 2 cols instead of 4 on small screens */
+  .kpi-grid { grid-template-columns: repeat(2, 1fr) !important; }
+
+  /* Admin page stat cards */
+  .admin-stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
+
+  /* Card padding reduction */
+  .card-elevated { padding: 16px !important; }
+
+  /* Terminal / log output: font size reduction */
+  .terminal-output { font-size: 11px !important; }
+
+  /* Pentest page: stack scan config and terminal */
+  .pentest-split { flex-direction: column !important; }
+
+  /* Score ring: smaller on mobile */
+  .score-ring { width: 80px !important; height: 80px !important; }
+
+  /* Pagination: compact */
+  .pagination-container { flex-wrap: wrap; gap: 4px; }
+
+  /* Repo select page cards */
+  .repo-card-grid { grid-template-columns: 1fr !important; }
+
+  /* Hide secondary columns in vulnerability table on mobile */
+  .vuln-col-hide-mobile { display: none !important; }
+
+  /* Monitoring cards: full width */
+  .monitoring-grid { grid-template-columns: 1fr !important; }
+
+  /* Load test results grid */
+  .loadtest-grid { grid-template-columns: repeat(2, 1fr) !important; }
+
+  /* Buttons: allow wrap in action bars */
+  .action-bar { flex-wrap: wrap !important; }
+
+  /* PDF / Export buttons: full width on mobile */
+  .export-actions { width: 100%; flex-direction: column; }
+
+  /* PageHeader: reduce title size */
+  h1.page-title { font-size: 1.25rem !important; }
+
+  /* Reduce gap in summary hero cards */
+  .summary-hero { flex-direction: column !important; align-items: flex-start !important; }
+}
+
+/* Tablet-only tweaks */
+@media (min-width: 641px) and (max-width: 1023px) {
+  .kpi-grid { grid-template-columns: repeat(2, 1fr) !important; }
+  .admin-stats-grid { grid-template-columns: repeat(3, 1fr) !important; }
+}
