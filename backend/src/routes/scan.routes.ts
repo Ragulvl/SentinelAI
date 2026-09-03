@@ -1,5 +1,7 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { ScanController } from '../controllers/scan.controller.js';
+import { Scan } from '../db/models/Scan.model.js';
+import { generateScanReportPdf } from '../services/pdfReport.service.js';
 
 const router = Router();
 
@@ -26,5 +28,20 @@ router.get('/:scanId/file/*', ScanController.getFileContent);
 
 // Update file content
 router.put('/:scanId/file/*', ScanController.updateFileContent);
+
+// Download PDF report
+router.get('/:scanId/report.pdf', async (req: Request, res: Response) => {
+  try {
+    const scan = await Scan.findById(req.params.scanId).lean();
+    if (!scan) { res.status(404).json({ error: 'Scan not found' }); return; }
+    const pdfBuffer = await generateScanReportPdf(scan);
+    const filename = `sentinelai-scan-${scan.repoName ?? 'report'}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(pdfBuffer);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 export default router;

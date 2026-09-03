@@ -5,7 +5,7 @@ import {
   AlertTriangle, Download, GitPullRequest, Code2,
   ChevronDown, ChevronRight, FileWarning, CheckCircle2,
   XCircle, Loader2, Shield, ArrowLeft, ExternalLink,
-  ChevronLeft, Terminal, Flame,
+  ChevronLeft, Terminal, Flame, FileText, Package,
 } from "lucide-react";
 import { Severity, Vulnerability, ScanResult } from "@/types/sentinel";
 import { PageLayout } from "@/components/PageLayout";
@@ -285,6 +285,29 @@ const ResultsPage = () => {
     }
   };
 
+  const handleDownloadPdf = async () => {
+    if (!scanId) return;
+    const token = AuthService.getToken();
+    if (!token) return;
+    try {
+      const response = await fetch(`/api/scan/${scanId}/report.pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error('PDF generation failed');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sentinelai-report-${scanId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('PDF download error:', err);
+    }
+  };
+
   if (loading) {
     return (
       <PageLayout>
@@ -351,6 +374,13 @@ const ResultsPage = () => {
               className="btn-ghost-border gap-2 text-xs"
             >
               <Download className="w-3.5 h-3.5" /> Download ({fixableCount})
+            </button>
+            <button
+              onClick={handleDownloadPdf}
+              className="btn-ghost-border gap-2 text-xs"
+              title="Download PDF Report"
+            >
+              <FileText className="w-3.5 h-3.5" /> PDF Report
             </button>
             {!prCreated && fixableCount > 0 && (
               <button
@@ -492,6 +522,49 @@ const ResultsPage = () => {
           </>
         )}
       </div>
+
+      {/* CVE Dependency Results */}
+      {((scanData as any).cveResults?.length > 0) && (
+        <div className="mt-8">
+          <div className="flex items-center gap-2 mb-4">
+            <Package className="w-4 h-4 text-blue-400" />
+            <h2 className="text-sm font-bold text-foreground uppercase tracking-wider">Dependency CVEs</h2>
+            <span className="ml-1 px-2 py-0.5 rounded-full text-xs font-mono" style={{ background: 'rgba(37,99,235,0.15)', color: '#60A5FA', border: '1px solid rgba(37,99,235,0.3)' }}>
+              {(scanData as any).cveResults.length}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {(scanData as any).cveResults.map((cve: any, i: number) => {
+              const sev = cve.severity as keyof typeof SEV_CONFIG;
+              const cfg = SEV_CONFIG[sev] ?? SEV_CONFIG.low;
+              return (
+                <div key={i} className={`rounded-xl p-4 flex flex-col sm:flex-row sm:items-center gap-3 border ${cfg.border} card-base`}>
+                  <span className={`badge text-[10px] font-mono uppercase tracking-wide px-2 py-0.5 shrink-0 ${cfg.color} ${cfg.bg} border ${cfg.border}`}>
+                    {sev}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-semibold text-foreground font-mono">{cve.pkg}</span>
+                      <span className="text-xs text-muted-foreground">v{cve.version}</span>
+                      <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: 'rgba(37,99,235,0.1)', color: '#60A5FA', border: '1px solid rgba(37,99,235,0.2)', fontFamily: 'monospace' }}>
+                        {cve.cveId}
+                      </span>
+                      <span className="text-xs text-muted-foreground">{cve.ecosystem}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">{cve.summary}</p>
+                  </div>
+                  {cve.fixedIn && (
+                    <div className="shrink-0 text-right">
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Fix in</div>
+                      <div className="text-xs font-mono text-green-400 font-semibold">v{cve.fixedIn}</div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </PageLayout>
   );
 };

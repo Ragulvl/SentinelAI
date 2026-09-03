@@ -7,11 +7,30 @@ import { PenetrationTest } from '../db/models/PenetrationTest.model.js';
 import { MonitoredSite } from '../db/models/MonitoredSite.model.js';
 import { LoadTest } from '../db/models/LoadTest.model.js';
 import { requireAdmin } from '../middleware/admin.middleware.js';
+import { AuditLog, AuditAction } from '../db/models/AuditLog.model.js';
+import { generateScanReportPdf, generatePentestReportPdf } from '../services/pdfReport.service.js';
 
 const router = Router();
 
 // Apply admin auth to all routes
 router.use(requireAdmin);
+
+// ── Audit log helper ──────────────────────────────────────────────────────────
+async function logAction(req: Request, action: AuditAction, targetId?: string, targetType?: 'user' | 'scan' | 'pentest' | 'repo', metadata?: Record<string, any>) {
+  try {
+    const admin = (req as any).user;
+    await AuditLog.create({
+      adminId:       admin?.id ?? admin?._id ?? 'unknown',
+      adminUsername: admin?.username ?? 'admin',
+      action,
+      targetId,
+      targetType,
+      metadata,
+      ip: req.ip,
+    });
+  } catch { /* audit logging is non-fatal */ }
+}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/admin/stats  — dashboard KPIs
@@ -585,10 +604,92 @@ router.get('/users/:id/repos/:owner/:repo/download', async (req: Request, res: R
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', zipBuffer!.byteLength.toString());
+    await logAction(req, 'repo.download', undefined, 'repo', { owner, repo, ref });
     res.send(zipBuffer);
 
   } catch (err: any) {
     if (!res.headersSent) res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/audit-logs  — paginated audit log
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/audit-logs', async (req: Request, res: Response) => {
+  try {
+    const page  = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, parseInt(req.query.limit as string) || 50);
+    const action = req.query.action as string | undefined;
+
+    const filter: any = {};
+    if (action) filter.action = action;
+
+    const [logs, total] = await Promise.all([
+      AuditLog.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+      AuditLog.countDocuments(filter),
+    ]);
+    await logAction(req, 'audit.view');
+    res.json({ logs, total, page, pages: Math.ceil(total / limit) });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/analytics  — platform metrics for admin dashboard
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/analytics', async (req: Request, res: Response) => {
+  try {
+    const days = parseInt(req.query.days as string) || 30;
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    // Daily scan counts
+    const [scansByDay, pentestsByDay, usersByDay, topVulnTypes] = await Promise.all([
+      Scan.aggregate([
+        { $match: { createdAt: { $gte: since } } },
+        { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } },
+        { $sort: { _id: 1 } },
+      ]),
+      PenetrationTest.aggregate([
+        { $match: { createdAt: { $gte: since } } },
+        { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } },
+        { $sort: { _id: 1 } },
+      ]),
+      User.aggregate([
+        { $match: { createdAt: { $gte: since } } },
+        { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } },
+        { $sort: { _id: 1 } },
+      ]),
+      Scan.aggregate([
+        { $unwind: '$vulnerabilities' },
+        { $group: { _id: '$vulnerabilities.title', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 10 },
+      ]),
+    ]);
+
+    await logAction(req, 'analytics.view');
+    res.json({ scansByDay, pentestsByDay, usersByDay, topVulnTypes, days });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/pentest/:id/report.pdf  — download pentest PDF report
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/pentest/:id/report.pdf', async (req: Request, res: Response) => {
+  try {
+    const pentest = await PenetrationTest.findById(req.params.id).lean();
+    if (!pentest) { res.status(404).json({ error: 'Pentest not found' }); return; }
+    const pdfBuffer = await generatePentestReportPdf(pentest);
+    const filename = `sentinelai-pentest-${(pentest as any).url?.replace(/https?:\/\//,'').replace(/[^a-z0-9]/gi,'-') ?? 'report'}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    await logAction(req, 'pentest.view', req.params.id, 'pentest', { action: 'pdf_download' });
+    res.send(pdfBuffer);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 

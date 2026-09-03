@@ -17,6 +17,17 @@ export interface IVulnerability {
   patchedCode: string;
 }
 
+export interface ICveResult {
+  pkg: string;
+  version: string;
+  ecosystem: string;  // npm | PyPI | Go | RubyGems
+  cveId: string;
+  osvId: string;
+  severity: Severity;
+  summary: string;
+  fixedIn?: string;
+}
+
 export interface IScan extends Document {
   userId: number;
   repoId: string;
@@ -28,6 +39,7 @@ export interface IScan extends Document {
   startedAt: Date;
   completedAt?: Date;
   vulnerabilities: IVulnerability[];
+  cveResults: ICveResult[];
   summary: {
     critical: number;
     high: number;
@@ -110,6 +122,19 @@ const ScanSchema = new Schema<IScan>(
     },
     vulnerabilities: {
       type: [VulnerabilitySchema],
+      default: [],
+    },
+    cveResults: {
+      type: [{
+        pkg:       { type: String, required: true },
+        version:   { type: String, required: true },
+        ecosystem: { type: String, required: true },
+        cveId:     { type: String, required: true },
+        osvId:     { type: String, required: true },
+        severity:  { type: String, enum: ['critical', 'high', 'medium', 'low'], required: true },
+        summary:   { type: String, required: true },
+        fixedIn:   { type: String },
+      }],
       default: [],
     },
     summary: {

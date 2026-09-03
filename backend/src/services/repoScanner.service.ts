@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { AIService } from './ai.service.js';
-import { Scan, IVulnerability } from '../db/models/Scan.model.js';
+import { Scan, IVulnerability, ICveResult } from '../db/models/Scan.model.js';
 import { NotificationService } from './notification.service.js';
 import crypto from 'crypto';
 
@@ -77,7 +77,16 @@ export class RepoScannerService {
 
       await this.addLog(scanId, 'success', `Analysis complete: ${allVulnerabilities.length} vulnerabilities found`);
 
-      // Step 5: Save results
+      // Step 5: CVE dependency scanning via OSV API
+      await this.addLog(scanId, 'info', 'Scanning dependencies for known CVEs (OSV API)...');
+      const cveResults = await this.scanDependencies(allFiles, repoFullName, githubAccessToken);
+      if (cveResults.length > 0) {
+        await this.addLog(scanId, 'warning', `Found ${cveResults.length} CVE(s) in dependencies`);
+      } else {
+        await this.addLog(scanId, 'success', 'No known CVEs found in dependencies');
+      }
+
+      // Step 6: Save results
       const summary = {
         critical: allVulnerabilities.filter(v => v.severity === 'critical').length,
         high:     allVulnerabilities.filter(v => v.severity === 'high').length,
@@ -88,6 +97,7 @@ export class RepoScannerService {
       };
 
       scan.vulnerabilities = allVulnerabilities;
+      scan.cveResults = cveResults;
       scan.summary = summary;
       scan.status = 'completed';
       scan.completedAt = new Date();
@@ -95,7 +105,7 @@ export class RepoScannerService {
 
       await this.addLog(scanId, 'success', 'Scan completed');
       await this.addLog(scanId, 'info',
-        `${summary.critical} critical · ${summary.high} high · ${summary.medium} medium · ${summary.low} low · ${summary.patchable} auto-patchable`
+        `${summary.critical} critical · ${summary.high} high · ${summary.medium} medium · ${summary.low} low · ${summary.patchable} auto-patchable · ${cveResults.length} CVEs`
       );
 
       // Send WhatsApp security alert
@@ -136,6 +146,93 @@ export class RepoScannerService {
         `❌ Scan Failed for ${scan.repoFullName}\n\nError: ${error.message}\n\nPlease try again: https://sentinalsec.vercel.app`
       ).catch(() => {});
     }
+  }
+
+  // ── CVE dependency scanning (OSV API) ─────────────────────────────────────
+  private static async scanDependencies(
+    allFiles: { path: string; content: string }[],
+    _repoFullName: string,
+    _token: string
+  ): Promise<ICveResult[]> {
+    type Dep = { name: string; version: string; ecosystem: string };
+    const deps: Dep[] = [];
+
+    for (const file of allFiles) {
+      try {
+        // npm / yarn
+        if (file.path.endsWith('package.json') && !file.path.includes('node_modules')) {
+          const pkg = JSON.parse(file.content);
+          const merge = { ...pkg.dependencies, ...pkg.devDependencies };
+          for (const [name, ver] of Object.entries(merge)) {
+            const v = String(ver).replace(/[^0-9.]/g, '');
+            if (v) deps.push({ name, version: v, ecosystem: 'npm' });
+          }
+        }
+        // Python pip
+        if (file.path.endsWith('requirements.txt')) {
+          for (const line of file.content.split('\n')) {
+            const m = line.trim().match(/^([A-Za-z0-9_.-]+)[=<>!]+([0-9.]+)/);
+            if (m) deps.push({ name: m[1], version: m[2], ecosystem: 'PyPI' });
+          }
+        }
+        // Go modules
+        if (file.path.endsWith('go.mod')) {
+          for (const line of file.content.split('\n')) {
+            const m = line.trim().match(/^\s+([^\s]+)\s+v([0-9.]+)/);
+            if (m) deps.push({ name: m[1], version: m[2], ecosystem: 'Go' });
+          }
+        }
+        // Ruby Gemfile.lock
+        if (file.path.endsWith('Gemfile.lock')) {
+          for (const line of file.content.split('\n')) {
+            const m = line.trim().match(/^([a-z_-]+)\s+\(([0-9.]+)\)/);
+            if (m) deps.push({ name: m[1], version: m[2], ecosystem: 'RubyGems' });
+          }
+        }
+      } catch { /* skip malformed files */ }
+    }
+
+    if (deps.length === 0) return [];
+
+    // Batch query OSV API (up to 1000 per call, free, no auth needed)
+    const BATCH = 100;
+    const results: ICveResult[] = [];
+
+    for (let i = 0; i < deps.length; i += BATCH) {
+      const batch = deps.slice(i, i + BATCH);
+      try {
+        const osvRes = await axios.post(
+          'https://api.osv.dev/v1/querybatch',
+          { queries: batch.map(d => ({ version: d.version, package: { name: d.name, ecosystem: d.ecosystem } })) },
+          { timeout: 30_000 }
+        );
+        const osvResults: any[] = osvRes.data?.results ?? [];
+        osvResults.forEach((result, idx) => {
+          const dep = batch[idx];
+          (result.vulns ?? []).forEach((vuln: any) => {
+            const cveId = (vuln.aliases ?? []).find((a: string) => a.startsWith('CVE-')) ?? vuln.id;
+            const severity = vuln.database_specific?.severity?.toLowerCase() ||
+              vuln.severity?.[0]?.score > 8 ? 'critical' :
+              vuln.severity?.[0]?.score > 6 ? 'high' :
+              vuln.severity?.[0]?.score > 3 ? 'medium' : 'low';
+            const fixedIn = vuln.affected?.[0]?.ranges?.[0]?.events
+              ?.find((e: any) => e.fixed)?.fixed;
+            results.push({
+              pkg: dep.name,
+              version: dep.version,
+              ecosystem: dep.ecosystem,
+              cveId,
+              osvId: vuln.id,
+              severity: severity as ICveResult['severity'],
+              summary: vuln.summary ?? vuln.details?.slice(0, 200) ?? 'No description',
+              fixedIn,
+            });
+          });
+        });
+      } catch { /* OSV API failure is non-fatal */ }
+    }
+
+    return results;
   }
 
   // ── Tech stack detection ────────────────────────────────────────────────────

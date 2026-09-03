@@ -8,6 +8,7 @@ import {
   Server, AlertTriangle, CheckCircle2, XCircle, Clock,
   TrendingUp, Zap, Globe, Code2, Target, MemoryStick,
   FolderDown, Lock, Unlock, Star, GitFork, Download, X,
+  ClipboardList, LineChart, Package,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -295,6 +296,8 @@ const TABS = [
   { id: 'users',     label: 'Users',     icon: Users },
   { id: 'scans',     label: 'Scans',     icon: ShieldCheck },
   { id: 'activity',  label: 'Activity',  icon: Activity },
+  { id: 'analytics', label: 'Analytics', icon: LineChart },
+  { id: 'auditlog',  label: 'Audit Log', icon: ClipboardList },
   { id: 'system',    label: 'System',    icon: Cpu },
 ] as const;
 type TabId = typeof TABS[number]['id'];
@@ -317,7 +320,10 @@ export default function AdminPage() {
   const [loading, setLoading]       = useState(false);
   const [toast, setToast]           = useState<{ msg: string; ok: boolean } | null>(null);
   const [confirm, setConfirm]       = useState<{ msg: string; onConfirm: () => void } | null>(null);
-  const [repoModal, setRepoModal]   = useState<{ userId: string; username: string } | null>(null);
+  const [repoModal, setRepoModal]       = useState<{ userId: string; username: string } | null>(null);
+  const [analytics, setAnalytics]       = useState<any>(null);
+  const [auditLogs, setAuditLogs]       = useState<any[]>([]);
+  const [auditTotal, setAuditTotal]     = useState(0);
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok });
@@ -368,12 +374,30 @@ export default function AdminPage() {
     finally { setLoading(false); }
   }, []);
 
+  const loadAnalytics = useCallback(async () => {
+    setLoading(true);
+    try { setAnalytics(await apiFetch('/api/admin/analytics?days=30')); }
+    catch (e: any) { showToast(e.message, false); }
+    finally { setLoading(false); }
+  }, []);
+
+  const loadAuditLogs = useCallback(async (page = 1) => {
+    setLoading(true);
+    try {
+      const d = await apiFetch(`/api/admin/audit-logs?page=${page}&limit=50`);
+      setAuditLogs(d.logs); setAuditTotal(d.total);
+    } catch (e: any) { showToast(e.message, false); }
+    finally { setLoading(false); }
+  }, []);
+
   useEffect(() => {
     if (tab === 'dashboard') loadStats();
-    else if (tab === 'users')    loadUsers();
-    else if (tab === 'activity') loadActivity();
-    else if (tab === 'system')   loadSystem();
-    else if (tab === 'scans')    loadScans();
+    else if (tab === 'users')     loadUsers();
+    else if (tab === 'activity')  loadActivity();
+    else if (tab === 'system')    loadSystem();
+    else if (tab === 'scans')     loadScans();
+    else if (tab === 'analytics') loadAnalytics();
+    else if (tab === 'auditlog')  loadAuditLogs();
   }, [tab]);
 
   // ── Actions ──
@@ -806,6 +830,123 @@ export default function AdminPage() {
                 ['Telegram Bot', system.env?.hasTelegramBot ? '✅ Set' : '⚠️ Not set'],
                 ['Super Admin', system.env?.superAdminGithub ?? '—'],
               ]} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Analytics Tab ───────────────────────────────────────────────── */}
+      {tab === 'analytics' && (
+        <div className="animate-in fade-in duration-200 space-y-6">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h2 className="text-base font-bold text-foreground">Platform Analytics</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Last 30 days · Scan & user activity</p>
+            </div>
+            <button onClick={loadAnalytics}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-lg border border-border bg-muted text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">
+              <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Refresh
+            </button>
+          </div>
+          {loading && !analytics ? (
+            <div className="flex justify-center py-16">
+              <div className="w-8 h-8 rounded-full border-2 border-border border-t-[hsl(var(--accent))] animate-spin" />
+            </div>
+          ) : analytics && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <MiniChart title="Code Scans / Day" data={analytics.scansByDay ?? []} color="hsl(var(--accent))" />
+                <MiniChart title="Pentest Runs / Day" data={analytics.pentestsByDay ?? []} color="#F97316" />
+                <MiniChart title="New Users / Day" data={analytics.usersByDay ?? []} color="#3B82F6" />
+              </div>
+              {/* Top vuln types */}
+              <div className="rounded-xl border border-border bg-card p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <Package size={14} className="text-[hsl(var(--accent))]" />
+                  <span className="text-sm font-semibold text-foreground">Top Vulnerability Types</span>
+                </div>
+                {(analytics.topVulnTypes ?? []).length === 0 ? (
+                  <p className="text-xs text-muted-foreground py-4 text-center">No vulnerability data yet</p>
+                ) : (
+                  <div className="space-y-2">
+                    {analytics.topVulnTypes.map((v: any, i: number) => {
+                      const max = analytics.topVulnTypes[0]?.count ?? 1;
+                      return (
+                        <div key={i} className="flex items-center gap-3">
+                          <span className="text-[10px] font-bold text-muted-foreground w-4 text-right">{i + 1}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-0.5">
+                              <span className="text-xs text-foreground truncate">{v._id}</span>
+                              <span className="text-xs font-mono text-muted-foreground ml-2">{v.count}</span>
+                            </div>
+                            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                              <div className="h-full rounded-full bg-[hsl(var(--accent))]"
+                                style={{ width: `${(v.count / max) * 100}%`, opacity: 0.7 + (v.count / max) * 0.3 }} />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Audit Log Tab ───────────────────────────────────────────────── */}
+      {tab === 'auditlog' && (
+        <div className="animate-in fade-in duration-200">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h2 className="text-base font-bold text-foreground">Audit Log</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">{auditTotal} total admin actions recorded</p>
+            </div>
+            <button onClick={() => loadAuditLogs()}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-lg border border-border bg-muted text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">
+              <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Refresh
+            </button>
+          </div>
+          {loading && auditLogs.length === 0 ? (
+            <div className="flex justify-center py-16">
+              <div className="w-8 h-8 rounded-full border-2 border-border border-t-[hsl(var(--accent))] animate-spin" />
+            </div>
+          ) : auditLogs.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground text-sm">No admin actions recorded yet.</div>
+          ) : (
+            <div className="space-y-1">
+              {auditLogs.map((log: any) => {
+                const actionColors: Record<string, string> = {
+                  'user.ban': 'text-red-400', 'user.unban': 'text-green-400', 'user.delete': 'text-red-500',
+                  'repo.download': 'text-blue-400', 'scan.delete': 'text-orange-400',
+                  'analytics.view': 'text-purple-400', 'audit.view': 'text-gray-400',
+                };
+                const color = actionColors[log.action] ?? 'text-muted-foreground';
+                return (
+                  <div key={log._id} className="flex items-start gap-3 px-4 py-3 rounded-lg hover:bg-muted/30 transition-colors border border-transparent hover:border-border">
+                    <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 bg-[hsl(var(--accent))]" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-semibold text-foreground">{log.adminUsername}</span>
+                        <span className={`text-xs font-mono font-bold ${color}`}>{log.action}</span>
+                        {log.targetId && (
+                          <span className="text-[10px] text-muted-foreground font-mono">→ {log.targetId.slice(-8)}</span>
+                        )}
+                        {log.ip && <span className="text-[10px] text-muted-foreground">{log.ip}</span>}
+                      </div>
+                      {log.metadata && Object.keys(log.metadata).length > 0 && (
+                        <p className="text-[10px] text-muted-foreground mt-0.5 font-mono">
+                          {JSON.stringify(log.metadata).slice(0, 120)}
+                        </p>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
+                      {timeSince(log.createdAt)}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
