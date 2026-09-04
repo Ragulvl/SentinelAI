@@ -1,8 +1,10 @@
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
+// pdfmake is a CommonJS package — require() directly in CJS context
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const PdfPrinter = require('pdfmake/build/pdfmake') as any;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const pdfFonts    = require('pdfmake/build/vfs_fonts') as any;
 PdfPrinter.vfs   = pdfFonts.pdfMake?.vfs ?? pdfFonts.vfs ?? {};
+
 
 import type { TDocumentDefinitions, Content } from 'pdfmake/interfaces';
 

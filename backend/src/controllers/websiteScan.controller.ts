@@ -5,7 +5,7 @@ import type { PentestProgressEvent } from '../services/penetrationTesting.servic
 import { WebsiteScan } from '../db/models/WebsiteScan.model.js';
 import { DomainVerificationService } from '../services/domainVerification.service.js';
 import '../types/auth.js';
-import { jwtVerify } from 'jose';
+import jwt from 'jsonwebtoken';
 
 export class WebsiteScanController {
   static async scanWebsite(req: Request, res: Response) {
@@ -149,8 +149,8 @@ export class WebsiteScanController {
 
     let userId: string;
     try {
-      const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback-secret');
-      const { payload } = await jwtVerify(tokenParam, secret);
+      const secret = process.env.JWT_SECRET || '';
+      const payload = jwt.verify(tokenParam, secret) as any;
       userId = payload.userId as string;
     } catch {
       return res.status(401).end();

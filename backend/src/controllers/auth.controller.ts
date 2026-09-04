@@ -68,7 +68,7 @@ export class AuthController {
       const user = await UserService.createOrUpdateUser(githubUser, accessToken);
 
       // Generate JWT token
-      const token = await JWTService.generateToken({
+      const token = JWTService.generateToken({
         userId: githubUser.id,
         username: githubUser.login,
         email: githubUser.email,
@@ -102,7 +102,7 @@ export class AuthController {
         return res.status(401).json({ error: 'No token provided' });
       }
 
-      const payload = await JWTService.verifyToken(token);
+      const payload = JWTService.verifyToken(token);
       
       // Get user details from database
       const user = await UserService.getUserByGithubId(payload.userId);
@@ -141,7 +141,7 @@ export class AuthController {
       const token = req.cookies?.token || req.headers.authorization?.replace('Bearer ', '');
       if (token) {
         try {
-          const payload = await JWTService.verifyToken(token);
+          const payload = JWTService.verifyToken(token);
           const githubAccessToken = await UserService.getGithubAccessToken(payload.userId);
           if (githubAccessToken) {
             // DELETE /applications/{clientId}/grant  ← removes the ENTIRE OAuth app authorization.
@@ -177,7 +177,7 @@ export class AuthController {
         return res.status(401).json({ error: 'No token provided' });
       }
 
-      const payload = await JWTService.verifyToken(token);
+      const payload = JWTService.verifyToken(token);
       
       // Get user's GitHub access token
       const githubAccessToken = await UserService.getGithubAccessToken(payload.userId);
@@ -208,7 +208,7 @@ export class AuthController {
         return res.status(401).json({ error: 'No token provided' });
       }
 
-      const payload = await JWTService.verifyToken(token);
+      const payload = JWTService.verifyToken(token);
       const { owner, repo } = req.params;
       
       // Get user's GitHub access token
@@ -244,7 +244,7 @@ export class AuthController {
         return;
       }
 
-      const payload = await JWTService.verifyToken(token);
+      const payload = JWTService.verifyToken(token);
       const { User } = await import('../db/models/User.model.js');
 
       const user = await User.findOne({ githubId: payload.userId }).select('username role githubId');

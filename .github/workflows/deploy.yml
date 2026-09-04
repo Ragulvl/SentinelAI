@@ -24,15 +24,6 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install backend dependencies
-        run: npm ci
-
-      - name: Compile TypeScript → dist/
-        run: npx tsc
-        # Pre-compiling eliminates @vercel/node's TS compilation, which was
-        # causing persistent FUNCTION_INVOCATION_FAILED. Vercel now receives
-        # plain JavaScript (dist/index.js) and just wraps it as a Lambda.
-
       - name: Deploy Backend to Vercel Production
         run: npx vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
         env:

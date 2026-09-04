@@ -19,7 +19,7 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
       return res.status(401).json({ error: 'Authentication required' });
     }
 
-    const payload = await JWTService.verifyToken(token);
+    const payload = JWTService.verifyToken(token);
     req.user = payload;
     
     // Update last active time in background (don't wait)

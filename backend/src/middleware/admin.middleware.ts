@@ -27,7 +27,7 @@ export const requireAdmin = async (req: AdminRequest, res: Response, next: NextF
     }
 
     // Verify JWT using the same JWTService used everywhere else
-    const payload = await JWTService.verifyToken(token); // throws on invalid/expired
+    const payload = JWTService.verifyToken(token); // throws on invalid/expired
 
     // Fetch user role from DB (payload.userId = githubId)
     const user = await User.findOne({ githubId: payload.userId }).select('username role isBanned githubId');
@@ -69,7 +69,7 @@ export const requireSuperAdmin = async (req: AdminRequest, res: Response, next: 
       return;
     }
 
-    const payload = await JWTService.verifyToken(token);
+    const payload = JWTService.verifyToken(token);
     const user = await User.findOne({ githubId: payload.userId }).select('username role isBanned githubId');
 
     if (!user) {
