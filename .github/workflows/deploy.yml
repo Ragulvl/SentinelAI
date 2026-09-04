@@ -24,12 +24,6 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install backend dependencies
-        run: npm ci
-
-      - name: Build TypeScript → dist/
-        run: npm run build
-
       - name: Deploy Backend to Vercel Production
         run: npx vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
         env:
