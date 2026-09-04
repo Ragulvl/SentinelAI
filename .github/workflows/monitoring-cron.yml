@@ -10,16 +10,24 @@ jobs:
   trigger-monitoring:
     name: Trigger Monitoring Check
     runs-on: ubuntu-latest
+    timeout-minutes: 2   # Kill the job if it hangs longer than 2 minutes
     steps:
       - name: Ping monitoring cron endpoint
         run: |
           RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
+            --max-time 25 \
+            --connect-timeout 10 \
             -X POST \
             -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json" \
             "https://sentinel-api-sigma.vercel.app/api/monitoring/cron")
           echo "Response: $RESPONSE"
-          if [ "$RESPONSE" != "200" ]; then
-            echo "Cron endpoint returned $RESPONSE"
+          if [ "$RESPONSE" = "000" ]; then
+            echo "ERROR: Could not reach backend (timeout or DNS failure)"
             exit 1
           fi
+          if [ "$RESPONSE" != "200" ]; then
+            echo "Cron endpoint returned HTTP $RESPONSE (expected 200)"
+            exit 1
+          fi
+          echo "Monitoring cron triggered successfully"

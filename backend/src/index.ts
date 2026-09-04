@@ -1,7 +1,10 @@
-import { setServers } from 'node:dns';
-// Fix: Node.js on Windows fails DNS SRV lookups for mongodb+srv://
-// Force Google's public DNS to resolve MongoDB Atlas cluster correctly
-setServers(['8.8.8.8', '8.8.4.4']);
+// DNS override: only needed on Windows to resolve mongodb+srv:// addresses.
+// On Vercel/Linux this is NOT needed and actually breaks Vercel's internal
+// DNS resolution, causing FUNCTION_INVOCATION_FAILED on every cold start.
+if (!process.env.VERCEL && process.platform === 'win32') {
+  const { setServers } = await import('node:dns');
+  setServers(['8.8.8.8', '8.8.4.4']);
+}
 
 import express from 'express';
 import cors from 'cors';
