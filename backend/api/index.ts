@@ -1,40 +1,21 @@
-// DIAGNOSTIC WRAPPER — deployed temporarily to surface the real runtime error.
-// Instead of FUNCTION_INVOCATION_FAILED (opaque 500), returns the actual error as JSON.
-import type { IncomingMessage, ServerResponse } from 'http';
-
-// Capture any initialization error so we can return it as JSON
-let app: ((req: IncomingMessage, res: ServerResponse) => void) | null = null;
-let initError: { message: string; stack: string } | null = null;
-
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const mod = require('../src/index');
-  // Handle both CommonJS module.exports = app AND ES module exports.default = app
-  app = (mod && mod.__esModule ? mod.default : mod) || mod;
-  console.log('[diagnostic] App loaded OK, type:', typeof app);
-} catch (err: unknown) {
-  const e = err as Error;
-  initError = { message: e.message || String(err), stack: e.stack || '' };
-  console.error('[diagnostic] INIT ERROR:', e.message, e.stack);
-}
-
-export default function handler(req: IncomingMessage, res: ServerResponse): void {
-  if (initError) {
-    (res as NodeJS.WritableStream & { statusCode: number; setHeader: (k: string, v: string) => void }).statusCode = 500;
-    (res as unknown as { setHeader: (k: string, v: string) => void }).setHeader('Content-Type', 'application/json');
+// MINIMAL DIAGNOSTIC — no imports from src/, just returns env info as JSON
+// If THIS fails, the issue is @vercel/node itself, not our app
+/* eslint-disable @typescript-eslint/no-explicit-any */
+export default function handler(req: any, res: any): void {
+  try {
+    res.setHeader('Content-Type', 'application/json');
+    res.statusCode = 200;
     res.end(
       JSON.stringify({
-        _diagnostic: true,
-        error: 'INIT_FAILED',
-        message: initError.message,
-        stack: initError.stack.substring(0, 800),
+        _ping: true,
+        node: process.version,
+        vercel: process.env.VERCEL,
+        nodeEnv: process.env.NODE_ENV,
+        ts: new Date().toISOString(),
       }),
     );
-    return;
+  } catch (err: any) {
+    res.statusCode = 500;
+    res.end(JSON.stringify({ _ping_error: err?.message || String(err) }));
   }
-  if (!app) {
-    res.end(JSON.stringify({ _diagnostic: true, error: 'NO_HANDLER' }));
-    return;
-  }
-  app(req, res);
 }
