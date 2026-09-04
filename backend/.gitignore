@@ -32,3 +32,5 @@ Thumbs.db
 coverage/
 .nyc_output/
 .vercel
+
+api/index.js

@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "buildCommand": "npm run build:lambda",
   "routes": [
     { "src": "/(.*)", "dest": "/api/index" }
   ]
