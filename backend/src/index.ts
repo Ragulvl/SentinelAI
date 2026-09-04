@@ -1,9 +1,8 @@
-// DNS override: only needed on Windows to resolve mongodb+srv:// addresses.
-// On Vercel/Linux this is NOT needed and actually breaks Vercel's internal
-// DNS resolution, causing FUNCTION_INVOCATION_FAILED on every cold start.
+// DNS override: only needed on Windows local dev to resolve mongodb+srv:// addresses.
+// Uses a static import (no top-level await) to stay compatible with @vercel/node builder.
+import dns from 'node:dns';
 if (!process.env.VERCEL && process.platform === 'win32') {
-  const { setServers } = await import('node:dns');
-  setServers(['8.8.8.8', '8.8.4.4']);
+  dns.setServers(['8.8.8.8', '8.8.4.4']);
 }
 
 import express from 'express';
