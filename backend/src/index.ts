@@ -9,7 +9,7 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import mongoose from 'mongoose';
-import { config } from './config/env.js';
+import { config, missingEnvVars } from './config/env.js';
 import { logger } from './config/logger.js';
 import { connectDatabase } from './config/database.js';
 import authRoutes from './routes/auth.routes.js';
@@ -130,14 +130,29 @@ app.use('/api/notifications', apiLimiter, notificationRoutes);
 app.use('/api/telegram',      apiLimiter, telegramRoutes);
 app.use('/api/admin',         apiLimiter, adminRoutes); // Super admin — protected by requireAdmin middleware
 
+// ── Startup env-var guard ────────────────────────────────────────────────────
+// If critical env vars are missing, all routes return 503 with a diagnostic
+// message. This prevents FUNCTION_INVOCATION_FAILED on Vercel (which occurs
+// when the module throws at load time) while still surfacing the root cause.
+if (missingEnvVars.length > 0) {
+  app.use((_req, res) => {
+    res.status(503).json({
+      error: 'Service misconfigured',
+      missing: missingEnvVars,
+      fix: 'Set the listed environment variables in your Vercel dashboard and redeploy.',
+    });
+  });
+}
+
 // Health check
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
-  res.json({ 
-    status: 'ok', 
+  res.json({
+    status: missingEnvVars.length > 0 ? 'misconfigured' : 'ok',
     timestamp: new Date().toISOString(),
     database: dbStatus,
-    environment: config.nodeEnv
+    environment: config.nodeEnv,
+    ...(missingEnvVars.length > 0 && { missingEnvVars }),
   });
 });
 
