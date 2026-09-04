@@ -16,8 +16,8 @@ router.use(authMiddleware);
 router.get('/',                                              MonitoringController.getSites);
 router.post('/',                                             MonitoringController.addSite);
 router.post('/refresh',                                      MonitoringController.refreshAllSites);
-router.post('/:siteId([a-zA-Z0-9_-]+)/refresh',             MonitoringController.refreshSite);
-router.patch('/:siteId([a-zA-Z0-9_-]+)/interval',           MonitoringController.updateCheckInterval);
-router.delete('/:siteId([a-zA-Z0-9_-]+)',                   MonitoringController.removeSite);
+router.post('/:siteId/refresh',             MonitoringController.refreshSite);
+router.patch('/:siteId/interval',           MonitoringController.updateCheckInterval);
+router.delete('/:siteId',                   MonitoringController.removeSite);
 
 export default router;

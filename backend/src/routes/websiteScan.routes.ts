@@ -26,7 +26,7 @@ router.post('/verify/check', WebsiteScanController.verifyDomain);
 router.get('/verify/domains', WebsiteScanController.getVerifiedDomains);
 router.get('/verify/status', WebsiteScanController.checkDomainVerification);
 // CWE-639: Restrict domain param to hostname-safe characters
-router.delete('/verify/domains/:domain([a-zA-Z0-9._-]+)', WebsiteScanController.deleteDomain);
+router.delete('/verify/domains/:domain', WebsiteScanController.deleteDomain);
 
 // ─── Bypass routes — SUPERADMIN ONLY ────────────────────────────────────────
 // These skip the normal DNS/file/meta ownership challenge.
@@ -56,7 +56,7 @@ router.post('/api-reset', WebsiteScanController.resetApiKeys);
 router.get('/history', WebsiteScanController.getScanHistory);
 
 // CWE-434: Restrict scanId to MongoDB ObjectId hex format
-router.get('/:scanId([a-f0-9]{24})', WebsiteScanController.getScanById);
-router.delete('/:scanId([a-f0-9]{24})', WebsiteScanController.deleteScan);
+router.get('/:scanId', WebsiteScanController.getScanById);
+router.delete('/:scanId', WebsiteScanController.deleteScan);
 
 export default router;

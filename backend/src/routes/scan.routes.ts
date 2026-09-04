@@ -24,10 +24,10 @@ router.post('/:scanId/create-pr', ScanController.createFixPR);
 router.get('/:scanId/download', ScanController.downloadFixedFiles);
 
 // Get file content
-router.get('/:scanId/file/*', ScanController.getFileContent);
+router.get('/:scanId/file/*filePath', ScanController.getFileContent);
 
 // Update file content
-router.put('/:scanId/file/*', ScanController.updateFileContent);
+router.put('/:scanId/file/*filePath', ScanController.updateFileContent);
 
 // Download PDF report
 router.get('/:scanId/report.pdf', async (req: Request, res: Response) => {
