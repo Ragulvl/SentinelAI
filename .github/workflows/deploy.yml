@@ -25,7 +25,7 @@ jobs:
           node-version: '22'
 
       - name: Deploy Backend to Vercel Production
-        run: npx vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
+        run: npx vercel deploy --prod --force --token=${{ secrets.VERCEL_TOKEN }} --yes
         env:
           VERCEL_ORG_ID: ${{ env.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ env.VERCEL_BACKEND_PROJECT_ID }}
