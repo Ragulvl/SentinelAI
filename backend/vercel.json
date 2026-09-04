@@ -2,14 +2,15 @@
   "version": 2,
   "installCommand": "npm ci",
   "builds": [
-    { "src": "src/index.ts", "use": "@vercel/node" }
+    {
+      "src": "src/index.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    }
   ],
   "routes": [
     { "src": "/(.*)", "dest": "/src/index.ts" }
-  ],
-  "functions": {
-    "src/index.ts": {
-      "maxDuration": 30
-    }
-  }
+  ]
 }
