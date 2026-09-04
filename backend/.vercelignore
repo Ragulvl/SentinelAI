@@ -1,12 +1,6 @@
-# Vercel ignore - controls what gets uploaded to Vercel during CLI deploy
-
-# Never upload local dev files
 node_modules/
 .env
 *.log
 coverage/
 .nyc_output/
-
-# dist/ is built ON Vercel via installCommand ("npm ci && npm run build")
-# src/ MUST be uploaded so Vercel can compile it
-# Both dist/ and src/ are therefore NOT excluded here
+dist/

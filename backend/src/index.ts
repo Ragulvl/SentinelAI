@@ -261,8 +261,6 @@ if (process.env.VERCEL) {
   startServer();
 }
 
-// CommonJS export: @vercel/node Lambda bridge calls require(file) and invokes
-// the result as handler(req, res). With 'export default', CJS output is
-// { __esModule: true, default: app } which is NOT directly callable.
-// 'export =' compiles to module.exports = app — directly callable. ✓
-export = app;
+// Export the Express app so @vercel/node can invoke it as a Lambda handler.
+// api/index.ts re-exports this for Vercel's api/ directory auto-detection.
+export default app;
