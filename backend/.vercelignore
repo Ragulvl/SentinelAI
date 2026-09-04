@@ -1,0 +1,14 @@
+# Vercel ignore - controls what gets uploaded to Vercel during CLI deploy
+# Note: Vercel CLI does NOT use .gitignore by default, only .vercelignore
+
+# Never upload raw source - we deploy pre-compiled dist/ instead
+src/
+
+# Never upload local dev files
+node_modules/
+.env
+*.log
+coverage/
+.nyc_output/
+
+# dist/ is intentionally NOT listed here - we upload the compiled JS

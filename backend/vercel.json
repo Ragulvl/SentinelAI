@@ -1,16 +1,12 @@
 {
   "version": 2,
-  "installCommand": "npm ci",
   "builds": [
     {
-      "src": "src/index.ts",
-      "use": "@vercel/node",
-      "config": {
-        "maxDuration": 30
-      }
+      "src": "dist/index.js",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
-    { "src": "/(.*)", "dest": "/src/index.ts" }
+    { "src": "/(.*)", "dest": "/dist/index.js" }
   ]
 }
