@@ -24,8 +24,23 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Bundle backend with esbuild
+        run: npm run build:lambda
+
+      - name: Prepare Vercel Build Output (prebuilt)
+        run: |
+          mkdir -p .vercel/output/functions/api/index.func
+          cp api/index.js .vercel/output/functions/api/index.func/index.js
+          printf '{"runtime":"nodejs20.x","handler":"index.js","launcherType":"Nodejs","shouldAddHelpers":true}' \
+            > .vercel/output/functions/api/index.func/.vc-config.json
+          printf '{"version":3,"routes":[{"src":"/(.*)","dest":"/api/index"}]}' \
+            > .vercel/output/config.json
+
       - name: Deploy Backend to Vercel Production
-        run: npx vercel deploy --prod --force --token=${{ secrets.VERCEL_TOKEN }} --yes
+        run: npx vercel deploy --prod --prebuilt --force --token=${{ secrets.VERCEL_TOKEN }} --yes
         env:
           VERCEL_ORG_ID: ${{ env.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ env.VERCEL_BACKEND_PROJECT_ID }}

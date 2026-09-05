@@ -1,4 +1,4 @@
-﻿{
+{
     "name":  "sentinelai-backend",
     "version":  "1.0.0",
     "scripts":  {
@@ -16,7 +16,7 @@
                     "debug:whatsapp":  "tsx scripts/debug-whatsapp-session.ts",
                     "check:github":  "tsx scripts/check-github-token.ts",
                     "set:github-token":  "tsx scripts/set-github-token.ts",
-                    "build:lambda":  "esbuild src/index.ts --bundle --platform=node --target=node20 --format=cjs --outfile=api/index.js --packages=external"
+                    "build:lambda":  "esbuild src/index.ts --bundle --platform=node --target=node20 --format=cjs --outfile=api/index.js --external:bufferutil --external:utf-8-validate --external:kerberos --external:mongodb-client-encryption --external:@mongodb-js/zstd --external:snappy --external:@swc/core"
                 },
     "dependencies":  {
                          "@octokit/rest":  "^22.0.1",
