@@ -1,5 +1,4 @@
 import { API_ENDPOINTS } from '../config/api';
-import { AuthService } from './auth.service';
 import type { ScanResult, ScanLog } from '../types/sentinel';
 
 export interface StartScanRequest {
@@ -29,21 +28,16 @@ export interface ScanStatusResponse {
   error?: string;
 }
 
+// Auth is httpOnly cookie — browser sends it automatically with credentials: 'include'.
+// No token variable needed; never read or store the JWT in JS.
+
 export class ScanService {
   static async startScan(request: StartScanRequest): Promise<{ scanId: string; status: string }> {
-        
-    if (!token) {
-      throw new Error('Not authenticated');
-    }
-
     try {
       const response = await fetch(API_ENDPOINTS.scan.start, {
-          credentials: 'include',
+        credentials: 'include',
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request),
       });
 
@@ -60,16 +54,9 @@ export class ScanService {
   }
 
   static async getScanStatus(scanId: string): Promise<ScanStatusResponse> {
-        
-    if (!token) {
-      throw new Error('Not authenticated');
-    }
-
     try {
       const response = await fetch(API_ENDPOINTS.scan.status(scanId), {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        credentials: 'include',
       });
 
       if (!response.ok) {
@@ -85,16 +72,9 @@ export class ScanService {
   }
 
   static async getScanResults(scanId: string): Promise<ScanResult> {
-        
-    if (!token) {
-      throw new Error('Not authenticated');
-    }
-
     try {
       const response = await fetch(API_ENDPOINTS.scan.results(scanId), {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        credentials: 'include',
       });
 
       if (!response.ok) {
@@ -110,16 +90,9 @@ export class ScanService {
   }
 
   static async getScanHistory(limit = 50): Promise<ScanResult[]> {
-        
-    if (!token) {
-      throw new Error('Not authenticated');
-    }
-
     try {
       const response = await fetch(`${API_ENDPOINTS.scan.history}?limit=${limit}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        credentials: 'include',
       });
 
       if (!response.ok) {
@@ -136,18 +109,11 @@ export class ScanService {
   }
 
   static async createFixPR(scanId: string): Promise<{ prUrl: string; prNumber: number; fixedCount: number }> {
-        
-    if (!token) {
-      throw new Error('Not authenticated');
-    }
-
     try {
       const response = await fetch(API_ENDPOINTS.scan.createPR(scanId), {
-          credentials: 'include',
+        credentials: 'include',
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
       });
 
       if (!response.ok) {
@@ -163,16 +129,9 @@ export class ScanService {
   }
 
   static async getFileContent(scanId: string, filePath: string): Promise<{ path: string; content: string; sha: string; size: number }> {
-        
-    if (!token) {
-      throw new Error('Not authenticated');
-    }
-
     try {
       const response = await fetch(API_ENDPOINTS.scan.getFile(scanId, filePath), {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        credentials: 'include',
       });
 
       if (!response.ok) {
@@ -194,18 +153,11 @@ export class ScanService {
     sha: string,
     commitMessage: string
   ): Promise<void> {
-        
-    if (!token) {
-      throw new Error('Not authenticated');
-    }
-
     try {
       const response = await fetch(API_ENDPOINTS.scan.updateFile(scanId, filePath), {
+        credentials: 'include',
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content, sha, commitMessage }),
       });
 

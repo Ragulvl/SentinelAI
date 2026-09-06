@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -70,7 +70,6 @@ const CodeScanPage = () => {
     try {
       setLoadingRepo(true);
       setError(null);
-            if (!token) { navigate("/login"); return; }
 
       // Load all repos to find this one (same endpoint, cached by browser usually)
       const reposRes = await fetch(API_ENDPOINTS.auth.repositories, {
