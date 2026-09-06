@@ -121,6 +121,30 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
+// ── Serverless DB connection guard ─────────────────────────────────────────────
+// Vercel freezes the Lambda process after each HTTP response, so fire-and-forget
+// connectDatabase() never completes in the background. This middleware awaits
+// the connection synchronously on every cold-start request.
+// On warm Lambda invocations the connection is cached (readyState === 1) → no-op.
+if (process.env.VERCEL) {
+  app.use(async (_req, _res, next) => {
+    const state = mongoose.connection.readyState;
+    try {
+      if (state === 0) {
+        // Not connected — establish a new connection
+        await connectDatabase();
+      } else if (state === 2) {
+        // Already connecting — wait for it to finish
+        await mongoose.connection.asPromise();
+      }
+      // state === 1 → already connected, fall through immediately
+    } catch {
+      // DB failed — continue without it; endpoints that need DB will return 503
+    }
+    next();
+  });
+}
+
 // Routes — rate limiters applied per route group
 app.use('/api/auth',         authLimiter, authRoutes);
 app.use('/api/scan',         apiLimiter,  scanRoutes);

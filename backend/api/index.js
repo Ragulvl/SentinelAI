@@ -330855,6 +330855,20 @@ app.use((0, import_cors.default)({
 app.use(import_express10.default.json());
 app.use(import_express10.default.urlencoded({ extended: true }));
 app.use((0, import_cookie_parser.default)());
+if (process.env.VERCEL) {
+  app.use(async (_req, _res, next2) => {
+    const state = import_mongoose10.default.connection.readyState;
+    try {
+      if (state === 0) {
+        await connectDatabase();
+      } else if (state === 2) {
+        await import_mongoose10.default.connection.asPromise();
+      }
+    } catch {
+    }
+    next2();
+  });
+}
 app.use("/api/auth", authLimiter, auth_routes_default);
 app.use("/api/scan", apiLimiter, scan_routes_default);
 app.use("/api/monitoring", apiLimiter, monitoring_routes_default);
