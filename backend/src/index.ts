@@ -1,4 +1,4 @@
-// DNS override: only needed on Windows local dev to resolve mongodb+srv:// addresses.
+﻿// DNS override: only needed on Windows local dev to resolve mongodb+srv:// addresses.
 // Uses a static import (no top-level await) to stay compatible with @vercel/node builder.
 import dns from 'node:dns';
 if (!process.env.VERCEL && process.platform === 'win32') {
@@ -31,7 +31,7 @@ const app = express();
 // Trust Vercel/proxy headers so rate limiter uses real client IPs (not internal Vercel IPs)
 app.set('trust proxy', 1);
 
-// ── Security headers (fixes CSP unsafe-inline, adds Permissions-Policy) ──────
+// â”€â”€ Security headers (fixes CSP unsafe-inline, adds Permissions-Policy) â”€â”€â”€â”€â”€â”€
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -62,14 +62,14 @@ app.use((_req, res, next) => {
   next();
 });
 
-// ── Rate limiting ──────────────────────────────────────────────────────────────
+// â”€â”€ Rate limiting â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Auth endpoints: 50 req / 15 min per real IP (trust proxy enabled above)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 50,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many requests — please try again later.' },
+  message: { error: 'Too many requests â€” please try again later.' },
   skip: (req) => config.nodeEnv === 'development',
 });
 
@@ -79,7 +79,7 @@ const apiLimiter = rateLimit({
   max: 100,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many requests — please try again later.' },
+  message: { error: 'Too many requests â€” please try again later.' },
   skip: (req) => config.nodeEnv === 'development',
 });
 
@@ -121,31 +121,31 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// ── Serverless DB connection guard ─────────────────────────────────────────────
+// â”€â”€ Serverless DB connection guard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Vercel freezes the Lambda process after each HTTP response, so fire-and-forget
 // connectDatabase() never completes in the background. This middleware awaits
 // the connection synchronously on every cold-start request.
-// On warm Lambda invocations the connection is cached (readyState === 1) → no-op.
+// On warm Lambda invocations the connection is cached (readyState === 1) â†’ no-op.
 if (process.env.VERCEL) {
   app.use(async (_req, _res, next) => {
     const state = mongoose.connection.readyState;
     try {
       if (state === 0) {
-        // Not connected — establish a new connection
+        // Not connected â€” establish a new connection
         await connectDatabase();
       } else if (state === 2) {
-        // Already connecting — wait for it to finish
+        // Already connecting â€” wait for it to finish
         await mongoose.connection.asPromise();
       }
-      // state === 1 → already connected, fall through immediately
+      // state === 1 â†’ already connected, fall through immediately
     } catch {
-      // DB failed — continue without it; endpoints that need DB will return 503
+      // DB failed â€” continue without it; endpoints that need DB will return 503
     }
     next();
   });
 }
 
-// Routes — rate limiters applied per route group
+// Routes â€” rate limiters applied per route group
 app.use('/api/auth',         authLimiter, authRoutes);
 app.use('/api/scan',         apiLimiter,  scanRoutes);
 app.use('/api/monitoring',   apiLimiter,  monitoringRoutes);
@@ -154,9 +154,9 @@ app.use('/api/sandbox',      apiLimiter,  sandboxScanRoutes);
 app.use('/api/history',      apiLimiter,  historyRoutes);
 app.use('/api/notifications', apiLimiter, notificationRoutes);
 app.use('/api/telegram',      apiLimiter, telegramRoutes);
-app.use('/api/admin',         apiLimiter, adminRoutes); // Super admin — protected by requireAdmin middleware
+app.use('/api/admin',         apiLimiter, adminRoutes); // Super admin â€” protected by requireAdmin middleware
 
-// ── Startup env-var guard ────────────────────────────────────────────────────
+// â”€â”€ Startup env-var guard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // If critical env vars are missing, all routes return 503 with a diagnostic
 // message. This prevents FUNCTION_INVOCATION_FAILED on Vercel (which occurs
 // when the module throws at load time) while still surfacing the root cause.
@@ -197,7 +197,7 @@ const startServer = async () => {
     try {
       await connectDatabase();
     } catch (dbError: any) {
-      logger.warn('Database connection failed — server will continue without DB', { error: dbError.message });
+      logger.warn('Database connection failed â€” server will continue without DB', { error: dbError.message });
     }
     
     // Initialize notification service
@@ -226,15 +226,15 @@ const startServer = async () => {
         // Telegram bot starts automatically when TELEGRAM_BOT_TOKEN is set
         // (webhook is registered inside NotificationService.initialize())
         if (process.env.TELEGRAM_BOT_TOKEN) {
-          logger.info('✅ Telegram bot active');
+          logger.info('âœ… Telegram bot active');
         } else {
-          logger.warn('Telegram bot not started — TELEGRAM_BOT_TOKEN not configured');
+          logger.warn('Telegram bot not started â€” TELEGRAM_BOT_TOKEN not configured');
         }
       } else {
-        logger.warn('Monitoring worker not started — no database connection');
+        logger.warn('Monitoring worker not started â€” no database connection');
       }
 
-      // Keep-warm ping — prevents Render free-tier cold starts (spins down after 15 min idle)
+      // Keep-warm ping â€” prevents Render free-tier cold starts (spins down after 15 min idle)
       // Pings the health endpoint every 14 minutes so the bot always responds instantly
       if (isProduction) {
         const selfUrl = process.env.RENDER_EXTERNAL_URL || process.env.BACKEND_URL;
@@ -263,20 +263,20 @@ const startServer = async () => {
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  logger.info('SIGTERM received — shutting down gracefully');
+  logger.info('SIGTERM received â€” shutting down gracefully');
   MonitoringWorker.stop();
   NotificationService.stopPolling();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
-  logger.info('SIGINT received — shutting down gracefully');
+  logger.info('SIGINT received â€” shutting down gracefully');
   MonitoringWorker.stop();
   NotificationService.stopPolling();
   process.exit(0);
 });
 
-// In Vercel serverless: export app (no listen needed — Vercel handles routing)
+// In Vercel serverless: export app (no listen needed â€” Vercel handles routing)
 // In traditional server (Render/local): call startServer() which calls app.listen()
 if (process.env.VERCEL) {
   // Connect DB eagerly so first request doesn't time out
@@ -289,4 +289,5 @@ if (process.env.VERCEL) {
 // api/index.ts re-exports this for Vercel's api/ directory auto-detection.
 export default app;
 
-// env-vars cleaned 2026-09-06T14:53:32
+// env-vars cleaned 15:03 (REST API - no CRLF)
+
