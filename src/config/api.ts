@@ -1,9 +1,9 @@
-// In production (Vercel), API calls use relative URLs (/api/...) which Vercel proxies to the backend.
+// In production, API calls go DIRECTLY to the backend URL to avoid Vercel rewrite
+// proxy issues with Set-Cookie header forwarding during OAuth callbacks.
 // In local dev, VITE_API_URL falls back to http://localhost:5000.
-// NOTE: .env file may contain VITE_API_URL=http://localhost:5000 for dev — NEVER used in production.
 const rawApiUrl = import.meta.env.VITE_API_URL;
 export const API_URL = import.meta.env.PROD
-  ? ''  // Always use relative URLs in production (Vercel rewrites handle the proxy)
+  ? 'https://sentinel-api-sigma.vercel.app'  // Direct backend — no proxy cookie issues
   : (rawApiUrl && rawApiUrl !== 'http://localhost:5000' ? rawApiUrl : 'http://localhost:5000');
 
 export const API_BASE_URL = API_URL; // Alias for compatibility
