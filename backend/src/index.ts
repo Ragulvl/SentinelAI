@@ -288,3 +288,5 @@ if (process.env.VERCEL) {
 // Export the Express app so @vercel/node can invoke it as a Lambda handler.
 // api/index.ts re-exports this for Vercel's api/ directory auto-detection.
 export default app;
+
+// env-vars cleaned 2026-09-06T14:53:32
