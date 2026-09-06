@@ -1,4 +1,4 @@
-﻿import { Toaster } from "@/components/ui/toaster";
+import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -55,19 +55,18 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
       // 1. Always re-fetch role from DB on mount (clears any stale cache)
       await refreshAuth();
 
-      // 2. If still not admin after re-fetch, try promote-self
-            if (token) {
-        const res = await fetch('/api/auth/promote-self', {
-          credentials: 'include',
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-        }).then(r => r.json()).catch(() => null);
+      // 2. Try promote-self — cookie is sent automatically (httpOnly, credentials: include)
+      // No Bearer token needed; auth was migrated to cookie-based sessions.
+      const res = await fetch(`${import.meta.env.PROD ? 'https://sentinel-api-sigma.vercel.app' : 'http://localhost:5000'}/api/auth/promote-self`, {
+        credentials: 'include',
+        method: 'POST',
+      }).then(r => r.json()).catch(() => null);
 
-        // If promotion happened or user is already admin, re-fetch role
-        if (res?.role === 'admin' || res?.role === 'superadmin') {
-          await refreshAuth();
-        }
+      // If promotion happened or user is already admin, re-fetch role
+      if (res?.role === 'admin' || res?.role === 'superadmin') {
+        await refreshAuth();
       }
+
       setChecking(false);
     };
     bootstrap();

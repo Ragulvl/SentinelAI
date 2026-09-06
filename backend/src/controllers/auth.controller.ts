@@ -171,7 +171,8 @@ export class AuthController {
 
   static async getUserRepositories(req: Request, res: Response) {
     try {
-      const token = req.headers.authorization?.replace('Bearer ', '');
+      // Read from httpOnly cookie first (browser sends automatically), then fall back to Bearer
+      const token = req.cookies?.token || req.headers.authorization?.replace('Bearer ', '');
 
       if (!token) {
         return res.status(401).json({ error: 'No token provided' });
@@ -202,7 +203,8 @@ export class AuthController {
 
   static async getRepositoryBranches(req: Request, res: Response) {
     try {
-      const token = req.headers.authorization?.replace('Bearer ', '');
+      // Read from httpOnly cookie first (browser sends automatically), then fall back to Bearer
+      const token = req.cookies?.token || req.headers.authorization?.replace('Bearer ', '');
 
       if (!token) {
         return res.status(401).json({ error: 'No token provided' });

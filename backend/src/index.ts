@@ -1,4 +1,4 @@
-﻿// DNS override: only needed on Windows local dev to resolve mongodb+srv:// addresses.
+// DNS override: only needed on Windows local dev to resolve mongodb+srv:// addresses.
 // Uses a static import (no top-level await) to stay compatible with @vercel/node builder.
 import dns from 'node:dns';
 if (!process.env.VERCEL && process.platform === 'win32') {
@@ -62,24 +62,34 @@ app.use((_req, res, next) => {
   next();
 });
 
-// â”€â”€ Rate limiting â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Auth endpoints: 50 req / 15 min per real IP (trust proxy enabled above)
+// ————— Rate limiting ──────────────────────────────────────────────────────────
+// Auth write endpoints (logout, callback): 300 req / 15 min per IP
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 50,
+  max: 300,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many requests â€” please try again later.' },
+  message: { error: 'Too many requests — please try again later.' },
   skip: (req) => config.nodeEnv === 'development',
 });
 
-// General API: permissive (100 req / 15 min)
-const apiLimiter = rateLimit({
+// Read-only auth endpoints (verify, github URL): very permissive — page loads call these
+const authReadLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 1000,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many requests â€” please try again later.' },
+  message: { error: 'Too many requests — please try again later.' },
+  skip: (req) => config.nodeEnv === 'development',
+});
+
+// General API: permissive (500 req / 15 min)
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 500,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests — please try again later.' },
   skip: (req) => config.nodeEnv === 'development',
 });
 
@@ -146,7 +156,7 @@ if (process.env.VERCEL) {
 }
 
 // Routes â€” rate limiters applied per route group
-app.use('/api/auth',         authLimiter, authRoutes);
+app.use('/api/auth',         authReadLimiter, authRoutes);
 app.use('/api/scan',         apiLimiter,  scanRoutes);
 app.use('/api/monitoring',   apiLimiter,  monitoringRoutes);
 app.use('/api/website-scan', apiLimiter,  websiteScanRoutes);
@@ -180,6 +190,27 @@ app.get('/health', (_req, res) => {
     environment: config.nodeEnv,
     ...(missingEnvVars.length > 0 && { missingEnvVars }),
   });
+});
+
+// ── MongoDB keep-alive endpoint ──────────────────────────────────────────────
+// MongoDB Atlas M0 (free tier) pauses after inactivity. Hit this endpoint from
+// an external cron (e.g. cron-job.org) every 10 minutes to keep it alive.
+// URL: https://sentinel-api-sigma.vercel.app/api/ping-db
+app.get('/api/ping-db', async (_req, res) => {
+  try {
+    const state = mongoose.connection.readyState;
+    if (state === 0) {
+      await connectDatabase();
+    } else if (state === 2) {
+      await mongoose.connection.asPromise();
+    }
+    // Lightweight query — just counts docs, touches the connection
+    const { User } = await import('./db/models/User.model.js');
+    const count = await User.countDocuments();
+    res.json({ ok: true, dbState: 'connected', userCount: count, timestamp: new Date().toISOString() });
+  } catch (err: any) {
+    res.status(503).json({ ok: false, error: err?.message || 'DB unreachable', timestamp: new Date().toISOString() });
+  }
 });
 
 // Error handling

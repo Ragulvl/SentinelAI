@@ -19,6 +19,10 @@ export const connectDatabase = async () => {
       serverSelectionTimeoutMS: IS_SERVERLESS ? 8000 : 30000,
       socketTimeoutMS: IS_SERVERLESS ? 10000 : 45000,
       family: 4, // Use IPv4, skip IPv6 probing
+      // Don't buffer Mongoose operations when disconnected — fail fast instead of hanging
+      bufferCommands: false,
+      // Close idle connections after 30s so Atlas doesn't kill them from its side
+      maxIdleTimeMS: 30000,
     });
 
     console.log('✅ MongoDB connected successfully');

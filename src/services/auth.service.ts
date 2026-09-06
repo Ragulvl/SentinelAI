@@ -61,7 +61,6 @@ export class AuthService {
   static async logout(): Promise<void> {
     try {
       await fetch(API_ENDPOINTS.auth.logout, {
-          credentials: 'include',
         method: 'POST',
         credentials: 'include',
       });
