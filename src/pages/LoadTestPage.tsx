@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -13,7 +13,6 @@ import { ApiClient } from "@/utils/api";
 import { websiteScanService } from "@/services/websiteScan.service";
 import { useToast } from "@/hooks/use-toast";
 import { API_ENDPOINTS } from "@/config/api";
-import { AuthService } from "@/services/auth.service";
 import { exportToPDF, downloadPDF, sharePDF } from "@/utils/pdfExport";
 
 interface LoadTestResult {
@@ -115,11 +114,8 @@ export default function LoadTestPage() {
   const loadExistingResult = async (id: string) => {
     try {
       setLoading(true);
-            const response = await fetch(API_ENDPOINTS.history.detail("load", id), {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!response.ok) throw new Error("Failed to load");
-      const data = await response.json();
+      // Use ApiClient — sends httpOnly cookie automatically (credentials: include)
+      const data = await ApiClient.get<{ scan: any }>(API_ENDPOINTS.history.detail("load", id).replace(/^.*\/api/, '/api'));
       const scan = data.scan;
       setResult({
         url: scan.url, testDate: scan.testDate, duration: scan.results.duration,
