@@ -1,9 +1,10 @@
-// In production, API calls go DIRECTLY to the backend URL to avoid Vercel rewrite
-// proxy issues with Set-Cookie header forwarding during OAuth callbacks.
+// In production: use relative URLs ("") so all /api/* calls go through the Vercel rewrite proxy
+// at sentinalsec.vercel.app/api/*. The proxy forwards Cookie headers to the backend, solving
+// the cross-domain httpOnly cookie issue (cookie set on sentinalsec.vercel.app, stays same-site).
 // In local dev, VITE_API_URL falls back to http://localhost:5000.
 const rawApiUrl = import.meta.env.VITE_API_URL;
 export const API_URL = import.meta.env.PROD
-  ? 'https://sentinel-api-sigma.vercel.app'  // Direct backend — no proxy cookie issues
+  ? ''  // Relative URLs — proxy at sentinalsec.vercel.app handles /api/* rewrites
   : (rawApiUrl && rawApiUrl !== 'http://localhost:5000' ? rawApiUrl : 'http://localhost:5000');
 
 export const API_BASE_URL = API_URL; // Alias for compatibility
@@ -14,6 +15,7 @@ export const API_ENDPOINTS = {
     verify: `${API_URL}/api/auth/verify`,
     logout: `${API_URL}/api/auth/logout`,
     repositories: `${API_URL}/api/auth/repositories`,
+    promoteSelf: `${API_URL}/api/auth/promote-self`,
     branches: (owner: string, repo: string) => `${API_URL}/api/auth/repositories/${owner}/${repo}/branches`,
   },
   scan: {

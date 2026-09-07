@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { AuthService } from "./services/auth.service";
+import { API_ENDPOINTS } from "./config/api";
 
 // ── Eager (always needed on first load) ───────────────────────────────────
 import LandingPage from "./pages/LandingPage";
@@ -55,9 +56,8 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
       // 1. Always re-fetch role from DB on mount (clears any stale cache)
       await refreshAuth();
 
-      // 2. Try promote-self — cookie is sent automatically (httpOnly, credentials: include)
-      // No Bearer token needed; auth was migrated to cookie-based sessions.
-      const res = await fetch(`${import.meta.env.PROD ? 'https://sentinel-api-sigma.vercel.app' : 'http://localhost:5000'}/api/auth/promote-self`, {
+      // 2. Try promote-self — cookie sent automatically via same-origin Vercel proxy
+      const res = await fetch(API_ENDPOINTS.auth.promoteSelf, {
         credentials: 'include',
         method: 'POST',
       }).then(r => r.json()).catch(() => null);
