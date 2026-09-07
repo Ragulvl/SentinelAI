@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -9,6 +9,7 @@ import {
 import { PageLayout } from "@/components/PageLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { API_ENDPOINTS } from "@/config/api";
+import { ApiClient } from "@/utils/api";
 import { AuthService } from "@/services/auth.service";
 import { ScanService } from "@/services/scan.service";
 
@@ -71,16 +72,11 @@ const CodeScanPage = () => {
       setLoadingRepo(true);
       setError(null);
 
-      // Load all repos to find this one (same endpoint, cached by browser usually)
-      const reposRes = await fetch(API_ENDPOINTS.auth.repositories, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!reposRes.ok) {
-        if (reposRes.status === 401) { navigate("/login"); return; }
-        throw new Error("Failed to load repository info");
-      }
-      const { repositories } = await reposRes.json();
-      const found: Repository | undefined = repositories.find(
+      // Use ApiClient — sends httpOnly cookie automatically
+      const reposData = await ApiClient.get<{ repositories: Repository[] }>(
+        API_ENDPOINTS.auth.repositories.replace(/^.*\/api/, '/api')
+      );
+      const found: Repository | undefined = reposData.repositories?.find(
         (r: Repository) => r.fullName === repoFullName
       );
       if (!found) {
@@ -93,14 +89,13 @@ const CodeScanPage = () => {
       // Load branches
       setLoadingBranches(true);
       const [owner, repoName] = repoFullName.split("/");
-      const branchRes = await fetch(API_ENDPOINTS.auth.branches(owner, repoName), {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!branchRes.ok) throw new Error("Failed to load branches");
-      const branchData = await branchRes.json();
+      const branchData = await ApiClient.get<{ branches: Branch[] }>(
+        API_ENDPOINTS.auth.branches(owner, repoName).replace(/^.*\/api/, '/api')
+      );
       setBranches(branchData.branches || []);
       setSelectedBranch(found.defaultBranch);
     } catch (err: any) {
+      if (err?.status === 401 || err?.response?.status === 401) { navigate("/login"); return; }
       setError(err.message || "Failed to load repository details.");
     } finally {
       setLoadingRepo(false);
