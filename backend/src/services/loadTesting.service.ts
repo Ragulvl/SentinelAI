@@ -27,8 +27,8 @@ export interface LoadTestResult {
 }
 
 export class LoadTestingService {
-  private static readonly MAX_CONCURRENT = 100; // Safety limit
-  private static readonly MAX_DURATION = 60; // 60 seconds max
+  private static readonly MAX_CONCURRENT = 50;  // Memory-safe for Vercel (1GB limit)
+  private static readonly MAX_DURATION = 55;    // 55s cap — Vercel maxDuration is 60s (5s buffer for DB save)
   private static readonly MAX_RPS = 50; // 50 requests per second max
 
   /**
