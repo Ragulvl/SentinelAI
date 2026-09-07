@@ -483,60 +483,58 @@ export default function LoadTestPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="card-elevated p-5 space-y-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Gauge className="w-4 h-4 text-primary" />
-                    <h3 className="font-semibold text-foreground text-sm">What We Measure</h3>
-                  </div>
-                  {[
-                    { icon: Clock, label: "Response Times", desc: "Min / Avg / Max latency", color: "#5B6CFF" },
-                    { icon: CheckCircle, label: "Success Rate", desc: "% of successful requests", color: "#22C55E" },
-                    { icon: XCircle, label: "Failure Analysis", desc: "Error codes & frequency", color: "#EF4444" },
-                    { icon: Users, label: "Concurrency", desc: "Peak user capacity", color: "#7F5AF0" },
-                    { icon: Activity, label: "Throughput", desc: "Requests per second", color: "#00D4FF" },
-                    { icon: Shield, label: "Rate Limits", desc: "429 detection & patterns", color: "#F59E0B" },
-                  ].map((item, i) => {
-                    const Icon = item.icon;
-                    return (
-                      <motion.div key={item.label}
-                        initial={{ opacity: 0, x: 8 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.05 }}
-                        className="flex items-center gap-3 p-2.5 rounded-lg"
-                        style={{ background: "hsl(var(--muted) / 0.4)", border: "1px solid hsl(var(--border))" }}>
-                        <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                          style={{ background: `${item.color}18` }}>
-                          <Icon className="w-3.5 h-3.5" style={{ color: item.color }} />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-medium text-foreground">{item.label}</p>
-                          <p className="text-[11px] text-muted-foreground">{item.desc}</p>
-                        </div>
-                        <ChevronRight className="w-3 h-3 text-muted-foreground/40 ml-auto shrink-0" />
-                      </motion.div>
-                    );
-                  })}
-                </div>
-
-                {/* Current config preview */}
-                <div className="card-elevated p-5 space-y-3">
-                  <h3 className="font-semibold text-foreground text-sm">Config Preview</h3>
-                  <div className="space-y-2">
-                    {[
-                      { label: "Duration", value: `${duration}s`, color: "#5B6CFF" },
-                      { label: "Users", value: concurrentUsers, color: "#7F5AF0" },
-                      { label: "Req/s", value: requestsPerSecond, color: "#00D4FF" },
-                      { label: "Total Est.", value: `~${estimatedRequests.toLocaleString()}`, color: "#F59E0B" },
-                    ].map(item => (
-                      <div key={item.label} className="flex items-center justify-between py-1.5"
-                        style={{ borderBottom: "1px solid hsl(var(--border-subtle))" }}>
-                        <span className="text-xs text-muted-foreground">{item.label}</span>
-                        <span className="text-sm font-bold tabular-nums" style={{ color: item.color }}>{item.value}</span>
+                  <>
+                    <div className="card-elevated p-5 space-y-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Gauge className="w-4 h-4 text-primary" />
+                        <h3 className="font-semibold text-foreground text-sm">What We Measure</h3>
                       </div>
-                    ))}
-                  </div>
-                  </div>
-                </div>
+                      {[
+                        { icon: Clock, label: "Response Times", desc: "Min / Avg / Max latency", color: "#5B6CFF" },
+                        { icon: CheckCircle, label: "Success Rate", desc: "% of successful requests", color: "#22C55E" },
+                        { icon: XCircle, label: "Failure Analysis", desc: "Error codes & frequency", color: "#EF4444" },
+                        { icon: Users, label: "Concurrency", desc: "Peak user capacity", color: "#7F5AF0" },
+                        { icon: Activity, label: "Throughput", desc: "Requests per second", color: "#00D4FF" },
+                        { icon: Shield, label: "Rate Limits", desc: "429 detection & patterns", color: "#F59E0B" },
+                      ].map((item, i) => {
+                        const Icon = item.icon;
+                        return (
+                          <motion.div key={item.label}
+                            initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: i * 0.05 }}
+                            className="flex items-center gap-3 p-2.5 rounded-lg"
+                            style={{ background: "hsl(var(--muted) / 0.4)", border: "1px solid hsl(var(--border))" }}>
+                            <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                              style={{ background: `${item.color}18` }}>
+                              <Icon className="w-3.5 h-3.5" style={{ color: item.color }} />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium text-foreground">{item.label}</p>
+                              <p className="text-[11px] text-muted-foreground">{item.desc}</p>
+                            </div>
+                            <ChevronRight className="w-3 h-3 text-muted-foreground/40 ml-auto shrink-0" />
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                    <div className="card-elevated p-5 space-y-3">
+                      <h3 className="font-semibold text-foreground text-sm">Config Preview</h3>
+                      <div className="space-y-2">
+                        {[
+                          { label: "Duration", value: `${duration}s`, color: "#5B6CFF" },
+                          { label: "Users", value: concurrentUsers, color: "#7F5AF0" },
+                          { label: "Req/s", value: requestsPerSecond, color: "#00D4FF" },
+                          { label: "Total Est.", value: `~${estimatedRequests.toLocaleString()}`, color: "#F59E0B" },
+                        ].map(item => (
+                          <div key={item.label} className="flex items-center justify-between py-1.5"
+                            style={{ borderBottom: "1px solid hsl(var(--border-subtle))" }}>
+                            <span className="text-xs text-muted-foreground">{item.label}</span>
+                            <span className="text-sm font-bold tabular-nums" style={{ color: item.color }}>{item.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
                 )} {/* end ternary: terminal vs info panel */}
               </div>
             </div>
