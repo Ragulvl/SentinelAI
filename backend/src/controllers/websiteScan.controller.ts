@@ -314,6 +314,84 @@ export class WebsiteScanController {
     }
   }
 
+  // SSE streaming load test — same auth pattern as penetrationTestStream
+  static async loadTestStream(req: Request, res: Response) {
+    const tokenParam = (req.cookies?.token as string | undefined) || (req.query.token as string | undefined);
+    if (!tokenParam) return res.status(401).end();
+
+    let userId: string;
+    try {
+      const secret = process.env.JWT_SECRET || '';
+      const payload = jwt.verify(tokenParam, secret) as any;
+      userId = payload.userId as string;
+    } catch {
+      return res.status(401).end();
+    }
+
+    const { url, duration, concurrentUsers, requestsPerSecond } = req.query;
+    if (!url) return res.status(400).json({ error: 'URL required' });
+
+    const isVerified = await DomainVerificationService.isDomainVerified(userId as any, url as string);
+    if (!isVerified) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.write(`event: error\ndata: ${JSON.stringify({ message: 'Domain not verified' })}\n\n`);
+      return res.end();
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    const send = (event: string, data: any) => {
+      try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch { /* client disconnected */ }
+    };
+
+    const heartbeat = setInterval(() => { try { res.write(': ping\n\n'); } catch { /* ignore */ } }, 15_000);
+
+    send('connected', { message: 'Load test stream connected' });
+
+    try {
+      const { LoadTestingService } = await import('../services/loadTesting.service.js');
+      const testResult = await LoadTestingService.performLoadTestStreaming(
+        {
+          url: url as string,
+          duration: Math.min(Number(duration) || 30, 55),
+          concurrentUsers: Math.min(Number(concurrentUsers) || 10, 50),
+          requestsPerSecond: Math.min(Number(requestsPerSecond) || 10, 50),
+          method: 'GET',
+        },
+        (progress) => send('progress', progress)
+      );
+
+      clearInterval(heartbeat);
+      send('done', testResult);
+
+      // Save to DB
+      try {
+        const { LoadTest } = await import('../db/models/LoadTest.model.js');
+        const saved = await (LoadTest as any).create({
+          userId, url: testResult.url, testDate: testResult.testDate,
+          config: { duration: testResult.duration, concurrentUsers: Number(concurrentUsers) || 10, requestsPerSecond: Number(requestsPerSecond) || 10 },
+          results: {
+            totalRequests: testResult.totalRequests, successfulRequests: testResult.successfulRequests,
+            failedRequests: testResult.failedRequests, averageResponseTime: testResult.averageResponseTime,
+            minResponseTime: testResult.minResponseTime, maxResponseTime: testResult.maxResponseTime,
+            requestsPerSecond: testResult.requestsPerSecond, errors: testResult.errors,
+          },
+        });
+        send('saved', { id: saved._id.toString() });
+      } catch (dbErr: any) { console.warn('LoadTest DB save failed:', dbErr.message); }
+    } catch (err: any) {
+      clearInterval(heartbeat);
+      send('error', { message: err.message || 'Load test failed' });
+    } finally {
+      clearInterval(heartbeat);
+      res.end();
+    }
+  }
+
   static async testResilience(req: Request, res: Response) {
     try {
       const { url, credentials } = req.body;

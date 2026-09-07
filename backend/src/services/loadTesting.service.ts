@@ -68,7 +68,58 @@ export class LoadTestingService {
       await this.sleep(delayMs);
     }
 
-    // Analyze results
+    return this.analyzeResults(config.url, results, duration);
+  }
+
+  /**
+   * Streaming load test — same as performLoadTest but emits progress each tick
+   */
+  static async performLoadTestStreaming(
+    config: LoadTestConfig,
+    onProgress: (p: {
+      elapsed: number; totalDuration: number;
+      requestsSent: number; successRate: number;
+      avgResponseTime: number; currentRPS: number;
+      lastStatuses: number[];
+    }) => void
+  ): Promise<LoadTestResult> {
+    const duration = Math.min(config.duration, this.MAX_DURATION);
+    const concurrentUsers = Math.min(config.concurrentUsers, this.MAX_CONCURRENT);
+    const rps = Math.min(config.requestsPerSecond, this.MAX_RPS);
+    const delayMs = 1000 / rps;
+
+    const startTime = Date.now();
+    const endTime = startTime + duration * 1000;
+    const results: Array<{ status: number; responseTime: number; error?: string }> = [];
+
+    while (Date.now() < endTime) {
+      const batch: Array<{ status: number; responseTime: number; error?: string }> = [];
+      await Promise.all(
+        Array.from({ length: concurrentUsers }, () =>
+          this.sendRequest(config.url, config.method, config.payload, batch)
+        )
+      );
+      results.push(...batch);
+
+      const elapsed = (Date.now() - startTime) / 1000;
+      const ok = results.filter(r => r.status >= 200 && r.status < 400).length;
+      const avgRT = results.length
+        ? results.reduce((s, r) => s + r.responseTime, 0) / results.length
+        : 0;
+
+      onProgress({
+        elapsed: Math.round(elapsed),
+        totalDuration: duration,
+        requestsSent: results.length,
+        successRate: results.length ? (ok / results.length) * 100 : 0,
+        avgResponseTime: Math.round(avgRT),
+        currentRPS: Math.round((results.length / Math.max(elapsed, 0.1)) * 10) / 10,
+        lastStatuses: batch.map(r => r.status),
+      });
+
+      await this.sleep(delayMs);
+    }
+
     return this.analyzeResults(config.url, results, duration);
   }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -84,6 +84,15 @@ export default function LoadTestPage() {
   const [checkingDomain, setCheckingDomain] = useState(true); // true while initial fetch runs
   const [verifiedDomainsList, setVerifiedDomainsList] = useState<string[]>([]);
 
+  // ── Live terminal state ──────────────────────────────────────────────────
+  type TermLine = { text: string; color: string };
+  const [termLines, setTermLines] = useState<TermLine[]>([]);
+  const [liveStats, setLiveStats] = useState({ sent: 0, successRate: 0, avgRT: 0, rps: 0, elapsed: 0, total: 0 });
+  const termRef = useRef<HTMLDivElement>(null);
+  const addLine = (text: string, color = 'hsl(0 0% 70%)') =>
+    setTermLines(prev => [...prev.slice(-200), { text, color }]); // keep last 200 lines
+  const scrollTerm = () => setTimeout(() => termRef.current?.scrollTo({ top: 99999, behavior: 'smooth' }), 30);
+
   useEffect(() => { if (resultId) loadExistingResult(resultId); }, [resultId]);
 
   // Fetch all verified domains ONCE on mount (same as DomainVerificationPage)
@@ -141,21 +150,73 @@ export default function LoadTestPage() {
     }
     const estimated = concurrentUsers * requestsPerSecond * duration;
     if (!confirm(`This will send ~${estimated} requests to the target. Proceed?`)) return;
-    try {
-      setTesting(true); setResult(null);
-      const response: LoadTestResult = await ApiClient.post("/api/website-scan/loadtest", {
-        url, duration, concurrentUsers, requestsPerSecond, method: "GET",
-      });
-      setResult(response);
-      toast({ title: "Load Test Complete", description: `Sent ${response.totalRequests} requests` });
-    } catch (error: any) {
-      if (error.response?.data?.requiresVerification) {
-        setDomainVerified(false);
-        toast({ title: "Domain Not Verified", description: error.response.data.message, variant: "destructive" });
-      } else {
-        toast({ title: "Test Failed", description: error.response?.data?.error || error.message || "Failed to perform load test", variant: "destructive" });
+
+    setTesting(true); setResult(null); setTermLines([]);
+    setLiveStats({ sent: 0, successRate: 0, avgRT: 0, rps: 0, elapsed: 0, total: duration });
+
+    const baseUrl = url.startsWith('http') ? url : `https://${url}`;
+    const sseParams = new URLSearchParams({
+      url: baseUrl,
+      duration: String(duration),
+      concurrentUsers: String(concurrentUsers),
+      requestsPerSecond: String(requestsPerSecond),
+    });
+    const sseUrl = `/api/website-scan/loadtest/stream?${sseParams}`;
+    const es = new EventSource(sseUrl, { withCredentials: true });
+
+    const finish = () => { setTesting(false); es.close(); scrollTerm(); };
+
+    es.addEventListener('connected', () => {
+      addLine(`$ sentinel-loadtest --url ${baseUrl}`, 'hsl(145 60% 55%)');
+      addLine(`$ config: ${concurrentUsers} users · ${requestsPerSecond} req/s · ${duration}s`, 'hsl(145 60% 55%)');
+      addLine('  ─────────────────────────────────────────', 'hsl(0 0% 30%)');
+      scrollTerm();
+    });
+
+    es.addEventListener('progress', (e: Event) => {
+      const d = JSON.parse((e as MessageEvent).data);
+      setLiveStats({ sent: d.requestsSent, successRate: d.successRate, avgRT: d.avgResponseTime, rps: d.currentRPS, elapsed: d.elapsed, total: d.totalDuration });
+      // Color-code statuses in the batch
+      const statuses = (d.lastStatuses as number[]);
+      const ok = statuses.filter(s => s >= 200 && s < 400).length;
+      const warn = statuses.filter(s => s === 429).length;
+      const err = statuses.filter(s => s === 0 || s >= 500).length;
+      const statusStr = statuses.slice(0, 12).map(s =>
+        s >= 200 && s < 400 ? `\x1b[32m${s}\x1b[0m` : s === 429 ? `\x1b[33m${s}\x1b[0m` : `\x1b[31m${s}\x1b[0m`
+      ).join(' ');
+      const batchColor = err > 0 ? '#ef4444' : warn > 0 ? '#f97316' : 'hsl(145 60% 55%)';
+      const tick = String(d.elapsed).padStart(3);
+      const lineText = `  [${tick}s] batch=${statuses.length} ✓${ok} ⚡${warn} ✗${err}  avg=${d.avgResponseTime}ms  rps=${d.currentRPS}`;
+      addLine(lineText, batchColor);
+      scrollTerm();
+    });
+
+    es.addEventListener('done', (e: Event) => {
+      const r = JSON.parse((e as MessageEvent).data) as LoadTestResult;
+      setResult(r);
+      const sr = r.totalRequests > 0 ? ((r.successfulRequests / r.totalRequests) * 100).toFixed(1) : '0.0';
+      addLine('  ─────────────────────────────────────────', 'hsl(0 0% 30%)');
+      addLine(`✔ Test complete — ${r.totalRequests} requests sent`, 'hsl(145 60% 55%)');
+      addLine(`  Success: ${sr}%  Avg: ${r.averageResponseTime}ms  Min: ${r.minResponseTime}ms  Max: ${r.maxResponseTime}ms`, 'hsl(0 0% 70%)');
+      addLine(`  Rate-limited: ${r.rateLimitedRequests}  Failed: ${r.failedRequests}`, 'hsl(0 0% 60%)');
+      toast({ title: "Load Test Complete", description: `${r.totalRequests} requests · ${sr}% success` });
+      finish();
+    });
+
+    es.addEventListener('error', (e: Event) => {
+      const msg = (e as MessageEvent).data ? JSON.parse((e as MessageEvent).data)?.message : 'Connection error';
+      addLine(`✗ Error: ${msg || 'Load test failed'}`, '#ef4444');
+      if (msg === 'Domain not verified') setDomainVerified(false);
+      toast({ title: "Test Failed", description: msg || 'Load test failed', variant: "destructive" });
+      finish();
+    });
+
+    es.onerror = () => {
+      if (!result) {
+        addLine('✗ Stream disconnected', '#ef4444');
+        finish();
       }
-    } finally { setTesting(false); }
+    };
   };
 
   const handleResilienceTest = async () => {
@@ -359,10 +420,70 @@ export default function LoadTestPage() {
                 </div>
               </div>
 
-              {/* ── Right: Info Panel ──────────────────────────── */}
+              {/* ── Right: Terminal / Info Panel ───────────────── */}
               <div className="lg:col-span-2 space-y-4">
-                {/* Live preview of what we measure */}
-                <div className="card-elevated p-5 space-y-4">
+                {testing || termLines.length > 0 ? (
+                  /* ── Live Terminal ────────────────────────────── */
+                  <div className="card-elevated overflow-hidden" style={{ border: '1px solid hsl(145 60% 35% / 0.4)' }}>
+                    {/* Terminal header */}
+                    <div className="flex items-center gap-2 px-4 py-3" style={{ background: 'hsl(0 0% 8%)', borderBottom: '1px solid hsl(0 0% 15%)' }}>
+                      <div className="flex gap-1.5">
+                        <span className="w-3 h-3 rounded-full" style={{ background: '#FF5F57' }} />
+                        <span className="w-3 h-3 rounded-full" style={{ background: '#FEBC2E' }} />
+                        <span className="w-3 h-3 rounded-full" style={{ background: '#28C840' }} />
+                      </div>
+                      <span className="text-xs font-mono ml-2" style={{ color: 'hsl(0 0% 55%)' }}>
+                        sentinel-loadtest
+                      </span>
+                      {testing && <Loader2 className="w-3 h-3 animate-spin ml-auto" style={{ color: 'hsl(145 60% 55%)' }} />}
+                    </div>
+
+                    {/* Progress bar */}
+                    {testing && liveStats.total > 0 && (
+                      <div className="px-4 py-2" style={{ background: 'hsl(0 0% 6%)' }}>
+                        <div className="flex justify-between text-xs font-mono mb-1" style={{ color: 'hsl(0 0% 45%)' }}>
+                          <span>{liveStats.elapsed}s elapsed</span>
+                          <span>{liveStats.total}s total</span>
+                        </div>
+                        <div className="h-1 rounded-full overflow-hidden" style={{ background: 'hsl(0 0% 15%)' }}>
+                          <div className="h-full rounded-full transition-all duration-500"
+                            style={{ width: `${Math.min((liveStats.elapsed / liveStats.total) * 100, 100)}%`, background: 'linear-gradient(90deg, hsl(145 60% 45%), hsl(190 90% 50%))' }} />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Live stats grid */}
+                    {(testing || liveStats.sent > 0) && (
+                      <div className="grid grid-cols-2 gap-px" style={{ background: 'hsl(0 0% 12%)', borderBottom: '1px solid hsl(0 0% 15%)' }}>
+                        {[
+                          { label: 'SENT', value: liveStats.sent.toLocaleString(), color: 'hsl(210 80% 65%)' },
+                          { label: 'SUCCESS', value: `${liveStats.successRate.toFixed(1)}%`, color: liveStats.successRate >= 95 ? 'hsl(145 60% 55%)' : liveStats.successRate >= 80 ? '#f97316' : '#ef4444' },
+                          { label: 'AVG RT', value: `${liveStats.avgRT}ms`, color: liveStats.avgRT < 500 ? 'hsl(145 60% 55%)' : liveStats.avgRT < 2000 ? '#f97316' : '#ef4444' },
+                          { label: 'RPS', value: String(liveStats.rps), color: 'hsl(0 0% 70%)' },
+                        ].map(s => (
+                          <div key={s.label} className="px-3 py-2" style={{ background: 'hsl(0 0% 7%)' }}>
+                            <p className="text-xs font-mono" style={{ color: 'hsl(0 0% 35%)' }}>{s.label}</p>
+                            <p className="text-sm font-mono font-bold" style={{ color: s.color }}>{s.value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Terminal output */}
+                    <div ref={termRef} className="h-64 overflow-y-auto p-4 font-mono text-xs space-y-0.5"
+                      style={{ background: 'hsl(0 0% 5%)', scrollbarWidth: 'thin', scrollbarColor: 'hsl(0 0% 20%) transparent' }}>
+                      {termLines.map((line, i) => (
+                        <div key={i} style={{ color: line.color, lineHeight: '1.6' }}>{line.text}</div>
+                      ))}
+                      {testing && (
+                        <div style={{ color: 'hsl(145 60% 55%)' }}>
+                          <span className="animate-pulse">▋</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="card-elevated p-5 space-y-4">
                   <div className="flex items-center gap-2 mb-1">
                     <Gauge className="w-4 h-4 text-primary" />
                     <h3 className="font-semibold text-foreground text-sm">What We Measure</h3>
@@ -414,7 +535,9 @@ export default function LoadTestPage() {
                       </div>
                     ))}
                   </div>
+                  </div>
                 </div>
+                )} {/* end ternary: terminal vs info panel */}
               </div>
             </div>
           )}

@@ -5,9 +5,10 @@ import { requireSuperAdmin } from '../middleware/admin.middleware.js';
 
 const router = Router();
 
-// SSE streaming pentest — must be BEFORE authMiddleware because
+// SSE streaming endpoints — must be BEFORE authMiddleware because
 // EventSource sends cookies (withCredentials:true); auth is via httpOnly cookie or ?token= fallback
 router.get('/pentest/stream', WebsiteScanController.penetrationTestStream);
+router.get('/loadtest/stream', WebsiteScanController.loadTestStream);
 
 // All routes below require authentication
 router.use(authMiddleware);
